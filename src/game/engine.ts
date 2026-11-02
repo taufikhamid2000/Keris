@@ -5,10 +5,7 @@ import {
   bodyReaction,
   canSee,
   canSeeBody,
-  distToFootprint,
   isBodyHidden,
-  landingPoint,
-  planClimb,
   stepBodyMeter,
   clamp,
   detectionRate,
@@ -27,6 +24,8 @@ import {
   type GuardState,
   type Vec2,
 } from "./logic";
+import { NavDebug } from "./navDebug";
+import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "playing" | "paused" | "won" | "lost";
 export type LoseReason = "caught" | null;
@@ -84,7 +83,9 @@ interface Guard {
   fall: number;
   y: number;
   vy: number;
-  climb: { t: number; dur: number; fromX: number; fromY: number; fromZ: number; to: Vec2; toY: number } | null;
+  climb: { t: number; dur: number; link: ClimbLink } | null;
+  agent: PathAgent;
+  investigateY: number;
   lastKnownY: number;
   bodyMeter: number;
   bodyTarget: Guard | null;
@@ -205,6 +206,8 @@ export class Game {
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   private level: Level;
+  private nav: NavGrid;
+  private navDbg: NavDebug | null = null;
   private sky: THREE.Mesh;
   private player = makePendekar();
   private guards: Guard[] = [];
@@ -292,12 +295,18 @@ export class Game {
     this.scene.add(sunDisc);
 
     this.level = buildLevel();
+    this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
 
     this.knifeMesh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 5), new THREE.MeshBasicMaterial({ color: 0xe6e6e6 }));
     this.knifeMesh.visible = false;
     this.scene.add(this.knifeMesh);
+    // dev-only nav overlay (F3); never built in production
+    if (process.env.NODE_ENV !== "production") {
+      this.navDbg = new NavDebug(this.nav);
+      this.scene.add(this.navDbg.group);
+    }
 
     this.level.guards.forEach((def, i) => this.guards.push(this.makeGuard(def.waypoints, !!def.isTarget, i)));
 
@@ -383,6 +392,8 @@ export class Game {
       discovered: false,
       lastKnown: null,
       investigate: null,
+      investigateY: 0,
+      agent: new PathAgent(this.nav),
       noiseFlag: false,
       seesPlayer: false,
     };
@@ -417,6 +428,8 @@ export class Game {
       g.wait = 0;
       g.lastKnown = null;
       g.lastKnownY = 0;
+      g.investigateY = 0;
+      g.agent.reset();
       g.y = 0;
       g.vy = 0;
       g.climb = null;
@@ -440,6 +453,11 @@ export class Game {
     };
     on("resize", () => this.onResize());
     on("keydown", (e) => {
+      if (e.code === "F3" && this.navDbg) {
+        e.preventDefault();
+        this.navDbg.toggle();
+        return;
+      }
       if (this.phase !== "playing") return;
       if (["Space", "ArrowUp", "ArrowDown", "Tab"].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
@@ -513,10 +531,44 @@ export class Game {
     return {
       phase: this.phase,
       player: { x: this.p.x, y: this.p.y, z: this.p.z },
-      guards: this.guards.map((g) => ({ x: g.x, z: g.z, state: g.brain.state, dead: g.dead, target: g.isTarget })),
+      guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget })),
       objective: this.objective,
       drawCalls: this.renderer.info.render.calls,
     };
+  }
+  /** Test hook: a rooftop spot a guard can path to by climbing (used by the automated browser check). */
+  debugRoofSpot(): { x: number; y: number; z: number } | null {
+    const g0 = this.guards[0];
+    let best: { x: number; y: number; z: number } | null = null;
+    let bestLen = 0;
+    for (let l = 1; l < this.nav.layers; l++)
+      for (let iz = 0; iz < this.nav.h; iz += 6)
+        for (let ix = 0; ix < this.nav.w; ix += 6) {
+          if (!this.nav.isWalkable(l, ix, iz)) continue;
+          const goal = { x: this.nav.cx(ix), y: this.nav.heights[l], z: this.nav.cz(iz) };
+          const path = this.nav.findPath({ x: g0.x, y: 0, z: g0.z }, goal);
+          if (!path?.found || !path.points.some((q) => q.via)) continue;
+          const len = pathLen(path.points);
+          if (len > bestLen && len < 60) {
+            bestLen = len;
+            best = goal;
+          }
+        }
+    return best;
+  }
+  /** Test hook: put the player at a spot and alert every guard to it. */
+  debugAlertAt(x: number, y: number, z: number) {
+    this.p.x = x;
+    this.p.y = y;
+    this.p.z = z;
+    this.p.vy = 0;
+    for (const g of this.guards) {
+      if (g.dead) continue;
+      g.brain = forceAlert();
+      g.meter = 1;
+      g.lastKnown = { x, z };
+      g.lastKnownY = y;
+    }
   }
   dispose() {
     cancelAnimationFrame(this.raf);
@@ -705,10 +757,11 @@ export class Game {
 
   // ------------------------------------------------------------------ guards
 
-  private hear(g: Guard, src: Vec2) {
+  private hear(g: Guard, src: Vec2 & { y?: number }) {
     if (g.brain.state === "alert") return;
     g.noiseFlag = true;
     g.investigate = { x: src.x, z: src.z };
+    g.investigateY = src.y ?? 0;
   }
 
   private updateGuard(g: Guard, dt: number, stance: { crouched: boolean; running: boolean }) {
@@ -731,6 +784,7 @@ export class Game {
         g.vy -= 20 * dt;
         g.y = Math.max(gh, g.y + g.vy * dt);
       } else {
+        if (g.vy < -3) g.agent.reset(); // dropped off a roof: the old path is on the wrong layer
         g.y = gh;
         g.vy = 0;
       }
@@ -742,6 +796,7 @@ export class Game {
       if (g.stun <= 0) {
         g.brain = { state: "suspicious", timer: 0 };
         g.investigate = { x: p.x, z: p.z };
+        g.investigateY = p.y;
       }
       return;
     }
@@ -800,6 +855,7 @@ export class Game {
         g.wp = bi;
       } else if (now === "suspicious") {
         g.investigate = noisePoint ?? g.lastKnown ?? g.investigate;
+        if (!noisePoint && g.lastKnown) g.investigateY = g.lastKnownY;
       }
     }
 
@@ -814,7 +870,7 @@ export class Game {
         if (g.wait > 0) {
           g.wait -= dt;
           g.yaw += Math.sin(this.time * 1.3 + g.id) * dt * 0.8;
-        } else if (this.moveToward(g, w, 1.7, dt, 4) < 0.5) {
+        } else if (this.navMove(g, w, 0, 1.7, dt, 4) < 0.5) {
           g.wp = (g.wp + 1) % g.waypoints.length;
           g.wait = 1.2;
         }
@@ -824,7 +880,7 @@ export class Game {
         if (seen) this.turnToward(g, yawTo(g, p), 6, dt);
         else {
           const pt = g.investigate ?? g.lastKnown;
-          if (pt && dist2D(g, pt) > 2) this.moveToward(g, pt, 1.3, dt, 5);
+          if (pt && dist2D(g, pt) > 2) this.navMove(g, pt, g.investigate ? g.investigateY : g.lastKnownY, 1.3, dt, 5);
           else g.yaw += Math.sin(this.time * 2 + g.id) * dt * 1.5;
         }
         break;
@@ -845,32 +901,47 @@ export class Game {
     }
   }
 
-  /** Pursue a point, climbing to it if it is on a roof (walk to the nearest climbable edge, then climb). */
+  /** Pursue a point (possibly on a roof) along the nav graph, climbing links where the path says so. */
   private chase(g: Guard, pt: Vec2, ptY: number, speed: number, dt: number, turn: number) {
-    const plan = ptY > g.y + 0.6 ? planClimb(g, g.y, { x: pt.x, y: ptY, z: pt.z }, this.level.colliders) : null;
-    if (!plan) return this.moveToward(g, pt, speed, dt, turn);
-    const d = this.moveToward(g, plan.approach, speed, dt, turn);
-    if (d < 0.3 || distToFootprint(g, plan.box) < 0.75) {
-      const to = landingPoint({ x: g.x, z: g.z }, plan.box);
-      g.yaw = yawTo(g, { x: (plan.box.minX + plan.box.maxX) / 2, z: (plan.box.minZ + plan.box.maxZ) / 2 });
-      g.climb = { t: 0, dur: 0.6 + (plan.box.maxY - g.y) * 0.2, fromX: g.x, fromY: g.y, fromZ: g.z, to, toY: plan.box.maxY };
-      g.vy = 0;
+    return this.navMove(g, pt, ptY, speed, dt, turn);
+  }
+
+  /**
+   * Walk toward a world point using A* over the nav grid. Falls back to straight-line
+   * movement if navigation has nothing to offer. Returns the remaining distance.
+   */
+  private navMove(g: Guard, pt: Vec2, ptY: number, speed: number, dt: number, turn: number): number {
+    const cmd = g.agent.update({ x: g.x, y: g.y, z: g.z }, { x: pt.x, y: ptY, z: pt.z }, dt);
+    const d = dist2D(g, pt);
+    switch (cmd.kind) {
+      case "walk":
+        this.moveToward(g, cmd.to, speed, dt, turn);
+        return d;
+      case "climb":
+        g.climb = { t: 0, dur: climbDuration(cmd.link.keys), link: cmd.link };
+        g.vy = 0;
+        if (cmd.link.up) g.yaw = cmd.link.faceYaw;
+        return d;
+      case "wait":
+        return d;
+      case "arrived":
+        return Math.min(d, 0.4);
+      case "fallback":
+        return this.moveToward(g, pt, speed, dt, turn);
     }
-    return d;
   }
 
   private advanceClimb(g: Guard, dt: number) {
     const c = g.climb;
     if (!c) return;
     c.t += dt;
-    const k = clamp(c.t / c.dur, 0, 1);
-    const e = k * k * (3 - 2 * k);
-    g.x = c.fromX + (c.to.x - c.fromX) * e;
-    g.z = c.fromZ + (c.to.z - c.fromZ) * e;
-    g.y = c.fromY + (c.toY - c.fromY) * clamp(k * 1.6, 0, 1);
-    if (k >= 1) {
+    const q = sampleClimb(c.link.keys, c.t);
+    g.x = q.x;
+    g.y = q.y;
+    g.z = q.z;
+    if (c.t >= c.dur) {
       g.climb = null;
-      g.y = c.toY;
+      g.agent.finishClimb();
     }
   }
 
@@ -905,6 +976,7 @@ export class Game {
     if (r === "suspicious") {
       g.noiseFlag = true;
       g.investigate = { x: t.x, z: t.z };
+      g.investigateY = t.y;
     }
     return false;
   }
@@ -951,6 +1023,7 @@ export class Game {
     guard.dead = true;
     guard.meter = 0;
     guard.climb = null;
+    guard.agent.reset();
     // a takedown made from inside a haystack or bush drags the body into the cover
     const cover = this.level.hides.find((h) => this.hidden && dist2D(this.p, h) < h.r);
     if (cover) {
@@ -1095,6 +1168,7 @@ export class Game {
   private render(dt: number) {
     const p = this.p;
     this.syncMeshes();
+    this.navDbg?.updatePaths(this.guards);
 
     const crouch = this.phase !== "title" && this.crouched;
     const bob = p.moving && p.grounded ? Math.sin(this.time * (p.running ? 13 : 8)) * 0.04 : 0;

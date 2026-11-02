@@ -39,12 +39,14 @@ Game rules are pure functions in `src/game/logic.ts`, separate from rendering, s
 - **Noise:** crouching, walking and running have different noise radii. Thrown knives that miss make noise where they land.
 - **Takedown:** needs you within 2 m, behind the guard (or the guard stunned), and the guard not alert.
 - **Body discovery:** a guard whose cone sees a downed guard fills a body-awareness meter (faster when close). Past 0.3 it goes to investigate; at full it raises the alarm at the body. A body inside cover is only seen at about 1.8 m, so hide them. Hay on a patrol lane is still risky.
-- **Climbing guards:** alert and search guards remember the height of where they last saw you. If that is a rooftop, they walk to the nearest climbable edge (using a lower roof as a stepping stone when needed) and climb up, slower than you. Guards have gravity, so they drop back down if they walk off a roof.
+- **Pathfinding:** `src/game/nav.ts` (pure, no three.js) rasterises the level colliders into a 0.5 m layered grid: ground (including the open space under stilt houses) plus one layer per rooftop height. A* with octile moves and no corner cutting runs over it, and the result is string-pulled into a few waypoints. Guards use it for patrol legs, investigating noises and bodies, chasing, searching, and returning to patrol. Re-pathing is throttled (goal moved >1.5 m, at most every 0.4 s, refreshed every 4 s). Stuck detection escalates replan, snap to the nearest walkable cell, then the old straight-line movement. An unreachable target gives a partial path to the closest reachable point.
+- **Climbing guards:** the grid has explicit bidirectional climb links wherever a surface is 0.6-3.7 m above another with a clear column (ground to roof, or a lower roof as a stepping stone). A guard paths to the nearest link, then follows its keyframes up the wall face and over the lip, slower than you. Guards have gravity, so they drop back down if they walk off a roof.
+- **Debug overlay:** in `npm run dev` only, F3 draws the nav grid per layer, climb links (magenta) and each guard path (yellow, red if the goal is unreachable). It is not built in production.
 - **Stilt houses:** the body of a house is raised above head height with thin post colliders, so you and guards can walk and hide under the floors while walls and roofs stay solid.
 - **Lighting:** dusk hemisphere and ambient fill, 17 lantern point lights along the lanes, and light fog. Mata Helang lowers the fill and tints the fog blue for contrast.
 - **Level:** `src/game/level.ts` builds stilt houses, atap roofs, kampung lanes, a three-tier palace, a harbour and a jetty from boxes and cones. Collision is circle-vs-box push-out; ledge climbing lerps onto a box top.
 
-Tests cover the vision cone, line of sight, detection meter, noise, behind check, the guard state machine, stilt colliders, climb planning and body discovery (`npm test`).
+Tests (`src/game/nav.test.ts` too) cover A*, climb links, unreachable goals, re-path throttling, stuck handling, the vision cone, line of sight, detection meter, noise, behind check, the guard state machine, stilt colliders, climb planning and body discovery (`npm test`).
 
 ## How I use AI
 
@@ -52,7 +54,7 @@ This was built with Claude Code, which wrote the code, tests and this README fro
 
 ## Rough edges
 
-- Guard climbing and body carrying are new and only lightly playtested. Guards climb in a straight lerp, not along real ladders, and pathing is not navmesh based (they can snag on walls).
+- Guard pathing and climbing are new and only lightly playtested. Climbs are keyframed, not skeletal animation. The grid is fixed at load, so guards ignore dynamic changes, and very tall roofs (over 3.7 m, such as the tower top) are unreachable for them. `npm run smoke:ai` (needs a running build) puts the player on a roof and checks a guard climbs up; headless software rendering is slow, so it can take about a minute.
 - Art is low-poly primitives, no audio, desktop only.
 
 ## Local dev

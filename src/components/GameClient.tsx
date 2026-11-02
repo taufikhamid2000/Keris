@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, LoseReason, Phase } from "@/game/engine";
+import { isTouchDevice, pickQuality } from "@/game/touch";
+import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -15,6 +17,7 @@ const EMPTY: HudState = {
   knives: 0,
   prompt: "",
   toast: "",
+  carrying: false,
   caught: 0,
 };
 
@@ -24,12 +27,23 @@ declare global {
   }
 }
 
-const subscribeMQ = (cb: () => void) => {
-  const mq = window.matchMedia("(pointer: coarse), (max-width: 760px)");
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
+const mq = (q: string) => window.matchMedia(q).matches;
+const subscribeMQ = (query: string) => (cb: () => void) => {
+  const m = window.matchMedia(query);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
 };
-const isMobileSnapshot = () => window.matchMedia("(pointer: coarse), (max-width: 760px)").matches;
+const subscribeTouch = subscribeMQ("(pointer: coarse)");
+const touchSnapshot = () =>
+  isTouchDevice({
+    coarse: mq("(pointer: coarse)"),
+    fine: mq("(pointer: fine)"),
+    hasTouchStart: "ontouchstart" in window,
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+    search: window.location.search,
+  });
+const subscribePortrait = subscribeMQ("(orientation: portrait)");
+const portraitSnapshot = () => mq("(orientation: portrait)");
 
 const CONTROLS: [string, string][] = [
   ["W A S D", "Move"],
@@ -42,6 +56,18 @@ const CONTROLS: [string, string][] = [
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
+];
+
+const TOUCH_CONTROLS: [string, string][] = [
+  ["Left thumb", "Move (push to the edge to run, louder)"],
+  ["Drag right side", "Look"],
+  ["Jump", "Jump / climb a ledge (hold at a wall)"],
+  ["C", "Crouch toggle (quieter)"],
+  ["E", "Tikam: takedown from behind"],
+  ["Q", "Pisau lempar: stun / distract"],
+  ["F", "Carry / drop a body (hide it in hay or bush)"],
+  ["V", "Mata Helang vision"],
+  ["II", "Pause"],
 ];
 
 function Compass({ north, obj }: { north: number; obj: number | null }) {
@@ -65,11 +91,11 @@ function Compass({ north, obj }: { north: number; obj: number | null }) {
   );
 }
 
-function Controls() {
+function Controls({ touch }: { touch: boolean }) {
   return (
     <table className="controls">
       <tbody>
-        {CONTROLS.map(([k, d]) => (
+        {(touch ? TOUCH_CONTROLS : CONTROLS).map(([k, d]) => (
           <tr key={k}>
             <td>
               <kbd>{k}</kbd>
@@ -89,22 +115,27 @@ export default function GameClient() {
   const [reason, setReason] = useState<LoseReason>(null);
   const [hud, setHud] = useState<HudState>(EMPTY);
   const [failed, setFailed] = useState(false);
-  const mobile = useSyncExternalStore(subscribeMQ, isMobileSnapshot, () => false);
+  const touch = useSyncExternalStore(subscribeTouch, touchSnapshot, () => false);
+  const portrait = useSyncExternalStore(subscribePortrait, portraitSnapshot, () => false) && touch;
 
   useEffect(() => {
-    if (mobile || !mount.current) return;
+    if (!mount.current) return;
     let disposed = false;
     let inst: Game | null = null;
     import("@/game/engine")
       .then(({ Game }) => {
         if (disposed || !mount.current) return;
-        inst = new Game(mount.current, {
-          onHud: setHud,
-          onPhase: (p, r) => {
-            setPhase(p);
-            setReason(r);
+        inst = new Game(
+          mount.current,
+          {
+            onHud: setHud,
+            onPhase: (p, r) => {
+              setPhase(p);
+              setReason(r);
+            },
           },
-        });
+          { quality: pickQuality(touch, window.location.search) },
+        );
         window.__keris = inst;
         setGame(inst);
       })
@@ -114,23 +145,26 @@ export default function GameClient() {
       inst?.dispose();
       delete window.__keris;
     };
-  }, [mobile]);
+  }, [touch]);
 
-  if (mobile) {
-    return (
-      <main className="center-screen">
-        <h1>Keris</h1>
-        <p>Keris is a desktop game. It needs a keyboard and mouse.</p>
-        <p className="dim">Open this page on a computer to play.</p>
-      </main>
-    );
-  }
+  // a rotated phone must not keep playing under the "rotate" prompt
+  useEffect(() => {
+    if (portrait) game?.pause();
+  }, [portrait, game]);
 
   const g = () => game;
+  const begin = () => {
+    if (touch) enterFullscreenLandscape();
+    g()?.start();
+  };
+  const resume = () => {
+    if (touch) enterFullscreenLandscape();
+    g()?.resume();
+  };
   const alertCls = hud.alert === "calm" ? "" : hud.alert;
 
   return (
-    <div className="root">
+    <div className={`root${touch ? " touch-ui" : ""}`} onContextMenu={(e) => touch && e.preventDefault()}>
       <div ref={mount} className="stage" />
       {failed && (
         <div className="overlay">
@@ -166,13 +200,15 @@ export default function GameClient() {
               <div style={{ width: `${hud.caught * 100}%` }} />
             </div>
           )}
-          {hud.prompt && <div className="prompt">{hud.prompt}</div>}
+          {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/^[EF]s+/, "") : hud.prompt}</div>}
           {hud.toast && <div className="toast">{hud.toast}</div>}
           <div className="hint">
             WASD move · Shift run · C crouch · Space climb · E tikam · Q throw · F carry body · V Mata Helang · Esc pause
           </div>
         </div>
       )}
+
+      {phase === "playing" && touch && <TouchControls game={game} hud={hud} />}
 
       {phase === "title" && (
         <div className="overlay title">
@@ -184,11 +220,13 @@ export default function GameClient() {
               silence the Kapitan before the guns are turned on the town. Move over the atap roofs and through the kampung lanes, strike once with your
               keris, and slip out by the jetty.
             </p>
-            <Controls />
-            <button className="btn" onClick={() => g()?.start()} disabled={!game}>
-              Begin
+            <Controls touch={touch} />
+            <button className="btn" onClick={begin} disabled={!game}>
+              {touch ? "Tap to play" : "Begin"}
             </button>
-            <p className="dim small">Click Begin to capture the mouse. Best on a desktop browser.</p>
+            <p className="dim small">
+              {touch ? "Best in landscape. Fullscreen is requested where your browser allows it." : "Click Begin to capture the mouse."}
+            </p>
           </div>
         </div>
       )}
@@ -197,8 +235,8 @@ export default function GameClient() {
         <div className="overlay">
           <div className="panel">
             <h2>Paused</h2>
-            <Controls />
-            <button className="btn" onClick={() => g()?.resume()}>
+            <Controls touch={touch} />
+            <button className="btn" onClick={resume}>
               Resume
             </button>
             <button className="btn ghost" onClick={() => g()?.start()}>
@@ -228,6 +266,16 @@ export default function GameClient() {
             <button className="btn" onClick={() => g()?.start()}>
               Restart
             </button>
+          </div>
+        </div>
+      )}
+
+      {portrait && (
+        <div className="overlay rotate" role="alert">
+          <div className="panel">
+            <div className="rotate-icon" aria-hidden="true" />
+            <h2>Rotate your phone</h2>
+            <p>Keris plays in landscape.</p>
           </div>
         </div>
       )}

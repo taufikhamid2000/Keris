@@ -2,7 +2,7 @@
 
 A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to silence the Portuguese Kapitan of the bridge battery, then slip out by the jetty. Procedural geometry only, built with three.js.
 
-**Live:** https://keris.taufikhamid.com (desktop only, keyboard and mouse)
+**Live:** https://keris.taufikhamid.com (desktop keyboard and mouse, or phone in landscape)
 
 ![Title screen](docs/title.png)
 ![Gameplay](docs/gameplay.png)
@@ -24,6 +24,23 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | Esc | Pause |
 
 Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. If an alert guard keeps you in reach for 2 seconds, you are caught and can restart.
+
+## Playing on phone
+
+Touch controls appear on touch devices (detected by `pointer: coarse`, not user agent). Tap to play, which requests fullscreen and a landscape lock where the browser allows it. Portrait shows a "rotate your phone" prompt and pauses.
+
+- Left thumb: floating joystick. Push to the edge to run (louder).
+- Drag the right side: look.
+- Buttons: Jump/Climb, C crouch (toggle), E Tikam, Q knife, F carry/drop, V Mata Helang, and a pause button. Multi-touch works, so you can move, look and press at once.
+- Phones default to a lighter quality tier (pixel ratio capped at 1.5, no antialiasing, smaller basic shadows, shorter fog, 5 real lantern lights). Force it with `?quality=low` or `?quality=high`. `?touch=1` or `?touch=0` forces the control scheme.
+
+![Phone title screen](docs/mobile-title-667x375.png)
+![Phone gameplay](docs/mobile-gameplay-667x375.png)
+![Phone gameplay, wider screen](docs/mobile-gameplay-844x390.png)
+![Phone pause menu](docs/mobile-paused-667x375.png)
+![Rotate prompt](docs/mobile-portrait.png)
+
+Checked with `node scripts/mobile-check.mjs <url>` (headless Chromium, touch emulation at 667x375 and 844x390). Real-device framerate is untested: it only ran in software-rendered headless Chromium, so the quality tier is a best guess. iPhone Safari does not allow page fullscreen or orientation lock, so rotate manually there.
 
 ## Stack
 
@@ -55,7 +72,7 @@ This was built with Claude Code, which wrote the code, tests and this README fro
 ## Rough edges
 
 - Guard pathing and climbing are new and only lightly playtested. Climbs are keyframed, not skeletal animation. The grid is fixed at load, so guards ignore dynamic changes, and very tall roofs (over 3.7 m, such as the tower top) are unreachable for them. `npm run smoke:ai` (needs a running build) puts the player on a roof and checks a guard climbs up; headless software rendering is slow, so it can take about a minute.
-- Art is low-poly primitives, no audio, desktop only.
+- Art is low-poly primitives, no audio, no in-game quality toggle (URL parameter only). The takedown (E) and carry (F) buttons are checked to send their keys, but their outcomes were not tested on touch.
 
 ## Local dev
 

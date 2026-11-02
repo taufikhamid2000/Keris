@@ -25,6 +25,7 @@ import {
   type Vec2,
 } from "./logic";
 import { NavDebug } from "./navDebug";
+import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "playing" | "paused" | "won" | "lost";
@@ -41,6 +42,7 @@ export interface HudState {
   hidden: boolean;
   knives: number;
   prompt: string;
+  carrying: boolean;
   toast: string;
   caught: number;
 }
@@ -240,22 +242,27 @@ export class Game {
   private knifeMesh: THREE.Mesh;
   private knifeFly: { t: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
   private disposers: (() => void)[] = [];
+  private touchMove = { x: 0, y: 0, run: false };
+  readonly quality: Quality;
 
   constructor(
     private container: HTMLElement,
     private cb: GameCallbacks,
+    opts: { quality?: Quality } = {},
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.quality = opts.quality ?? "high";
+    const Q = QUALITY[this.quality];
+    this.renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance" });
+    this.renderer.setPixelRatio(pixelRatioFor(this.quality, window.devicePixelRatio));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = Q.basicShadows ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.display = "block";
 
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 400);
-    this.scene.fog = new THREE.Fog(FOG_DUSK, 30, 170);
+    this.scene.fog = new THREE.Fog(FOG_DUSK, Q.fogNear, Q.fogFar);
 
     // sky dome
     this.sky = new THREE.Mesh(
@@ -280,7 +287,7 @@ export class Game {
     this.sun = sun;
     sun.position.set(-40, 24, 30);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(Q.shadowMapSize, Q.shadowMapSize);
     const sc = sun.shadow.camera;
     sc.left = -48;
     sc.right = 48;
@@ -294,7 +301,7 @@ export class Game {
     sunDisc.position.set(-180, 26, 140);
     this.scene.add(sunDisc);
 
-    this.level = buildLevel();
+    this.level = buildLevel({ lampLights: Q.lampLights });
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
@@ -461,13 +468,7 @@ export class Game {
       if (this.phase !== "playing") return;
       if (["Space", "ArrowUp", "ArrowDown", "Tab"].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
-      this.keys.add(e.code);
-      if (e.code === "KeyE") this.tryTakedown();
-      if (e.code === "KeyQ") this.tryThrow();
-      if (e.code === "KeyF") this.tryCarry();
-      if (e.code === "KeyV") this.eagle = !this.eagle;
-      if (e.code === "KeyC") this.crouchToggle = !this.crouchToggle;
-      if (e.code === "Space") this.tryJumpOrClimb();
+      this.pressKey(e.code);
     });
     on("keyup", (e) => this.keys.delete(e.code));
     on("blur", () => this.keys.clear());
@@ -511,6 +512,7 @@ export class Game {
   pause() {
     if (this.phase === "playing") {
       this.keys.clear();
+      this.setTouchMove(0, 0, false);
       this.setPhase("paused");
     }
   }
@@ -521,6 +523,26 @@ export class Game {
     } catch {
       /* pointer lock unavailable (e.g. headless); keyboard still works */
     }
+  }
+  /** Key press as the keyboard handler sees it. Touch buttons call this with the same codes (KeyE, KeyQ, KeyF, KeyV, KeyC, Space). */
+  pressKey(code: string) {
+    if (this.phase !== "playing") return;
+    this.keys.add(code);
+    if (code === "KeyE") this.tryTakedown();
+    if (code === "KeyQ") this.tryThrow();
+    if (code === "KeyF") this.tryCarry();
+    if (code === "KeyV") this.eagle = !this.eagle;
+    if (code === "KeyC") this.crouchToggle = !this.crouchToggle;
+    if (code === "Space") this.tryJumpOrClimb();
+  }
+  releaseKey(code: string) {
+    this.keys.delete(code);
+  }
+  /** Analog movement from the touch joystick: x strafe, y forward, both -1..1 already deadzoned. */
+  setTouchMove(x: number, y: number, run: boolean) {
+    this.touchMove.x = x;
+    this.touchMove.y = y;
+    this.touchMove.run = run;
   }
   look(dx: number, dy: number) {
     this.camYaw -= dx * 0.0022;
@@ -534,6 +556,13 @@ export class Game {
       guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget })),
       objective: this.objective,
       drawCalls: this.renderer.info.render.calls,
+      quality: this.quality,
+      camYaw: this.camYaw,
+      camPitch: this.camPitch,
+      crouched: this.crouched,
+      eagle: this.eagle,
+      knives: this.knives,
+      pixelRatio: this.renderer.getPixelRatio(),
     };
   }
   /** Test hook: a rooftop spot a guard can path to by climbing (used by the automated browser check). */
@@ -617,13 +646,20 @@ export class Game {
     // ---- player movement
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
     let str = (this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("KeyA") ? 1 : 0);
-    const len = Math.hypot(fwd, str);
+    let len = Math.hypot(fwd, str);
+    const tm = this.touchMove;
+    const touchActive = len === 0 && (tm.x !== 0 || tm.y !== 0);
+    if (touchActive) {
+      fwd = tm.y;
+      str = tm.x;
+      len = Math.hypot(fwd, str); // normalised below: direction only, gait is walk or run like the keyboard
+    }
     if (len > 0) {
       fwd /= len;
       str /= len;
     }
     const crouched = this.crouched;
-    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && !crouched && !this.carrying && len > 0;
+    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && len > 0;
 
     if (this.climb) {
       const c = this.climb;
@@ -1147,6 +1183,7 @@ export class Game {
       hidden: this.hidden,
       knives: this.knives,
       prompt,
+      carrying: !!this.carrying,
       toast: this.toastT > 0 ? this.toastText : "",
       caught: this.caught / CATCH_SECONDS,
     };

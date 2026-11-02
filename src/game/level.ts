@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Box, Vec2 } from "./logic";
+import { spreadIndices } from "./touch";
 
 // Original, fully procedural Malacca-1511 kampung: timber stilt houses with atap
 // roofs, pasar stalls, a three-tier istana, a harbour with a jetty and prahu boats.
@@ -73,7 +74,7 @@ function atapRoof(w: number, d: number, topY: number, rise: number, color: numbe
   return m;
 }
 
-export function buildLevel(): Level {
+export function buildLevel(opts: { lampLights?: number } = {}): Level {
   const root = new THREE.Group();
   const colliders: Box[] = [];
   const occluders: Box[] = [];
@@ -377,9 +378,11 @@ export function buildLevel(): Level {
     [-5, 5], [5, -5], [-11, -12], [11, 12], [0, -29],
     [-28, 28], [-8, 16], [8, 16], [-8, -15], [8, -15], [-15, -8.5], [15, 8.5], [-14, 0], [14, 0], [-10, 30], [10, 30], [4, -31],
   ];
-  for (const [x, z] of lampPos) {
+  const litLamps = spreadIndices(lampPos.length, opts.lampLights ?? lampPos.length);
+  for (const [i, [x, z]] of lampPos.entries()) {
     root.add(mesh(new THREE.CylinderGeometry(0.07, 0.09, 3, 5), mat(0x3d2a1a), x, 1.5, z));
     root.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb14a }), x, 3.1, z, false));
+    if (!litLamps.has(i)) continue;
     const l = new THREE.PointLight(0xffa04a, 11, 17, 1.5);
     l.position.set(x, 3.0, z);
     root.add(l);

@@ -25,6 +25,7 @@ import {
   type Vec2,
 } from "./logic";
 import { NavDebug } from "./navDebug";
+import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
@@ -47,9 +48,20 @@ export interface HudState {
   caught: number;
 }
 
+export interface RunStats {
+  /** seconds of play in this attempt (pauses excluded) */
+  time: number;
+  /** guards that went fully alert */
+  alerts: number;
+  /** the attempt began at the mission start rather than a later checkpoint */
+  fromStart: boolean;
+}
+
 export interface GameCallbacks {
   onHud: (h: HudState) => void;
   onPhase: (p: Phase, reason: LoseReason) => void;
+  /** a checkpoint was reached: at mission start, or when the Kapitan goes down */
+  onCheckpoint?: (cp: Checkpoint) => void;
 }
 
 const VIS = { range: 16, halfAngle: 0.6 };
@@ -243,6 +255,9 @@ export class Game {
   private knifeFly: { t: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
   private disposers: (() => void)[] = [];
   private touchMove = { x: 0, y: 0, run: false };
+  private lookSens = 1;
+  private invertY = false;
+  private run: RunStats = { time: 0, alerts: 0, fromStart: true };
   readonly quality: Quality;
 
   constructor(
@@ -498,10 +513,33 @@ export class Game {
 
   // ------------------------------------------------------------------ public API
 
-  start() {
+  /** Begin the mission, from the beginning or from the "Kapitan down" checkpoint. Guard and alert state is never restored. */
+  start(from: Checkpoint = "start") {
     this.resetWorld();
+    this.run = { time: 0, alerts: 0, fromStart: from === "start" };
+    if (from === "kapitan") this.applyKapitanCheckpoint();
+    this.cb.onCheckpoint?.(from);
     this.setPhase("playing");
     this.lock();
+  }
+  private applyKapitanCheckpoint() {
+    const t = this.guards.find((g) => g.isTarget);
+    if (!t) return;
+    t.dead = true;
+    this.p.x = t.x;
+    this.p.z = t.z;
+    this.objective = "escape";
+    (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
+    this.syncMeshes();
+  }
+  /** Play stats for the current attempt (read when it ends). */
+  stats(): RunStats {
+    return { ...this.run };
+  }
+  /** Mouse and touch look settings: sensitivity multiplier and inverted vertical look. */
+  setLookSettings(sens: number, invertY: boolean) {
+    this.lookSens = Number.isFinite(sens) && sens > 0 ? sens : 1;
+    this.invertY = invertY;
   }
   resume() {
     if (this.phase === "paused") {
@@ -545,8 +583,9 @@ export class Game {
     this.touchMove.run = run;
   }
   look(dx: number, dy: number) {
-    this.camYaw -= dx * 0.0022;
-    this.camPitch = clamp(this.camPitch + dy * 0.0022, -0.25, 1.2);
+    const k = 0.0022 * this.lookSens;
+    this.camYaw -= dx * k;
+    this.camPitch = clamp(this.camPitch + dy * k * (this.invertY ? -1 : 1), -0.25, 1.2);
   }
   /** Small read-only snapshot used by the automated browser check. */
   debug() {
@@ -555,6 +594,7 @@ export class Game {
       player: { x: this.p.x, y: this.p.y, z: this.p.z },
       guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget })),
       objective: this.objective,
+      exit: { x: this.level.exit.x, z: this.level.exit.z },
       drawCalls: this.renderer.info.render.calls,
       quality: this.quality,
       camYaw: this.camYaw,
@@ -638,6 +678,7 @@ export class Game {
   }
 
   private update(dt: number) {
+    this.run.time += dt;
     this.toastT = Math.max(0, this.toastT - dt);
     this.knifeCd = Math.max(0, this.knifeCd - dt);
     const L = this.level;
@@ -862,6 +903,7 @@ export class Game {
     const now = g.brain.state;
     if (now !== prev) {
       if (now === "alert") {
+        this.run.alerts++;
         g.meter = 1;
         if (!g.lastKnown) {
           g.lastKnown = { x: p.x, z: p.z };
@@ -1072,6 +1114,7 @@ export class Game {
       this.objective = "escape";
       (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
       this.toast("The Kapitan is down. Reach the jetty.");
+      this.cb.onCheckpoint?.("kapitan");
     } else this.toast(cover ? "Silent kill. Body hidden in cover." : "Silent kill.");
   }
 

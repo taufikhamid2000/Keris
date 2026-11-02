@@ -73,11 +73,15 @@ export function isTouchDevice(env: TouchEnv): boolean {
 
 export type Quality = "low" | "high";
 
-/** ?quality=low|high wins; otherwise touch devices get low and everything else high. */
-export function pickQuality(touch: boolean, search = ""): Quality {
+/** ?quality=low|high in the URL, or null. It beats any saved preference for that session. */
+export function qualityFromUrl(search = ""): Quality | null {
   const q = new URLSearchParams(search).get("quality");
-  if (q === "low" || q === "high") return q;
-  return touch ? "low" : "high";
+  return q === "low" || q === "high" ? q : null;
+}
+
+/** ?quality=low|high wins, then a saved override ("low"/"high"), otherwise touch devices get low and everything else high. */
+export function pickQuality(touch: boolean, search = "", pref: Quality | "auto" = "auto"): Quality {
+  return qualityFromUrl(search) ?? (pref === "low" || pref === "high" ? pref : touch ? "low" : "high");
 }
 
 export interface QualitySettings {

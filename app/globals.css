@@ -109,3 +109,18 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 @media (max-height: 480px) and (pointer: coarse) {
   .panel.wide > .small { font-size: .65rem; }
 }
+
+/* settings and saved progress */
+.overlay.settings { z-index: 20; }
+.panel .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; text-align: left; font-size: .9rem; }
+.panel .row select, .panel .row input[type="range"] { max-width: 220px; }
+.panel .row select { background: #2a1a30; color: #f4e6d4; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; padding: 4px; }
+.panel .codebox { margin: 10px 0; text-align: left; font-size: .85rem; }
+.panel .codebox textarea { width: 100%; margin-top: 6px; background: #2a1a30; color: #f4e6d4; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; font-family: ui-monospace, monospace; font-size: .7rem; }
+.btn.sm { padding: 5px 14px; margin: 6px 6px 0 0; font-size: .8rem; }
+.btn.danger { background: #8e1b12; }
+.confirm { border: 1px solid rgba(255,120,100,.5); border-radius: 6px; padding: 6px 10px 10px; margin: 8px 0; }
+.confirm p { margin: 4px 0; font-size: .85rem; }
+.best { margin: 8px 0 0; font-size: .9rem; color: #ffcf8a; }
+.best.new { color: #ffd24a; font-weight: 600; }
+.root.touch-ui .overlay.settings .panel { max-width: min(520px, calc(100vw - 24px)); }

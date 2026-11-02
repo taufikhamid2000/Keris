@@ -2,7 +2,20 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, LoseReason, Phase } from "@/game/engine";
-import { isTouchDevice, pickQuality } from "@/game/touch";
+import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
+import {
+  MISSION_ID,
+  defaultSave,
+  formatTime,
+  getSaveStore,
+  hasProgress,
+  ratingLabel,
+  recordStart,
+  recordWin,
+  withCheckpoint,
+  type MissionStats,
+} from "@/game/save";
+import SettingsPanel from "./SettingsPanel";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
 
 const EMPTY: HudState = {
@@ -20,6 +33,15 @@ const EMPTY: HudState = {
   carrying: false,
   caught: 0,
 };
+
+const SERVER_SAVE = defaultSave();
+
+interface WinResult {
+  time: number;
+  rating: number;
+  newBestTime: boolean;
+  newBestRating: boolean;
+}
 
 declare global {
   interface Window {
@@ -91,6 +113,15 @@ function Compass({ north, obj }: { north: number; obj: number | null }) {
   );
 }
 
+function Best({ m, className = "" }: { m: MissionStats | undefined; className?: string }) {
+  if (!m || (m.bestTime === null && m.bestRating === null)) return null;
+  return (
+    <p className={`best ${className}`}>
+      Best: {formatTime(m.bestTime)} · {ratingLabel(m.bestRating)}
+    </p>
+  );
+}
+
 function Controls({ touch }: { touch: boolean }) {
   return (
     <table className="controls">
@@ -115,6 +146,12 @@ export default function GameClient() {
   const [reason, setReason] = useState<LoseReason>(null);
   const [hud, setHud] = useState<HudState>(EMPTY);
   const [failed, setFailed] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [win, setWin] = useState<WinResult | null>(null);
+  const store = getSaveStore();
+  const save = useSyncExternalStore(store.subscribe, store.getSnapshot, () => SERVER_SAVE);
+  const mission = save.missions[MISSION_ID];
+  const qualityPref = save.settings.quality;
   const touch = useSyncExternalStore(subscribeTouch, touchSnapshot, () => false);
   const portrait = useSyncExternalStore(subscribePortrait, portraitSnapshot, () => false) && touch;
 
@@ -130,11 +167,17 @@ export default function GameClient() {
           {
             onHud: setHud,
             onPhase: (p, r) => {
+              if (p === "won" && inst) {
+                const out = recordWin(store.get(), inst.stats());
+                store.set(out.data);
+                setWin({ time: inst.stats().time, rating: out.rating, newBestTime: out.newBestTime, newBestRating: out.newBestRating });
+              }
               setPhase(p);
               setReason(r);
             },
+            onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d) : withCheckpoint(d, cp))),
           },
-          { quality: pickQuality(touch, window.location.search) },
+          { quality: pickQuality(touch, window.location.search, qualityPref) },
         );
         window.__keris = inst;
         setGame(inst);
@@ -145,7 +188,11 @@ export default function GameClient() {
       inst?.dispose();
       delete window.__keris;
     };
-  }, [touch]);
+  }, [touch, qualityPref, store]);
+
+  useEffect(() => {
+    game?.setLookSettings(save.settings.lookSens, save.settings.invertY);
+  }, [game, save.settings.lookSens, save.settings.invertY]);
 
   // a rotated phone must not keep playing under the "rotate" prompt
   useEffect(() => {
@@ -153,10 +200,17 @@ export default function GameClient() {
   }, [portrait, game]);
 
   const g = () => game;
-  const begin = () => {
+  const begin = (from: "start" | "kapitan" = "start") => {
     if (touch) enterFullscreenLandscape();
-    g()?.start();
+    setWin(null);
+    g()?.start(from);
   };
+  const canContinue = hasProgress(save);
+  const settingsBtn = (
+    <button className="btn ghost" onClick={() => setShowSettings(true)}>
+      Settings
+    </button>
+  );
   const resume = () => {
     if (touch) enterFullscreenLandscape();
     g()?.resume();
@@ -221,9 +275,25 @@ export default function GameClient() {
               keris, and slip out by the jetty.
             </p>
             <Controls touch={touch} />
-            <button className="btn" onClick={begin} disabled={!game}>
-              {touch ? "Tap to play" : "Begin"}
-            </button>
+            {canContinue ? (
+              <>
+                <button className="btn" onClick={() => begin(save.checkpoint ?? "start")} disabled={!game}>
+                  Continue
+                </button>
+                <button className="btn ghost" onClick={() => begin("start")} disabled={!game}>
+                  New game
+                </button>
+              </>
+            ) : (
+              <button className="btn" onClick={() => begin("start")} disabled={!game}>
+                {touch ? "Tap to play" : "Begin"}
+              </button>
+            )}
+            {settingsBtn}
+            {canContinue && (
+              <p className="dim small">{save.checkpoint === "kapitan" ? "Checkpoint: the Kapitan is down" : "Checkpoint: mission start"}</p>
+            )}
+            <Best m={mission} />
             <p className="dim small">
               {touch ? "Best in landscape. Fullscreen is requested where your browser allows it." : "Click Begin to capture the mouse."}
             </p>
@@ -239,9 +309,10 @@ export default function GameClient() {
             <button className="btn" onClick={resume}>
               Resume
             </button>
-            <button className="btn ghost" onClick={() => g()?.start()}>
+            <button className="btn ghost" onClick={() => begin("start")}>
               Restart
             </button>
+            {settingsBtn}
           </div>
         </div>
       )}
@@ -251,7 +322,14 @@ export default function GameClient() {
           <div className="panel">
             <h2>The Kapitan is silenced</h2>
             <p>You reached the jetty and vanished into the harbour. The battery will wait for a new commander.</p>
-            <button className="btn" onClick={() => g()?.start()}>
+            {win && (
+              <p className={`best ${win.newBestTime || win.newBestRating ? "new" : ""}`}>
+                Time {formatTime(win.time)} · {ratingLabel(win.rating)}
+                {(win.newBestTime || win.newBestRating) && " · New best!"}
+              </p>
+            )}
+            <Best m={mission} />
+            <button className="btn" onClick={() => begin("start")}>
               Play again
             </button>
           </div>
@@ -263,11 +341,27 @@ export default function GameClient() {
           <div className="panel">
             <h2>{reason === "caught" ? "You were caught" : "Mission failed"}</h2>
             <p>The alarm spread through the lanes. Try another route.</p>
-            <button className="btn" onClick={() => g()?.start()}>
-              Restart
+            {save.checkpoint === "kapitan" && (
+              <button className="btn" onClick={() => begin("kapitan")}>
+                Retry from checkpoint
+              </button>
+            )}
+            <button className={`btn${save.checkpoint === "kapitan" ? " ghost" : ""}`} onClick={() => begin("start")}>
+              {save.checkpoint === "kapitan" ? "Restart mission" : "Restart"}
             </button>
+            <Best m={mission} />
           </div>
         </div>
+      )}
+
+      {showSettings && (
+        <SettingsPanel
+          store={store}
+          save={save}
+          canChangeQuality={phase === "title"}
+          urlQuality={qualityFromUrl(window.location.search)}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {portrait && (

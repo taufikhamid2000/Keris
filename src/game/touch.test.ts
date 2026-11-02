@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { QUALITY, clampToRadius, isTouchDevice, joystickVector, lookDelta, pickQuality, pixelRatioFor, spreadIndices } from "./touch";
+import { QUALITY, clampToRadius, isTouchDevice, joystickVector, lookDelta, pickQuality, pixelRatioFor, qualityFromUrl, spreadIndices } from "./touch";
 
 describe("joystickVector", () => {
   it("is zero inside the deadzone", () => {
@@ -116,5 +116,22 @@ describe("spreadIndices", () => {
   });
   it("returns all when n >= total", () => {
     expect(spreadIndices(4, 10).size).toBe(4);
+  });
+});
+
+describe("pickQuality with a saved preference", () => {
+  it("defaults by device when the preference is auto", () => {
+    expect(pickQuality(true, "")).toBe("low");
+    expect(pickQuality(false, "", "auto")).toBe("high");
+  });
+  it("a saved low/high beats the device default", () => {
+    expect(pickQuality(false, "", "low")).toBe("low");
+    expect(pickQuality(true, "", "high")).toBe("high");
+  });
+  it("the ?quality= param beats the saved value", () => {
+    expect(pickQuality(false, "?quality=low", "high")).toBe("low");
+    expect(pickQuality(true, "?quality=high", "low")).toBe("high");
+    expect(qualityFromUrl("?quality=ultra")).toBeNull();
+    expect(pickQuality(true, "?quality=ultra", "high")).toBe("high");
   });
 });

@@ -42,6 +42,17 @@ Touch controls appear on touch devices (detected by `pointer: coarse`, not user 
 
 Checked with `node scripts/mobile-check.mjs <url>` (headless Chromium, touch emulation at 667x375 and 844x390). Real-device framerate is untested: it only ran in software-rendered headless Chromium, so the quality tier is a best guess. iPhone Safari does not allow page fullscreen or orientation lock, so rotate manually there.
 
+## Saving progress
+
+Progress is saved in your browser's localStorage under the single key `keris:save` (versioned, with a migration path). It is per browser and per device, and clearing site data erases it. Nothing is sent to a server.
+
+- Saved: the last checkpoint (mission start, or "Kapitan is down"), your best time and stealth rating, and settings (quality, look sensitivity, invert Y). Guard and alert state is never saved, so Continue rebuilds the world with guards on patrol.
+- Title screen: Continue (only when a save exists) and New game. Settings has Reset progress (with a confirm step) and an export/import save code (base64 of the JSON, validated on import).
+- `?quality=low|high` in the URL beats the saved quality for that session without changing it.
+- Corrupt, unrecognised or newer-version data falls back to defaults, and if storage is blocked the game runs with in-memory progress.
+
+Checked with `node scripts/save-check.mjs <url>` (headless Chromium, desktop and touch) plus unit tests in `src/game/save.test.ts`.
+
 ## Stack
 
 Next.js 16 (App Router), React 19, TypeScript, plain three.js in a client component, Vitest, ESLint, GitHub Actions CI. No backend.

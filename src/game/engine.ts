@@ -1,7 +1,15 @@
 import * as THREE from "three";
 import { buildLevel, type Level } from "./level";
 import {
+  BODY,
+  bodyReaction,
   canSee,
+  canSeeBody,
+  distToFootprint,
+  isBodyHidden,
+  landingPoint,
+  planClimb,
+  stepBodyMeter,
   clamp,
   detectionRate,
   dist2D,
@@ -45,9 +53,14 @@ export interface GameCallbacks {
 
 const VIS = { range: 16, halfAngle: 0.6 };
 const PLAYER_R = 0.4;
+const FOG_DUSK = 0xc98259;
+const FOG_EAGLE = 0x4a5878;
+// dusk fill levels; Mata Helang drops them for contrast
+const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
 const CATCH_SECONDS = 2;
 const START_KNIVES = 6;
+const HEAD_H = 1.75;
 
 interface Guard {
   id: number;
@@ -69,6 +82,14 @@ interface Guard {
   stun: number;
   dead: boolean;
   fall: number;
+  y: number;
+  vy: number;
+  climb: { t: number; dur: number; fromX: number; fromY: number; fromZ: number; to: Vec2; toY: number } | null;
+  lastKnownY: number;
+  bodyMeter: number;
+  bodyTarget: Guard | null;
+  carried: boolean;
+  discovered: boolean;
   lastKnown: Vec2 | null;
   investigate: Vec2 | null;
   noiseFlag: boolean;
@@ -85,7 +106,7 @@ const STATE_COLOR: Record<GuardState, number> = {
 function pushOut(pos: { x: number; z: number }, r: number, boxes: Box[], feetY: number) {
   for (let pass = 0; pass < 2; pass++) {
     for (const b of boxes) {
-      if (b.maxY <= feetY + STEP_H) continue;
+      if (b.maxY <= feetY + STEP_H || b.minY >= feetY + HEAD_H) continue;
       const cx = clamp(pos.x, b.minX, b.maxX);
       const cz = clamp(pos.z, b.minZ, b.maxZ);
       const dx = pos.x - cx;
@@ -206,6 +227,10 @@ export class Game {
   private caught = 0;
   private objective: "kill" | "escape" = "kill";
   private hidden = false;
+  private carrying: Guard | null = null;
+  private hemi!: THREE.HemisphereLight;
+  private ambient!: THREE.AmbientLight;
+  private sun!: THREE.DirectionalLight;
   private toastText = "";
   private toastT = 0;
   private lockedOnce = false;
@@ -222,12 +247,12 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.display = "block";
 
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 400);
-    this.scene.fog = new THREE.Fog(0xc98259, 25, 150);
+    this.scene.fog = new THREE.Fog(FOG_DUSK, 30, 170);
 
     // sky dome
     this.sky = new THREE.Mesh(
@@ -244,8 +269,12 @@ export class Game {
     this.scene.add(this.sky);
 
     // lights: warm low sun + cool fill
-    this.scene.add(new THREE.HemisphereLight(0xffc896, 0x3a2a4a, 0.85));
-    const sun = new THREE.DirectionalLight(0xffa054, 2.6);
+    this.hemi = new THREE.HemisphereLight(0xffd2a6, 0x6a5878, LIGHT.hemi);
+    this.scene.add(this.hemi);
+    this.ambient = new THREE.AmbientLight(0x9a86a8, LIGHT.ambient);
+    this.scene.add(this.ambient);
+    const sun = new THREE.DirectionalLight(0xffa860, LIGHT.sun);
+    this.sun = sun;
     sun.position.set(-40, 24, 30);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -344,6 +373,14 @@ export class Game {
       stun: 0,
       dead: false,
       fall: 0,
+      y: 0,
+      vy: 0,
+      climb: null,
+      lastKnownY: 0,
+      bodyMeter: 0,
+      bodyTarget: null,
+      carried: false,
+      discovered: false,
       lastKnown: null,
       investigate: null,
       noiseFlag: false,
@@ -363,6 +400,7 @@ export class Game {
     this.caught = 0;
     this.objective = "kill";
     this.hidden = false;
+    this.carrying = null;
     this.crouchToggle = false;
     this.toastText = "";
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0;
@@ -378,6 +416,14 @@ export class Game {
       g.fall = 0;
       g.wait = 0;
       g.lastKnown = null;
+      g.lastKnownY = 0;
+      g.y = 0;
+      g.vy = 0;
+      g.climb = null;
+      g.bodyMeter = 0;
+      g.bodyTarget = null;
+      g.carried = false;
+      g.discovered = false;
       g.investigate = null;
       g.noiseFlag = false;
       g.group.rotation.x = 0;
@@ -400,6 +446,7 @@ export class Game {
       this.keys.add(e.code);
       if (e.code === "KeyE") this.tryTakedown();
       if (e.code === "KeyQ") this.tryThrow();
+      if (e.code === "KeyF") this.tryCarry();
       if (e.code === "KeyV") this.eagle = !this.eagle;
       if (e.code === "KeyC") this.crouchToggle = !this.crouchToggle;
       if (e.code === "Space") this.tryJumpOrClimb();
@@ -524,7 +571,7 @@ export class Game {
       str /= len;
     }
     const crouched = this.crouched;
-    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && !crouched && len > 0;
+    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && !crouched && !this.carrying && len > 0;
 
     if (this.climb) {
       const c = this.climb;
@@ -543,7 +590,7 @@ export class Game {
       }
       p.moving = false;
     } else {
-      const speed = crouched ? 1.7 : p.running ? 6.2 : 3.4;
+      const speed = this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       const rx = -Math.cos(this.camYaw);
@@ -580,13 +627,13 @@ export class Game {
     // ---- noise
     const stance = { crouched, running: p.running };
     const nr = this.hidden ? 0 : noiseRadius(stance, p.moving && p.grounded);
-    if (nr > 0) for (const g of this.guards) if (!g.dead && dist2D(g, p) < nr * (Math.abs(g.group.position.y - p.y) > 2 ? 0.5 : 1)) this.hear(g, p);
+    if (nr > 0) for (const g of this.guards) if (!g.dead && dist2D(g, p) < nr * (Math.abs(g.y - p.y) > 2 ? 0.5 : 1)) this.hear(g, p);
 
     // ---- guards
     for (const g of this.guards) this.updateGuard(g, dt, stance);
 
     // ---- caught
-    const grabbing = this.guards.some((g) => !g.dead && g.stun <= 0 && g.brain.state === "alert" && dist2D(g, p) < 2.3 && p.y < 2.2);
+    const grabbing = this.guards.some((g) => !g.dead && g.stun <= 0 && g.brain.state === "alert" && dist2D(g, p) < 2.3 && Math.abs(p.y - g.y) < 2.2);
     this.caught = clamp(this.caught + (grabbing ? dt : -dt * 0.6), 0, CATCH_SECONDS);
     if (this.caught >= CATCH_SECONDS) {
       this.setPhase("lost", "caught");
@@ -635,6 +682,8 @@ export class Game {
       const pz = p.z + dz * (PLAYER_R + reach);
       for (const b of this.level.colliders) {
         if (b.maxY <= p.y + STEP_H || b.maxY > p.y + 3.7) continue;
+        // standing under a raised floor: do not climb up through it
+        if (b.minY > p.y && p.x >= b.minX && p.x <= b.maxX && p.z >= b.minZ && p.z <= b.maxZ) continue;
         if (px < b.minX - 0.05 || px > b.maxX + 0.05 || pz < b.minZ - 0.05 || pz > b.maxZ + 0.05) continue;
         if (!best || b.maxY < best.maxY) best = b;
       }
@@ -665,10 +714,27 @@ export class Game {
   private updateGuard(g: Guard, dt: number, stance: { crouched: boolean; running: boolean }) {
     if (g.dead) {
       g.fall = Math.min(1, g.fall + dt * 3);
+      if (g.carried) {
+        g.x = this.p.x;
+        g.z = this.p.z;
+        g.y = this.p.y + 0.9;
+      }
       return;
     }
     const p = this.p;
     const L = this.level;
+
+    // gravity: guards that walk off a roof drop to the ground
+    if (!g.climb) {
+      const gh = groundHeight(g.x, g.z, g.y, L.colliders);
+      if (g.y > gh + 0.01) {
+        g.vy -= 20 * dt;
+        g.y = Math.max(gh, g.y + g.vy * dt);
+      } else {
+        g.y = gh;
+        g.vy = 0;
+      }
+    }
 
     if (g.stun > 0) {
       g.stun -= dt;
@@ -682,19 +748,23 @@ export class Game {
 
     // ---- senses
     const alertNow = g.brain.state === "alert";
-    const eye = { x: g.x, y: 1.7, z: g.z };
+    const eye = { x: g.x, y: g.y + 1.7, z: g.z };
     const chest = { x: p.x, y: p.y + (stance.crouched ? 0.6 : 1.1), z: p.z };
     const seen = canSee(eye, g.yaw, chest, VIS, L.occluders, this.hidden);
     g.seesPlayer = seen;
     if (seen) {
       g.lastKnown = { x: p.x, z: p.z };
+      g.lastKnownY = p.y;
       g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), VIS.range, stance), dt);
     } else {
       g.meter = stepMeter(g.meter, false, 0, dt, alertNow || g.brain.state === "search" ? 0.1 : 0.25);
     }
 
-    // ---- brain
+    // ---- bodies: a guard whose cone catches a downed guard investigates, then raises the alarm
     const prev = g.brain.state;
+    const found = alertNow ? false : this.noticeBodies(g, eye, dt);
+
+    // ---- brain
     g.brain = stepBrain(g.brain, { meter: g.meter, seesPlayer: seen, heardNoise: g.noiseFlag }, dt);
     const noisePoint = g.noiseFlag ? g.investigate : null;
     g.noiseFlag = false;
@@ -702,13 +772,17 @@ export class Game {
     if (now !== prev) {
       if (now === "alert") {
         g.meter = 1;
-        if (!g.lastKnown) g.lastKnown = { x: p.x, z: p.z };
-        this.toast(g.isTarget ? "The Kapitan has seen you!" : "Spotted!");
+        if (!g.lastKnown) {
+          g.lastKnown = { x: p.x, z: p.z };
+          g.lastKnownY = p.y;
+        }
+        this.toast(found ? "A body was found!" : g.isTarget ? "The Kapitan has seen you!" : "Spotted!");
         for (const o of this.guards) {
           if (o !== g && !o.dead && o.stun <= 0 && o.brain.state !== "alert" && dist2D(o, g) < 14) {
             o.brain = forceAlert();
             o.meter = 1;
             o.lastKnown = g.lastKnown;
+            o.lastKnownY = g.lastKnownY;
           }
         }
       } else if (now === "patrol") {
@@ -730,6 +804,10 @@ export class Game {
     }
 
     // ---- movement per state
+    if (g.climb) {
+      this.advanceClimb(g, dt);
+      return;
+    }
     switch (g.brain.state) {
       case "patrol": {
         const w = g.waypoints[g.wp];
@@ -753,17 +831,82 @@ export class Game {
       }
       case "alert": {
         const pt = g.lastKnown ?? { x: p.x, z: p.z };
-        if (dist2D(g, pt) > 1.0) this.moveToward(g, pt, 4.0, dt, 9);
+        const ptY = g.lastKnown ? g.lastKnownY : p.y;
+        if (dist2D(g, pt) > 1.0 || ptY > g.y + 0.6) this.chase(g, pt, ptY, 4.0, dt, 9);
         else this.turnToward(g, yawTo(g, p), 9, dt);
         break;
       }
       case "search": {
         const pt = g.lastKnown;
-        if (pt && dist2D(g, pt) > 1.2) this.moveToward(g, pt, 2.4, dt, 6);
+        if (pt && (dist2D(g, pt) > 1.2 || g.lastKnownY > g.y + 0.6)) this.chase(g, pt, g.lastKnownY, 2.4, dt, 6);
         else g.yaw += 1.4 * dt;
         break;
       }
     }
+  }
+
+  /** Pursue a point, climbing to it if it is on a roof (walk to the nearest climbable edge, then climb). */
+  private chase(g: Guard, pt: Vec2, ptY: number, speed: number, dt: number, turn: number) {
+    const plan = ptY > g.y + 0.6 ? planClimb(g, g.y, { x: pt.x, y: ptY, z: pt.z }, this.level.colliders) : null;
+    if (!plan) return this.moveToward(g, pt, speed, dt, turn);
+    const d = this.moveToward(g, plan.approach, speed, dt, turn);
+    if (d < 0.3 || distToFootprint(g, plan.box) < 0.75) {
+      const to = landingPoint({ x: g.x, z: g.z }, plan.box);
+      g.yaw = yawTo(g, { x: (plan.box.minX + plan.box.maxX) / 2, z: (plan.box.minZ + plan.box.maxZ) / 2 });
+      g.climb = { t: 0, dur: 0.6 + (plan.box.maxY - g.y) * 0.2, fromX: g.x, fromY: g.y, fromZ: g.z, to, toY: plan.box.maxY };
+      g.vy = 0;
+    }
+    return d;
+  }
+
+  private advanceClimb(g: Guard, dt: number) {
+    const c = g.climb;
+    if (!c) return;
+    c.t += dt;
+    const k = clamp(c.t / c.dur, 0, 1);
+    const e = k * k * (3 - 2 * k);
+    g.x = c.fromX + (c.to.x - c.fromX) * e;
+    g.z = c.fromZ + (c.to.z - c.fromZ) * e;
+    g.y = c.fromY + (c.toY - c.fromY) * clamp(k * 1.6, 0, 1);
+    if (k >= 1) {
+      g.climb = null;
+      g.y = c.toY;
+    }
+  }
+
+  /** Look for undiscovered bodies in the cone. Returns true on the frame the guard discovers one. */
+  private noticeBodies(g: Guard, eye: { x: number; y: number; z: number }, dt: number): boolean {
+    let seen: Guard | null = null;
+    let sd = Infinity;
+    for (const b of this.guards) {
+      if (!b.dead || b.carried || b.discovered) continue;
+      const hidden = isBodyHidden(b, this.level.hides);
+      if (!canSeeBody(eye, g.yaw, b, VIS, this.level.occluders, hidden, b.y)) continue;
+      const d = dist2D(g, b);
+      if (d < sd) {
+        sd = d;
+        seen = b;
+      }
+    }
+    if (seen) g.bodyTarget = seen;
+    g.bodyMeter = stepBodyMeter(g.bodyMeter, !!seen, seen ? sd : BODY.range, dt);
+    const t = g.bodyTarget;
+    if (!t || t.discovered || !t.dead) return false;
+    const r = bodyReaction(g.bodyMeter);
+    if (r === "discovered") {
+      t.discovered = true;
+      g.bodyMeter = 0;
+      g.bodyTarget = null;
+      g.brain = forceAlert();
+      g.lastKnown = { x: t.x, z: t.z };
+      g.lastKnownY = t.y;
+      return true;
+    }
+    if (r === "suspicious") {
+      g.noiseFlag = true;
+      g.investigate = { x: t.x, z: t.z };
+    }
+    return false;
   }
 
   private turnToward(g: Guard, target: number, rate: number, dt: number) {
@@ -779,7 +922,7 @@ export class Game {
       const step = Math.min(speed * dt, d);
       g.x += Math.sin(g.yaw) * step;
       g.z += Math.cos(g.yaw) * step;
-      pushOut(g, 0.45, this.level.colliders, 0);
+      pushOut(g, 0.45, this.level.colliders, g.y);
     }
     return d;
   }
@@ -793,7 +936,7 @@ export class Game {
     for (const g of this.guards) {
       if (g.dead) continue;
       const d = dist2D(g, p);
-      if (d > 2.0 || Math.abs(p.y - 0) > 1.8) continue;
+      if (d > 2.0 || Math.abs(p.y - g.y) > 1.8) continue;
       near = true;
       const ok = g.stun > 0 || (g.brain.state !== "alert" && isBehind(g, g.yaw, p));
       if (ok && (!best || d < dist2D(best, p))) best = g;
@@ -802,18 +945,56 @@ export class Game {
   }
 
   private tryTakedown() {
-    if (this.climb) return;
+    if (this.climb || this.carrying) return;
     const { guard } = this.takedownTarget();
     if (!guard) return;
     guard.dead = true;
     guard.meter = 0;
+    guard.climb = null;
+    // a takedown made from inside a haystack or bush drags the body into the cover
+    const cover = this.level.hides.find((h) => this.hidden && dist2D(this.p, h) < h.r);
+    if (cover) {
+      guard.x = cover.x + (guard.x - cover.x) * 0.2;
+      guard.z = cover.z + (guard.z - cover.z) * 0.2;
+    }
     this.p.yaw = yawTo(this.p, guard);
     for (const o of this.guards) if (!o.dead && o !== guard && dist2D(o, guard) < 5) this.hear(o, guard);
     if (guard.isTarget) {
       this.objective = "escape";
       (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
       this.toast("The Kapitan is down. Reach the jetty.");
-    } else this.toast("Silent kill.");
+    } else this.toast(cover ? "Silent kill. Body hidden in cover." : "Silent kill.");
+  }
+
+  /** F: pick up the nearest body, or drop the one being carried (hidden if dropped inside cover). */
+  private tryCarry() {
+    if (this.climb) return;
+    const p = this.p;
+    if (this.carrying) {
+      const b = this.carrying;
+      this.carrying = null;
+      b.carried = false;
+      b.x = p.x + Math.sin(p.yaw) * 0.6;
+      b.z = p.z + Math.cos(p.yaw) * 0.6;
+      b.y = p.y;
+      this.toast(isBodyHidden(b, this.level.hides) ? "Body hidden." : "Body dropped. Hide it in a haystack or bush.");
+      return;
+    }
+    const b = this.nearestBody();
+    if (!b) return;
+    this.carrying = b;
+    b.carried = true;
+    this.toast("Carrying body. F to drop.");
+  }
+
+  private nearestBody(): Guard | null {
+    let best: Guard | null = null;
+    for (const g of this.guards) {
+      if (!g.dead || g.carried) continue;
+      const d = dist2D(g, this.p);
+      if (d < 2.0 && Math.abs(this.p.y - g.y) < 1.8 && (!best || d < dist2D(best, this.p))) best = g;
+    }
+    return best;
   }
 
   private tryThrow() {
@@ -874,7 +1055,9 @@ export class Game {
     let prompt = "";
     if (this.climb) prompt = "";
     else if (tg.guard) prompt = tg.guard.isTarget ? "E  Strike the Kapitan with the keris" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
+    else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
+    else if (this.nearestBody()) prompt = "F  Carry body";
     else if (this.hidden) prompt = "Hidden";
 
     const tgt = this.objective === "kill" ? this.guards.find((g) => g.isTarget && !g.dead) : null;
@@ -903,7 +1086,7 @@ export class Game {
     this.player.group.position.set(p.x, p.y, p.z);
     this.player.group.rotation.y = p.yaw;
     for (const g of this.guards) {
-      g.group.position.set(g.x, g.dead ? 0.25 * g.fall : 0, g.z);
+      g.group.position.set(g.x, g.y + (g.dead && !g.carried ? 0.25 * g.fall : 0), g.z);
       g.group.rotation.y = g.yaw;
       g.group.rotation.x = g.dead ? -g.fall * (Math.PI / 2) : 0;
     }
@@ -956,8 +1139,13 @@ export class Game {
     }
     this.sky.position.copy(this.camera.position);
 
-    // Mata Helang look: slightly dimmer, bluish tone
-    this.renderer.toneMappingExposure = this.eagle ? 0.8 : 1.05;
+    // Mata Helang look: darker, bluish world so guards and cones stand out
+    const e = this.eagle;
+    this.renderer.toneMappingExposure = e ? 0.85 : 1.2;
+    this.hemi.intensity = e ? LIGHT.eagleHemi : LIGHT.hemi;
+    this.ambient.intensity = e ? LIGHT.eagleAmbient : LIGHT.ambient;
+    this.sun.intensity = e ? LIGHT.eagleSun : LIGHT.sun;
+    (this.scene.fog as THREE.Fog).color.setHex(e ? FOG_EAGLE : FOG_DUSK);
 
     // exit beam pulse
     const eb = this.level.exitBeam.material as THREE.MeshBasicMaterial;

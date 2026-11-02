@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  BODY,
   BRAIN,
+  approachPoint,
+  bodyReaction,
+  canSeeBody,
+  isBodyHidden,
+  landingPoint,
+  planClimb,
+  stepBodyMeter,
   type Brain,
   canSee,
   detectionRate,
@@ -159,5 +167,69 @@ describe("guard state machine", () => {
   it("search -> suspicious when the player is spotted again", () => {
     const b = stepBrain({ state: "search", timer: 2 }, { meter: 0.4, seesPlayer: true, heardNoise: false }, 0.1);
     expect(b.state).toBe("suspicious");
+  });
+});
+
+const house = (minX: number, maxX: number, minZ: number, maxZ: number, maxY: number, minY = 0): Box => ({ minX, maxX, minY, maxY, minZ, maxZ });
+
+describe("stilt house colliders", () => {
+  it("leaves a gap under the floor for a ray at body height", () => {
+    const floor = house(-5, 5, -5, 5, 3.4, 1.7);
+    expect(hasLineOfSight({ x: -9, y: 1, z: 0 }, { x: 9, y: 1, z: 0 }, [floor])).toBe(true);
+    expect(hasLineOfSight({ x: -9, y: 2.5, z: 0 }, { x: 9, y: 2.5, z: 0 }, [floor])).toBe(false);
+  });
+});
+
+describe("planClimb", () => {
+  const low = house(-6, 6, -6, 6, 3.4);
+  const tall = house(-6, 6, 6, 12, 6.6);
+  it("needs no climb on the same level", () => {
+    expect(planClimb({ x: 10, z: 0 }, 0, { x: 0, y: 0, z: 0 }, [low])).toBeNull();
+  });
+  it("walks to the edge of the roof the player is on", () => {
+    const plan = planClimb({ x: 10, z: 0 }, 0, { x: 0, y: 3.4, z: 0 }, [low]);
+    expect(plan?.box).toBe(low);
+    expect(plan?.approach.x).toBeCloseTo(6.95, 5);
+  });
+  it("uses a lower roof as a stepping stone for a tall one", () => {
+    const first = planClimb({ x: 10, z: 0 }, 0, { x: 0, y: 6.6, z: 9 }, [low, tall]);
+    expect(first?.box).toBe(low);
+    const second = planClimb({ x: 0, z: 5 }, 3.4, { x: 0, y: 6.6, z: 9 }, [low, tall]);
+    expect(second?.box).toBe(tall);
+  });
+  it("gives up when the goal is out of reach", () => {
+    expect(planClimb({ x: 40, z: 0 }, 0, { x: 0, y: 6.6, z: 9 }, [tall])).toBeNull();
+  });
+  it("lands inside the roof and approaches from outside", () => {
+    expect(landingPoint({ x: 7, z: 0 }, low).x).toBeCloseTo(5.5, 5);
+    expect(approachPoint({ x: 0, z: 0 }, low).x).toBeLessThan(low.minX);
+  });
+});
+
+describe("body discovery", () => {
+  const eye = { x: 0, y: 1.7, z: 0 };
+  const vision = { range: 16, halfAngle: 0.6 };
+  const haystack = [{ x: 0, z: 8, r: 1.5 }];
+  it("hides a body inside cover", () => {
+    expect(isBodyHidden({ x: 0.5, z: 8 }, haystack)).toBe(true);
+    expect(isBodyHidden({ x: 5, z: 8 }, haystack)).toBe(false);
+  });
+  it("sees an exposed body in the cone but not behind it", () => {
+    expect(canSeeBody(eye, 0, { x: 0, z: 8 }, vision, [], false)).toBe(true);
+    expect(canSeeBody(eye, Math.PI, { x: 0, z: 8 }, vision, [], false)).toBe(false);
+  });
+  it("only sees a hidden body at point-blank range", () => {
+    expect(canSeeBody(eye, 0, { x: 0, z: 8 }, vision, [], true)).toBe(false);
+    expect(canSeeBody(eye, 0, { x: 0, z: 1.2 }, vision, [], true)).toBe(true);
+  });
+  it("is blocked by walls", () => {
+    expect(canSeeBody(eye, 0, { x: 0, z: 8 }, vision, [wall], false)).toBe(false);
+  });
+  it("ramps awareness faster when close and escalates", () => {
+    expect(stepBodyMeter(0, true, 2, 0.5)).toBeGreaterThan(stepBodyMeter(0, true, 11, 0.5));
+    expect(bodyReaction(0.1)).toBe("none");
+    expect(bodyReaction(BODY.noticeAt)).toBe("suspicious");
+    expect(bodyReaction(1)).toBe("discovered");
+    expect(stepBodyMeter(0.5, false, 5, 1)).toBeLessThan(0.5);
   });
 });

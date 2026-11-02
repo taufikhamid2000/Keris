@@ -208,3 +208,123 @@ export function stepBrain(brain: Brain, s: Senses, dt: number): Brain {
 
 /** Another guard shouted: jump straight to alert. */
 export const forceAlert = (): Brain => ({ state: "alert", timer: 0 });
+
+// ---------------------------------------------------------------- climbing guards
+
+export const CLIMB = { step: 0.6, maxRise: 3.7, approachGap: 0.95 } as const;
+
+const topContains = (b: Box, p: Vec2, pad = 0.05) =>
+  p.x >= b.minX - pad && p.x <= b.maxX + pad && p.z >= b.minZ - pad && p.z <= b.maxZ + pad;
+
+/** Horizontal distance from a point to a box footprint (0 if inside). */
+export function distToFootprint(p: Vec2, b: Box): number {
+  const dx = p.x - clamp(p.x, b.minX, b.maxX);
+  const dz = p.z - clamp(p.z, b.minZ, b.maxZ);
+  return Math.hypot(dx, dz);
+}
+
+/** Closest point just outside a box footprint, where a climber can stand to grab its edge. */
+export function approachPoint(from: Vec2, b: Box, gap: number = CLIMB.approachGap): Vec2 {
+  const cx = clamp(from.x, b.minX, b.maxX);
+  const cz = clamp(from.z, b.minZ, b.maxZ);
+  if (from.x !== cx || from.z !== cz) {
+    const dx = from.x - cx;
+    const dz = from.z - cz;
+    const d = Math.hypot(dx, dz);
+    return { x: cx + (dx / d) * gap, z: cz + (dz / d) * gap };
+  }
+  const opts = [
+    { d: from.x - b.minX, x: b.minX - gap, z: from.z },
+    { d: b.maxX - from.x, x: b.maxX + gap, z: from.z },
+    { d: from.z - b.minZ, x: from.x, z: b.minZ - gap },
+    { d: b.maxZ - from.z, x: from.x, z: b.maxZ + gap },
+  ].sort((a, c) => a.d - c.d)[0];
+  return { x: opts.x, z: opts.z };
+}
+
+export interface ClimbPlan {
+  /** the box to climb next */
+  box: Box;
+  /** where to stand before climbing */
+  approach: Vec2;
+}
+
+/**
+ * How does a guard standing at height `climberY` reach a goal (x, z, y)?
+ * Returns the next box to climb (a stepping stone or the goal's own box) and the point to
+ * stand at, or null if no climb is needed / none is possible.
+ */
+export function planClimb(climber: Vec2, climberY: number, goal: Vec3, boxes: Box[]): ClimbPlan | null {
+  if (goal.y <= climberY + CLIMB.step) return null;
+  // the box whose top the goal stands on
+  let goalBox: Box | null = null;
+  for (const b of boxes) {
+    if (b.maxY > goal.y + CLIMB.step || b.maxY <= climberY + CLIMB.step) continue;
+    if (!topContains(b, goal)) continue;
+    if (!goalBox || b.maxY > goalBox.maxY) goalBox = b;
+  }
+  if (!goalBox) return null;
+  let best: Box | null = null;
+  let bestScore = Infinity;
+  for (const b of boxes) {
+    const rise = b.maxY - climberY;
+    if (rise <= CLIMB.step || rise > CLIMB.maxRise) continue;
+    if (b.maxY > goalBox.maxY + 1e-6) continue;
+    let extra = 0;
+    if (b !== goalBox) {
+      if (goalBox.maxY - b.maxY > CLIMB.maxRise) continue; // cannot go on from there
+      const gap =
+        Math.max(0, b.minX - goalBox.maxX, goalBox.minX - b.maxX) + Math.max(0, b.minZ - goalBox.maxZ, goalBox.minZ - b.maxZ);
+      if (gap > 2) continue; // a stepping stone must touch the goal's box
+      extra = 8 + gap;
+    }
+    const score = distToFootprint(climber, b) + extra;
+    if (score < bestScore) {
+      bestScore = score;
+      best = b;
+    }
+  }
+  if (!best) return null;
+  return { box: best, approach: approachPoint(climber, best) };
+}
+
+/** Landing point on top of `box` for a climber who grabbed it from `from`. */
+export function landingPoint(from: Vec2, box: Box, inset = 0.5): Vec2 {
+  const ix = Math.min(inset, (box.maxX - box.minX) / 2);
+  const iz = Math.min(inset, (box.maxZ - box.minZ) / 2);
+  return { x: clamp(from.x, box.minX + ix, box.maxX - ix), z: clamp(from.z, box.minZ + iz, box.maxZ - iz) };
+}
+
+// ---------------------------------------------------------------- bodies
+
+export const BODY = { range: 12, noticeAt: 0.3, discoverAt: 1, eyeHeight: 0.3, hiddenRange: 1.8 } as const;
+
+export interface Cover {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/** A body is hidden when it lies inside a haystack or bush. */
+export function isBodyHidden(body: Vec2, covers: Cover[]): boolean {
+  return covers.some((c) => dist2D(body, c) < c.r);
+}
+
+/** Can a guard see a body on the ground? Hidden bodies only at point-blank range. */
+export function canSeeBody(eye: Vec3, yaw: number, body: Vec2, vision: VisionParams, occluders: Box[], hidden: boolean, bodyY = 0): boolean {
+  const range = Math.min(vision.range, hidden ? BODY.hiddenRange : BODY.range);
+  return canSee(eye, yaw, { x: body.x, y: bodyY + BODY.eyeHeight, z: body.z }, { range, halfAngle: vision.halfAngle }, occluders, false);
+}
+
+/** Body awareness meter (0..1): rises while a body is in view (faster when close), fades otherwise. */
+export function stepBodyMeter(meter: number, sees: boolean, distance: number, dt: number): number {
+  const closeness = clamp(1 - distance / BODY.range, 0, 1);
+  return clamp(sees ? meter + (0.5 + 1.5 * closeness) * dt : meter - 0.2 * dt, 0, 1);
+}
+
+export type BodyReaction = "none" | "suspicious" | "discovered";
+
+export function bodyReaction(meter: number): BodyReaction {
+  if (meter >= BODY.discoverAt) return "discovered";
+  return meter >= BODY.noticeAt ? "suspicious" : "none";
+}

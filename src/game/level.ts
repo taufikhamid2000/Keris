@@ -25,6 +25,9 @@ export interface Level {
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number; jettyZ: number; jettyHalf: number };
 }
 
+/** Height of the open space under a stilt house's floor. */
+const STILT_H = 1.75;
+
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
 function mat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
   const key = color + JSON.stringify(opts);
@@ -96,13 +99,24 @@ export function buildLevel(): Level {
   function house(cx: number, cz: number, w: number, d: number, h: number, wall: number, roof: number, opts: { windows?: boolean; stilts?: boolean } = {}) {
     const { windows = true, stilts = true } = opts;
     const roofH = 0.6;
-    const baseH = stilts ? 1.2 : 0;
-    addCollider(boxOf(cx, cz, w, d, h));
+    const baseH = stilts ? STILT_H : 0;
     if (stilts) {
-      root.add(mesh(new THREE.BoxGeometry(w - 0.8, baseH, d - 0.8), mat(0x2a1a10), cx, baseH / 2, cz));
-      for (const sx of [-1, 1])
-        for (const sz of [-1, 1])
-          root.add(mesh(new THREE.CylinderGeometry(0.16, 0.2, baseH + 0.1, 6), mat(0x4a3220), cx + sx * (w / 2 - 0.25), baseH / 2, cz + sz * (d / 2 - 0.25)));
+      // raised floor + walls + roof are one solid block; the space under it is open ground
+      addCollider(boxOf(cx, cz, w, d, h, baseH));
+      // stilts are thin solid posts; everything between them can be walked through
+      const nx = Math.max(2, Math.round(w / 4) + 1);
+      const nz = Math.max(2, Math.round(d / 4) + 1);
+      for (let i = 0; i < nx; i++)
+        for (let j = 0; j < nz; j++) {
+          if (i > 0 && i < nx - 1 && j > 0 && j < nz - 1) continue;
+          const px = cx - w / 2 + 0.25 + (i / (nx - 1)) * (w - 0.5);
+          const pz = cz - d / 2 + 0.25 + (j / (nz - 1)) * (d - 0.5);
+          addCollider(boxOf(px, pz, 0.36, 0.36, baseH));
+          root.add(mesh(new THREE.CylinderGeometry(0.16, 0.2, baseH + 0.1, 6), mat(0x4a3220), px, baseH / 2, pz));
+        }
+      root.add(mesh(new THREE.BoxGeometry(w, 0.12, d), mat(0x2a1a10), cx, baseH - 0.06, cz));
+    } else {
+      addCollider(boxOf(cx, cz, w, d, h));
     }
     const wallH = h - roofH - baseH;
     root.add(mesh(new THREE.BoxGeometry(w, wallH, d), mat(wall), cx, baseH + wallH / 2, cz));
@@ -203,7 +217,9 @@ export function buildLevel(): Level {
   {
     const tx = 17.3,
       tz = 17.3;
-    addCollider(boxOf(tx, tz, 2.4, 2.4, 15));
+    addCollider(boxOf(tx, tz, 3.6, 3.6, 15, 11.5));
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) addCollider(boxOf(tx + sx * 1, tz + sz * 1, 0.5, 0.5, 11.5));
     for (const sx of [-1, 1])
       for (const sz of [-1, 1])
         root.add(mesh(new THREE.CylinderGeometry(0.17, 0.22, 11.5, 6), mat(0x4a3220), tx + sx * 1, 5.75, tz + sz * 1));
@@ -357,11 +373,14 @@ export function buildLevel(): Level {
   }
 
   // ---------------------------------------------------------------- lanterns
-  const lampPos: [number, number][] = [[-5, 5], [5, -5], [-11, -12], [11, 12], [0, -29]];
+  const lampPos: [number, number][] = [
+    [-5, 5], [5, -5], [-11, -12], [11, 12], [0, -29],
+    [-28, 28], [-8, 16], [8, 16], [-8, -15], [8, -15], [-15, -8.5], [15, 8.5], [-14, 0], [14, 0], [-10, 30], [10, 30], [4, -31],
+  ];
   for (const [x, z] of lampPos) {
     root.add(mesh(new THREE.CylinderGeometry(0.07, 0.09, 3, 5), mat(0x3d2a1a), x, 1.5, z));
     root.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb14a }), x, 3.1, z, false));
-    const l = new THREE.PointLight(0xff9a3c, 14, 15, 1.6);
+    const l = new THREE.PointLight(0xffa04a, 11, 17, 1.5);
     l.position.set(x, 3.0, z);
     root.add(l);
   }

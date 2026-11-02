@@ -19,10 +19,11 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | Mouse | Look (pointer lock) |
 | E | Tikam: keris takedown from behind, or on a stunned guard |
 | Q | Pisau lempar: throw a knife to stun a guard, or make noise to distract |
+| F | Carry the nearest body, or drop it. Drop it inside a haystack or bush to hide it |
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause |
 
-Hide in haystacks and bushes to disappear from view. If an alert guard keeps you in reach for 2 seconds, you are caught and can restart.
+Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. If an alert guard keeps you in reach for 2 seconds, you are caught and can restart.
 
 ## Stack
 
@@ -37,9 +38,13 @@ Game rules are pure functions in `src/game/logic.ts`, separate from rendering, s
 - **Guard state machine:** `patrol -> suspicious -> alert -> search -> patrol`. A meter above 0.25 or a heard noise makes a guard suspicious, a full meter makes it alert (and alerts nearby guards), losing sight for 3 s starts a search, and searching ends after 8 s.
 - **Noise:** crouching, walking and running have different noise radii. Thrown knives that miss make noise where they land.
 - **Takedown:** needs you within 2 m, behind the guard (or the guard stunned), and the guard not alert.
+- **Body discovery:** a guard whose cone sees a downed guard fills a body-awareness meter (faster when close). Past 0.3 it goes to investigate; at full it raises the alarm at the body. A body inside cover is only seen at about 1.8 m, so hide them. Hay on a patrol lane is still risky.
+- **Climbing guards:** alert and search guards remember the height of where they last saw you. If that is a rooftop, they walk to the nearest climbable edge (using a lower roof as a stepping stone when needed) and climb up, slower than you. Guards have gravity, so they drop back down if they walk off a roof.
+- **Stilt houses:** the body of a house is raised above head height with thin post colliders, so you and guards can walk and hide under the floors while walls and roofs stay solid.
+- **Lighting:** dusk hemisphere and ambient fill, 17 lantern point lights along the lanes, and light fog. Mata Helang lowers the fill and tints the fog blue for contrast.
 - **Level:** `src/game/level.ts` builds stilt houses, atap roofs, kampung lanes, a three-tier palace, a harbour and a jetty from boxes and cones. Collision is circle-vs-box push-out; ledge climbing lerps onto a box top.
 
-Tests cover the vision cone, line of sight, detection meter, noise, behind check and the guard state machine (`npm test`).
+Tests cover the vision cone, line of sight, detection meter, noise, behind check, the guard state machine, stilt colliders, climb planning and body discovery (`npm test`).
 
 ## How I use AI
 
@@ -47,9 +52,7 @@ This was built with Claude Code, which wrote the code, tests and this README fro
 
 ## Rough edges
 
-- Stilt houses use full-height collision boxes; the open space under them is visual only.
-- Alert guards cannot climb, so rooftops are always a safe refuge.
-- Bodies are not discovered by other guards.
+- Guard climbing and body carrying are new and only lightly playtested. Guards climb in a straight lerp, not along real ladders, and pathing is not navmesh based (they can snag on walls).
 - Art is low-poly primitives, no audio, desktop only.
 
 ## Local dev

@@ -39,6 +39,7 @@ const CONTROLS: [string, string][] = [
   ["Mouse", "Look"],
   ["E", "Tikam: keris takedown from behind"],
   ["Q", "Pisau lempar: stun / distract"],
+  ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
 ];
@@ -168,7 +169,7 @@ export default function GameClient() {
           {hud.prompt && <div className="prompt">{hud.prompt}</div>}
           {hud.toast && <div className="toast">{hud.toast}</div>}
           <div className="hint">
-            WASD move · Shift run · C crouch · Space climb · E tikam · Q throw · V Mata Helang · Esc pause
+            WASD move · Shift run · C crouch · Space climb · E tikam · Q throw · F carry body · V Mata Helang · Esc pause
           </div>
         </div>
       )}

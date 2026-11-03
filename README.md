@@ -23,6 +23,8 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause |
 
+A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam, RT throw knife, Y carry, B crouch, RB Mata Helang, LB or L3 run, Start pause. A or Start also picks the main button on menus and skips the intro.
+
 Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. If an alert guard keeps you in reach for 2 seconds, you are caught and can restart.
 
 ## Playing on phone

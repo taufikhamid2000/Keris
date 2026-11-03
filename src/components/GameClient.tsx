@@ -80,6 +80,7 @@ const CONTROLS: [string, string][] = [
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
+  ["Controller", "Sticks move / look, A jump, X tikam, RT knife, Y carry, B crouch, RB vision, LB run, Start pause"],
 ];
 
 const TOUCH_CONTROLS: [string, string][] = [
@@ -190,6 +191,8 @@ export default function GameClient() {
                 inst.start("start");
               } else inst.showTitle();
             },
+            // the primary (non-ghost) button of whichever menu is showing
+            onPadConfirm: () => document.querySelector<HTMLButtonElement>(".overlay .btn:not(.ghost):not(:disabled)")?.click(),
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch },

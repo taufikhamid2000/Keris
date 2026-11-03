@@ -28,6 +28,7 @@ import { NavDebug } from "./navDebug";
 import { advanceIntro, cameraAt, captionAt, fadeAt, isSkipKey, skipIntro, startIntro, type IntroState } from "./intro";
 import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
+import { PAD_CONFIRM, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
@@ -67,6 +68,8 @@ export interface GameCallbacks {
   onIntro?: (v: IntroView) => void;
   /** the intro finished or was skipped; the caller must now call start() or showTitle() */
   onIntroEnd?: (skipped: boolean) => void;
+  /** gamepad A or Start pressed on a menu screen (title, paused, won, lost) */
+  onPadConfirm?: () => void;
 }
 
 export interface IntroView {
@@ -272,6 +275,8 @@ export class Game {
   private knifeFly: { t: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
   private disposers: (() => void)[] = [];
   private touchMove = { x: 0, y: 0, run: false };
+  private padMove = { x: 0, y: 0, run: false };
+  private padPrev: boolean[] = [];
   private lookSens = 1;
   private invertY = false;
   private run: RunStats = { time: 0, alerts: 0, fromStart: true };
@@ -740,11 +745,39 @@ export class Game {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
+    this.pollPad(dt);
     if (this.phase === "playing") this.update(dt);
     if (this.phase === "title") this.attractCamera();
     if (this.phase === "intro") this.stepIntro(dt);
     this.render(dt);
   };
+
+  /** Gamepad buttons act as their key codes; sticks move and look. Polled each frame (the Gamepad API has no input events). */
+  private pollPad(dt: number) {
+    const pad = typeof navigator !== "undefined" && navigator.getGamepads ? pickPad([...navigator.getGamepads()]) : null;
+    const s = pad ? readPad(pad) : null;
+    const { down, up } = diffButtons(this.padPrev, s?.buttons ?? []);
+    this.padPrev = s?.buttons ?? [];
+    for (const i of up) if (PAD_KEYS[i]) this.releaseKey(PAD_KEYS[i]);
+    this.padMove = { x: 0, y: 0, run: false };
+    if (!s) return;
+    const pressed = (i: number) => down.includes(i);
+    if (this.phase === "intro") {
+      if (pressed(PAD_CONFIRM) || pressed(PAD_START)) this.skipIntro();
+      return;
+    }
+    if (this.phase !== "playing") {
+      if (pressed(PAD_CONFIRM) || pressed(PAD_START)) this.cb.onPadConfirm?.();
+      return;
+    }
+    if (pressed(PAD_START)) {
+      this.pause();
+      return;
+    }
+    for (const i of down) if (PAD_KEYS[i]) this.pressKey(PAD_KEYS[i]);
+    this.padMove = { ...s.move, run: PAD_RUN.some((i) => s.buttons[i]) };
+    if (s.look.x || s.look.y) this.look(s.look.x * PAD_LOOK_RATE * dt, s.look.y * PAD_LOOK_RATE * dt);
+  }
 
   private attractCamera() {
     const a = this.time * 0.08;
@@ -767,7 +800,8 @@ export class Game {
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
     let str = (this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("KeyA") ? 1 : 0);
     let len = Math.hypot(fwd, str);
-    const tm = this.touchMove;
+    // keyboard wins, then the touch joystick, then the gamepad stick
+    const tm = this.touchMove.x !== 0 || this.touchMove.y !== 0 ? this.touchMove : this.padMove;
     const touchActive = len === 0 && (tm.x !== 0 || tm.y !== 0);
     if (touchActive) {
       fwd = tm.y;

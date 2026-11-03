@@ -1,19 +1,21 @@
 // Headless smoke check for guard pathfinding: put the player on a rooftop, alert the guards,
-// and assert a guard climbs up and reaches them. Usage: node scripts/smoke-ai.mjs [url] [timeoutSec]
-import { chromium } from "playwright";
+// and assert a guard climbs up and reaches them. Simulated time is fast-forwarded, so it runs in seconds.
+// Usage: node scripts/smoke-ai.mjs [url] [simSeconds]
+import { launch, gameReady, waitPhase, dismissSplash } from "./lib.mjs";
 const url = process.argv[2] || "http://localhost:3000";
-const timeoutSec = Number(process.argv[3] || 90);
-const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
-const pg = await b.newPage({ viewport: { width: 1024, height: 576 } });
+const simSeconds = Number(process.argv[3] || 90);
+const b = await launch();
+const pg = await b.newPage({ viewport: { width: 640, height: 360 } });
 const errs = [];
 pg.on("pageerror", (e) => errs.push(String(e)));
 let code = 1;
 try {
-  await pg.goto(url, { waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 30000 });
-  await pg.click("text=Begin");
+  await pg.goto(`${url}/?quality=low`, { waitUntil: "load" });
+  await gameReady(pg);
+  await dismissSplash(pg);
+  await pg.click("text=New game");
   await pg.keyboard.press("Space"); // skip the first-run intro
-  await pg.waitForTimeout(500);
+  await waitPhase(pg, "playing");
   const spot = await pg.evaluate(() => window.__keris.debugRoofSpot());
   if (!spot) throw new Error("no climbable rooftop spot found in the nav graph");
   console.log("roof spot", JSON.stringify(spot));
@@ -23,9 +25,11 @@ try {
   let minD = Infinity;
   let sawClimb = false;
   let reached = false;
-  while (Date.now() - t0 < timeoutSec * 1000) {
-    await pg.waitForTimeout(250);
-    const d = await pg.evaluate(() => window.__keris.debug());
+  let sim = 0;
+  // step a quarter second of game time at a time, sampling guards in between (as the old real-time poll did)
+  while (sim < simSeconds) {
+    const d = await pg.evaluate(() => (window.__keris.debugAdvance(0.25), window.__keris.debug()));
+    sim += 0.25;
     for (const g of d.guards) {
       if (g.dead) continue;
       sawClimb ||= g.climbing;
@@ -37,7 +41,7 @@ try {
     if (reached) break;
     if (d.phase !== "playing") break;
   }
-  console.log(JSON.stringify({ reached, sawClimb, maxGuardY: +maxY.toFixed(2), minRoofDist: Number.isFinite(minD) ? +minD.toFixed(2) : null, seconds: +((Date.now() - t0) / 1000).toFixed(1), errors: errs }));
+  console.log(JSON.stringify({ reached, sawClimb, maxGuardY: +maxY.toFixed(2), minRoofDist: Number.isFinite(minD) ? +minD.toFixed(2) : null, simSeconds: sim, wallSeconds: +((Date.now() - t0) / 1000).toFixed(1), errors: errs }));
   code = reached && !errs.length ? 0 : 1;
 } catch (e) {
   console.error("smoke failed:", e.message);

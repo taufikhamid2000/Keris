@@ -23,13 +23,13 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause |
 
-A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam, RT throw knife, Y carry, B crouch, RB Mata Helang, LB or L3 run, Start pause. A or Start also picks the main button on menus and skips the intro.
+A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam, RT throw knife, Y carry, B crouch, RB Mata Helang, LB or L3 run, Start pause. On menus the d-pad moves between buttons and A or Start picks one; any button gets past the start screen, and A or Start skips the intro.
 
 Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. If an alert guard keeps you in reach for 2 seconds, you are caught and can restart.
 
 ## Playing on phone
 
-Touch controls appear on touch devices (detected by `pointer: coarse`, not user agent). Tap to play, which requests fullscreen and a landscape lock where the browser allows it. Portrait shows a "rotate your phone" prompt and pauses.
+Touch controls appear on touch devices (detected by `pointer: coarse`, not user agent). Tap to start, then New game or Continue, which requests fullscreen and a landscape lock where the browser allows it. Portrait shows a "rotate your phone" prompt and pauses.
 
 - Left thumb: floating joystick. Push to the edge to run (louder).
 - Drag the right side: look.
@@ -49,7 +49,7 @@ Checked with `node scripts/mobile-check.mjs <url>` (headless Chromium, touch emu
 Progress is saved in your browser's localStorage under the single key `keris:save` (versioned, with a migration path). It is per browser and per device, and clearing site data erases it. Nothing is sent to a server.
 
 - Saved: the last checkpoint (mission start, or "Kapitan is down"), your best time and stealth rating, and settings (quality, look sensitivity, invert Y). Guard and alert state is never saved, so Continue rebuilds the world with guards on patrol.
-- Title screen: Continue (only when a save exists) and New game. Settings has Reset progress (with a confirm step) and an export/import save code (base64 of the JSON, validated on import).
+- Start screen: "Press any button" ("Tap to start" on touch), then a main menu over a slow harbour camera drift: Continue (only when a save exists), New game, Settings, Controls and Credits. Settings has Reset progress (with a confirm step) and an export/import save code (base64 of the JSON, validated on import).
 - `?quality=low|high` in the URL beats the saved quality for that session without changing it.
 - Corrupt, unrecognised or newer-version data falls back to defaults, and if storage is blocked the game runs with in-memory progress.
 
@@ -84,7 +84,7 @@ This was built with Claude Code, which wrote the code, tests and this README fro
 
 ## Rough edges
 
-- Guard pathing and climbing are new and only lightly playtested. Climbs are keyframed, not skeletal animation. The grid is fixed at load, so guards ignore dynamic changes, and very tall roofs (over 3.7 m, such as the tower top) are unreachable for them. `npm run smoke:ai` (needs a running build) puts the player on a roof and checks a guard climbs up; headless software rendering is slow, so it can take about a minute.
+- Guard pathing and climbing are new and only lightly playtested. Climbs are keyframed, not skeletal animation. The grid is fixed at load, so guards ignore dynamic changes, and very tall roofs (over 3.7 m, such as the tower top) are unreachable for them. `npm run smoke:ai` (needs a running build) puts the player on a roof and checks a guard climbs up; it fast-forwards game time, so it takes a few seconds.
 - Art is low-poly primitives, no audio, no in-game quality toggle (URL parameter only). The takedown (E) and carry (F) buttons are checked to send their keys, but their outcomes were not tested on touch.
 
 ## Local dev
@@ -94,6 +94,15 @@ npm install
 npm run dev        # http://localhost:3000
 npm run lint && npm run typecheck && npm test && npm run build
 ```
+
+Browser checks need a running build (`npm run build && npm start`):
+
+```bash
+npm run check:browser                                  # all: intro, save, mobile, ai, shots
+npm run check:browser -- http://localhost:3123 save ai # pick a URL and checks
+```
+
+They run 3 at a time (`CHECK_JOBS=n` to change) on the real GPU through ANGLE/D3D11, about 30 s for the full set. Set `KERIS_GL=swiftshader` for software rendering on machines without a GPU (much slower). Screenshots from these runs go to a temp folder; run `node scripts/shots.mjs` on its own to refresh `docs/`.
 
 ## Credit
 

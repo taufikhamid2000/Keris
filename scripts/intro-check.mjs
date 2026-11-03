@@ -1,6 +1,6 @@
 // Headless check of the intro cutscene: desktop + phone viewports, skip (keys and touch), first-run only, replay, reset, reduced motion.
 // Usage: node scripts/intro-check.mjs [url] [outDir]   (needs a running server, e.g. npm run build && npm start)
-import { chromium } from "playwright";
+import { launch, sleep, gameReady, waitPhase, dismissSplash } from "./lib.mjs";
 
 const url = process.argv[2] || "http://localhost:3000";
 const out = process.argv[3] || "docs";
@@ -9,17 +9,16 @@ const check = (ok, msg) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${msg}`);
   if (!ok) fails.push(msg);
 };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+const b = await launch();
 
 async function open(ctx) {
   const pg = await ctx.newPage();
   const errs = [];
   pg.on("console", (m) => m.type() === "error" && errs.push(m.text()));
   pg.on("pageerror", (x) => errs.push(String(x)));
-  await pg.goto(url, { waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 90000 });
-  await sleep(500);
+  await pg.goto(url, { waitUntil: "load" });
+  await gameReady(pg);
+  await dismissSplash(pg);
   return { pg, errs };
 }
 const phase = (pg) => pg.evaluate(() => window.__keris.debug().phase);
@@ -27,13 +26,12 @@ const seen = (pg) => pg.evaluate(() => JSON.parse(localStorage.getItem("keris:sa
 const text = (pg) => pg.evaluate(() => document.body.innerText);
 const seek = async (pg, t) => {
   await pg.evaluate((x) => window.__keris.debugIntroSeek(x), t);
-  await sleep(700);
+  await sleep(250); // let captions cross-fade
 };
-const waitPhase = (pg, p) => pg.waitForFunction((x) => window.__keris.debug().phase === x, p, { timeout: 15000 });
 const reload = async (pg) => {
-  await pg.reload({ waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 30000 });
-  await sleep(500);
+  await pg.reload({ waitUntil: "load" });
+  await gameReady(pg);
+  await dismissSplash(pg);
 };
 
 // ---------------------------------------------------------------- desktop
@@ -41,9 +39,9 @@ const reload = async (pg) => {
   console.log("\n== desktop 1280x720 ==");
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
   const { pg, errs } = await open(ctx);
-  await pg.getByRole("button", { name: "Begin" }).click();
+  await pg.getByRole("button", { name: "New game" }).click();
   await waitPhase(pg, "intro");
-  check(true, "first Begin plays the intro instead of starting");
+  check(true, "first New game plays the intro instead of starting");
   await seek(pg, 2.5);
   await pg.screenshot({ path: `${out}/intro-1.png` });
   await seek(pg, 12);
@@ -92,7 +90,7 @@ const reload = async (pg) => {
   await pg.getByRole("button", { name: "Yes, reset" }).click();
   check((await seen(pg)) === false, "Reset progress clears seenIntro");
   await pg.getByRole("button", { name: "Close" }).click();
-  await pg.getByRole("button", { name: "Begin" }).click();
+  await pg.getByRole("button", { name: "New game" }).click();
   await waitPhase(pg, "intro");
   check(true, "after reset the intro plays again");
   check(errs.length === 0, `no console errors ${JSON.stringify(errs)}`);
@@ -130,8 +128,12 @@ for (const s of [
   const ctx = await b.newContext({ viewport: { width: s.w, height: s.h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const { pg, errs } = await open(ctx);
   // the existing rotate prompt covers the title in portrait, so start in landscape and rotate during the intro
-  if (s.name === "portrait") await pg.setViewportSize({ width: s.h, height: s.w });
-  await pg.locator("text=Tap to play").tap();
+  if (s.name === "portrait") {
+    await pg.evaluate(() => document.fullscreenElement && document.exitFullscreen()).catch(() => {});
+    await sleep(300);
+    await pg.setViewportSize({ width: s.h, height: s.w });
+  }
+  await pg.getByRole("button", { name: "New game" }).tap();
   await waitPhase(pg, "intro");
   if (s.name === "portrait") {
     await pg.evaluate(() => document.fullscreenElement && document.exitFullscreen()).catch(() => {});
@@ -167,7 +169,7 @@ for (const s of [
   console.log("\n== reduced motion ==");
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: "reduce" });
   const { pg } = await open(ctx);
-  await pg.getByRole("button", { name: "Begin" }).click();
+  await pg.getByRole("button", { name: "New game" }).click();
   await waitPhase(pg, "intro");
   await seek(pg, 3);
   await pg.screenshot({ path: `${out}/intro-reduced.png` });

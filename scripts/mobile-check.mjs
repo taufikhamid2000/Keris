@@ -1,6 +1,6 @@
 // Headless mobile check: touch emulation at two landscape sizes plus portrait.
 // Usage: node scripts/mobile-check.mjs [url] [outDir]   (needs a running server, e.g. npm run build && npm start)
-import { chromium } from "playwright";
+import { launch, sleep, gameReady, waitPhase } from "./lib.mjs";
 
 const url = process.argv[2] || "http://localhost:3000";
 const out = process.argv[3] || "docs";
@@ -13,9 +13,7 @@ const check = (ok, msg) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${msg}`);
   if (!ok) fails.push(msg);
 };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+const b = await launch();
 
 for (const s of sizes) {
   console.log(`\n== ${s.name} ==`);
@@ -42,21 +40,22 @@ for (const s of sizes) {
   };
   const dbg = () => pg.evaluate(() => window.__keris.debug());
 
-  await pg.goto(url, { waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 30000 });
-  await sleep(1500);
+  await pg.goto(url, { waitUntil: "load" });
+  await gameReady(pg);
+  await pg.locator(".overlay.splash").waitFor();
   const env = await pg.evaluate(() => ({ coarse: matchMedia("(pointer: coarse)").matches, text: document.body.innerText }));
   check(env.coarse, "pointer: coarse matches under emulation");
   check(!/desktop game/i.test(env.text), "no desktop-only block");
-  check(/Tap to play/.test(env.text), "tap-to-play screen shown");
+  check(/Tap to start/i.test(env.text), "tap-to-start screen shown");
   const d0 = await dbg();
   check(d0.quality === "low", `auto quality is low on touch (got ${d0.quality})`);
   check(d0.pixelRatio <= 1.5, `pixel ratio capped (got ${d0.pixelRatio} at dpr 2)`);
   await pg.screenshot({ path: `${out}/mobile-title-${s.name}.png` });
 
-  await pg.locator("text=Tap to play").tap();
+  await pg.locator(".overlay.splash").tap();
+  await pg.getByRole("button", { name: "New game" }).tap();
   await pg.locator(".intro-skip").tap(); // skip the first-run intro
-  await pg.waitForFunction(() => window.__keris.debug().phase === "playing", null, { timeout: 10000 });
+  await waitPhase(pg, "playing");
   check((await pg.locator(".tbtn").count()) === 7, "touch controls rendered (6 action buttons + pause)");
   check((await pg.locator(".joy-hint").count()) === 1, "joystick zone rendered");
   const fits = await pg.evaluate(() => [...document.querySelectorAll(".tbtn, .topleft, .compass")].every((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }));
@@ -148,11 +147,11 @@ for (const s of sizes) {
 
   // pause button
   await tapCenter(".pause-btn");
-  await sleep(300);
+  await waitPhase(pg, "paused", 3000).catch(() => {});
   check((await dbg()).phase === "paused", "pause button pauses");
   await pg.screenshot({ path: `${out}/mobile-paused-${s.name}.png` });
   await pg.locator("text=Resume").tap();
-  await sleep(300);
+  await waitPhase(pg, "playing", 3000).catch(() => {});
   check((await dbg()).phase === "playing", "resume returns to play");
 
   // portrait (leave fullscreen first so the window can be resized)
@@ -176,16 +175,18 @@ for (const s of sizes) {
 {
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
   const pg = await ctx.newPage();
-  await pg.goto(url, { waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 30000 });
+  await pg.goto(url, { waitUntil: "load" });
+  await gameReady(pg);
   const d = await pg.evaluate(() => window.__keris.debug());
   check(d.quality === "high", "desktop defaults to high quality");
-  check(/Begin/.test(await pg.evaluate(() => document.body.innerText)) && (await pg.locator(".tbtn").count()) === 0, "desktop shows Begin and no touch controls");
+  await pg.keyboard.press("Enter");
+  await pg.waitForTimeout(300);
+  check(/New game/.test(await pg.evaluate(() => document.body.innerText)) && (await pg.locator(".tbtn").count()) === 0, "desktop shows New game and no touch controls");
   await ctx.close();
   const c2 = await b.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const p2 = await c2.newPage();
-  await p2.goto(`${url}/?quality=high`, { waitUntil: "networkidle" });
-  await p2.waitForFunction(() => window.__keris, null, { timeout: 30000 });
+  await p2.goto(`${url}/?quality=high`, { waitUntil: "load" });
+  await gameReady(p2);
   const d2 = await p2.evaluate(() => window.__keris.debug());
   check(d2.quality === "high" && d2.pixelRatio === 2, "?quality=high overrides on mobile");
   await c2.close();

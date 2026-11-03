@@ -1,6 +1,6 @@
 // Headless check of browser progress saving (desktop, touch, bad storage).
 // Usage: node scripts/save-check.mjs [url]   (needs a running server, e.g. npm run build && npm start)
-import { chromium } from "playwright";
+import { launch, sleep, gameReady, waitPhase, dismissSplash } from "./lib.mjs";
 
 const url = process.argv[2] || "http://localhost:3000";
 const KEY = "keris:save";
@@ -9,28 +9,27 @@ const check = (ok, msg) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${msg}`);
   if (!ok) fails.push(msg);
 };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+const b = await launch();
 
 async function open(ctx, path = "") {
   const pg = await ctx.newPage();
   const errs = [];
   pg.on("console", (m) => m.type() === "error" && errs.push(m.text()));
   pg.on("pageerror", (x) => errs.push(String(x)));
-  await pg.goto(url + path, { waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 90000 });
-  await sleep(500);
+  await pg.goto(url + path, { waitUntil: "load" });
+  await gameReady(pg);
+  await dismissSplash(pg);
   return { pg, errs };
 }
 const reload = async (pg) => {
-  await pg.reload({ waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 30000 });
-  await sleep(500);
+  await pg.reload({ waitUntil: "load" });
+  await gameReady(pg);
+  await dismissSplash(pg);
 };
 const stored = (pg) => pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || "null"), KEY);
 const text = (pg) => pg.evaluate(() => document.body.innerText);
 const dbg = (pg) => pg.evaluate(() => window.__keris.debug());
-const playing = (pg) => pg.waitForFunction(() => window.__keris.debug().phase === "playing", null, { timeout: 15000 });
+const playing = (pg) => waitPhase(pg, "playing");
 const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first();
 
 // ---------------------------------------------------------------- desktop flow
@@ -39,10 +38,10 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
   const { pg, errs } = await open(ctx);
   let t = await text(pg);
-  check(/Begin/.test(t) && !/Continue/.test(t), "fresh browser: Begin shown, no Continue");
+  check(/New game/.test(t) && !/Continue/.test(t), "fresh browser: New game shown, no Continue");
   check((await stored(pg)) === null, "nothing written before the player does anything");
 
-  await btn(pg, "Begin").click();
+  await btn(pg, "New game").click();
   await pg.keyboard.press("Space"); // skip the first-run intro
   await playing(pg);
   const s1 = await stored(pg);
@@ -93,7 +92,7 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   await pg.locator("select[aria-label='Quality']").selectOption("low");
   await pg.locator("input[aria-label='Invert vertical look']").check();
   await pg.locator("input[aria-label='Look sensitivity']").fill("2");
-  await sleep(1500);
+  await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || "null")?.settings?.lookSens === 2, KEY, { timeout: 5000 }).catch(() => {});
   const s3 = await stored(pg);
   check(s3.settings.quality === "low" && s3.settings.invertY === true && s3.settings.lookSens === 2, "settings written to storage");
   await btn(pg, "Close").click();
@@ -121,8 +120,9 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   await pq.close();
 
   // export / import
-  await pg.goto(url, { waitUntil: "networkidle" });
-  await pg.waitForFunction(() => window.__keris, null, { timeout: 60000 });
+  await pg.goto(url, { waitUntil: "load" });
+  await gameReady(pg);
+  await dismissSplash(pg);
   await btn(pg, "Settings").click();
   await pg.locator("summary").click();
   await btn(pg, "Export").click();
@@ -143,7 +143,7 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   check(s4.checkpoint === null && Object.keys(s4.missions).length === 0 && s4.settings.quality === "low", "reset clears progress and bests, keeps settings");
   await btn(pg, "Close").click();
   t = await text(pg);
-  check(/Begin/.test(t) && !/Continue/.test(t) && !/Best:/.test(t), "after reset: Begin again, no Continue or Best");
+  check(/New game/.test(t) && !/Continue/.test(t) && !/Best:/.test(t), "after reset: New game again, no Continue or Best");
   // import restores
   await btn(pg, "Settings").click();
   await pg.locator("summary").click();
@@ -177,8 +177,8 @@ for (const [name, init] of cases) {
   await ctx.addInitScript(init);
   const { pg, errs } = await open(ctx);
   const t = await text(pg);
-  check(/Begin/.test(t) && !/Continue/.test(t), "falls back to defaults (Begin, no Continue)");
-  await btn(pg, "Begin").click();
+  check(/New game/.test(t) && !/Continue/.test(t), "falls back to defaults (New game, no Continue)");
+  await btn(pg, "New game").click();
   await pg.keyboard.press("Space"); // skip the first-run intro
   await playing(pg);
   await pg.evaluate(() => window.__keris.pause());

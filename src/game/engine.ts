@@ -28,7 +28,8 @@ import { NavDebug } from "./navDebug";
 import { advanceIntro, cameraAt, captionAt, fadeAt, isSkipKey, skipIntro, startIntro, type IntroState } from "./intro";
 import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
-import { PAD_CONFIRM, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, diffButtons, pickPad, readPad } from "./gamepad";
+import { harbourDrift } from "./menuCamera";
+import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
@@ -70,6 +71,10 @@ export interface GameCallbacks {
   onIntroEnd?: (skipped: boolean) => void;
   /** gamepad A or Start pressed on a menu screen (title, paused, won, lost) */
   onPadConfirm?: () => void;
+  /** any gamepad button pressed on a menu screen; return true to consume it (the "press any button" splash) */
+  onPadAny?: () => boolean;
+  /** d-pad up (-1) or down (+1) on a menu screen */
+  onPadNav?: (dir: -1 | 1) => void;
 }
 
 export interface IntroView {
@@ -722,6 +727,14 @@ export class Game {
       g.lastKnownY = y;
     }
   }
+  /** Test hook: run the simulation ahead by `seconds` in fixed 1/30 s steps without rendering. Stops early if the phase changes. */
+  debugAdvance(seconds: number) {
+    const step = 1 / 30;
+    for (let t = 0; t < seconds && this.phase === "playing"; t += step) {
+      this.time += step;
+      this.update(step);
+    }
+  }
   dispose() {
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
@@ -767,6 +780,9 @@ export class Game {
       return;
     }
     if (this.phase !== "playing") {
+      if (down.length && this.cb.onPadAny?.()) return;
+      if (pressed(PAD_UP)) this.cb.onPadNav?.(-1);
+      if (pressed(PAD_DOWN)) this.cb.onPadNav?.(1);
       if (pressed(PAD_CONFIRM) || pressed(PAD_START)) this.cb.onPadConfirm?.();
       return;
     }
@@ -780,9 +796,9 @@ export class Game {
   }
 
   private attractCamera() {
-    const a = this.time * 0.08;
-    this.camera.position.set(Math.sin(a) * 34, 15, Math.cos(a) * 34);
-    this.camera.lookAt(0, 3, 0);
+    const { pos, look } = harbourDrift(this.time);
+    this.camera.position.set(pos.x, pos.y, pos.z);
+    this.camera.lookAt(look.x, look.y, look.z);
   }
 
   private get crouched() {

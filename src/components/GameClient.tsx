@@ -17,6 +17,7 @@ import {
   withCheckpoint,
   type MissionStats,
 } from "@/game/save";
+import KerisEmblem from "./KerisEmblem";
 import SettingsPanel from "./SettingsPanel";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
 
@@ -142,6 +143,32 @@ function Controls({ touch }: { touch: boolean }) {
   );
 }
 
+/** The menu currently on top: settings over the title, or whichever overlay is last in the DOM. */
+const topOverlay = () => {
+  const all = document.querySelectorAll<HTMLElement>(".overlay");
+  return all[all.length - 1] ?? null;
+};
+const menuButtons = () => [...(topOverlay()?.querySelectorAll<HTMLButtonElement>(".btn:not(:disabled)") ?? [])];
+
+/** Move focus up or down through the top menu's buttons (d-pad, arrow keys). */
+function moveFocus(dir: -1 | 1) {
+  const btns = menuButtons();
+  if (!btns.length) return;
+  const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+  const next = i < 0 ? (dir > 0 ? 0 : btns.length - 1) : (i + dir + btns.length) % btns.length;
+  btns[next].focus();
+}
+
+/** Gamepad A: the focused menu button, else the menu's primary (non-ghost) button. */
+function padConfirm() {
+  const top = topOverlay();
+  const active = document.activeElement;
+  if (top && active instanceof HTMLButtonElement && top.contains(active) && !active.disabled) active.click();
+  else top?.querySelector<HTMLButtonElement>(".btn:not(.ghost):not(:disabled)")?.click();
+}
+
+type MenuView = "main" | "controls" | "credits";
+
 export default function GameClient() {
   const mount = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -154,6 +181,10 @@ export default function GameClient() {
   const [introView, setIntroView] = useState<IntroView | null>(null);
   /** what to do when the cutscene ends: go on into the mission, or back to the title (replay) */
   const introMode = useRef<"mission" | "replay">("mission");
+  /** "press any button" splash dismissed; a real gesture first, so fullscreen and the Gamepad API unlock */
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const [view, setView] = useState<MenuView>("main");
   const store = getSaveStore();
   const save = useSyncExternalStore(store.subscribe, store.getSnapshot, () => SERVER_SAVE);
   const mission = save.missions[MISSION_ID];
@@ -191,8 +222,14 @@ export default function GameClient() {
                 inst.start("start");
               } else inst.showTitle();
             },
-            // the primary (non-ghost) button of whichever menu is showing
-            onPadConfirm: () => document.querySelector<HTMLButtonElement>(".overlay .btn:not(.ghost):not(:disabled)")?.click(),
+            onPadConfirm: padConfirm,
+            onPadNav: moveFocus,
+            onPadAny: () => {
+              if (startedRef.current) return false;
+              startedRef.current = true;
+              setStarted(true);
+              return true;
+            },
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch },
@@ -216,6 +253,34 @@ export default function GameClient() {
   useEffect(() => {
     if (portrait) game?.pause();
   }, [portrait, game, phase]);
+
+  const dismissSplash = () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setStarted(true);
+    if (touch) enterFullscreenLandscape();
+  };
+  const splash = phase === "title" && !started;
+
+  // splash: any key (not a lone modifier or a held repeat). Menu: arrows move focus, Esc backs out of a sub-view.
+  useEffect(() => {
+    if (phase !== "title") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+      if (!startedRef.current) {
+        e.preventDefault();
+        dismissSplash();
+        return;
+      }
+      if (showSettings) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        moveFocus(e.key === "ArrowDown" ? 1 : -1);
+      } else if (e.key === "Escape" && view !== "main") setView("main");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const g = () => game;
   const begin = (from: "start" | "kapitan" = "start") => {
@@ -309,40 +374,82 @@ export default function GameClient() {
 
       {phase === "playing" && touch && <TouchControls game={game} hud={hud} />}
 
-      {phase === "title" && (
-        <div className="overlay title">
-          <div className="panel wide">
-            <p className="kicker">Malacca, July 1511</p>
+      {splash && (
+        <div className="overlay splash" onPointerDown={dismissSplash} role="button" tabIndex={-1} aria-label="Start">
+          <div className="splash-inner">
+            <KerisEmblem />
             <h1>Keris</h1>
-            <p className="story">
-              The Portuguese fleet lies in the roads and their battery commands the bridge. The elder Hang Tuah has chosen you, Pendekar, to
-              silence the Kapitan before the guns are turned on the town. Move over the atap roofs and through the kampung lanes, strike once with your
-              keris, and slip out by the jetty.
-            </p>
-            <Controls touch={touch} />
-            {canContinue ? (
-              <>
-                <button className="btn" onClick={() => begin(save.checkpoint ?? "start")} disabled={!game}>
-                  Continue
-                </button>
-                <button className="btn ghost" onClick={() => begin("start")} disabled={!game}>
-                  New game
-                </button>
-              </>
-            ) : (
-              <button className="btn" onClick={() => begin("start")} disabled={!game}>
-                {touch ? "Tap to play" : "Begin"}
+            <p className="kicker">Malacca, July 1511</p>
+            <p className="press">{touch ? "Tap to start" : "Press any button"}</p>
+          </div>
+        </div>
+      )}
+
+      {phase === "title" && started && (
+        <div className="overlay title menu-screen">
+          <nav className="menu" aria-label="Main menu">
+            <div className="brand">
+              <KerisEmblem />
+              <div>
+                <p className="kicker">Malacca, July 1511</p>
+                <h1>Keris</h1>
+              </div>
+            </div>
+            {canContinue && (
+              <button className="btn" onClick={() => begin(save.checkpoint ?? "start")} disabled={!game}>
+                Continue
               </button>
             )}
+            <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
+              New game
+            </button>
             {settingsBtn}
-            {canContinue && (
-              <p className="dim small">{save.checkpoint === "kapitan" ? "Checkpoint: the Kapitan is down" : "Checkpoint: mission start"}</p>
-            )}
-            <Best m={mission} />
+            <button className={`btn ghost${view === "controls" ? " on" : ""}`} onClick={() => setView(view === "controls" ? "main" : "controls")}>
+              Controls
+            </button>
+            <button className={`btn ghost${view === "credits" ? " on" : ""}`} onClick={() => setView(view === "credits" ? "main" : "credits")}>
+              Credits
+            </button>
             <p className="dim small">
-              {touch ? "Best in landscape. Fullscreen is requested where your browser allows it." : "Click Begin to capture the mouse."}
+              {touch ? "Best in landscape. Fullscreen is requested where your browser allows it." : "Starting captures the mouse."}
             </p>
-          </div>
+          </nav>
+          <section className="songket menu-pane" aria-live="polite">
+            {view === "main" && (
+              <>
+                <h2>The mission</h2>
+                <p className="story">
+                  The Portuguese fleet lies in the roads and their battery commands the bridge. The elder Hang Tuah has chosen you, Pendekar, to
+                  silence the Kapitan before the guns are turned on the town. Move over the atap roofs and through the kampung lanes, strike once with
+                  your keris, and slip out by the jetty.
+                </p>
+                {canContinue && (
+                  <p className="dim small">{save.checkpoint === "kapitan" ? "Checkpoint: the Kapitan is down" : "Checkpoint: mission start"}</p>
+                )}
+                <Best m={mission} />
+              </>
+            )}
+            {view === "controls" && (
+              <>
+                <h2>Controls</h2>
+                <Controls touch={touch} />
+              </>
+            )}
+            {view === "credits" && (
+              <>
+                <h2>Credits</h2>
+                <p>Design by Taufik Hamid. Code written with Claude Code from the designer&apos;s spec.</p>
+                <p>Built with three.js, Next.js and React. Procedural geometry, no audio.</p>
+                <p>Hang Tuah is a figure of Malay legend. The story here is fiction.</p>
+                <p className="dim small">Inspired by the stealth genre. Not affiliated with Ubisoft.</p>
+              </>
+            )}
+            {view !== "main" && (
+              <button className="btn ghost back" onClick={() => setView("main")}>
+                Back
+              </button>
+            )}
+          </section>
         </div>
       )}
 

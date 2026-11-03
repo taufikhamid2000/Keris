@@ -12,6 +12,8 @@ export const PAD_KEYS: Record<number, string> = {
 export const PAD_RUN = [4, 10]; // LB / L1 or left stick click
 export const PAD_START = 9;
 export const PAD_CONFIRM = 0;
+export const PAD_UP = 12; // d-pad, menus only
+export const PAD_DOWN = 13;
 /** Look speed at full right-stick deflection, in mouse pixels per second. */
 export const PAD_LOOK_RATE = 900;
 

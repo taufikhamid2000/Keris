@@ -13,6 +13,7 @@ await pg.waitForFunction(() => window.__keris, null, { timeout: 20000 });
 await pg.waitForTimeout(2500);
 await pg.screenshot({ path: `${out}/title.png` });
 await pg.click("text=Begin");
+await pg.keyboard.press("Space"); // skip the first-run intro
 await pg.waitForTimeout(800);
 await pg.evaluate(() => window.__keris.look(357, 0));
 await pg.keyboard.down("ShiftLeft");

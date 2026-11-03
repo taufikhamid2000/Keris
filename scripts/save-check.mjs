@@ -43,9 +43,10 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   check((await stored(pg)) === null, "nothing written before the player does anything");
 
   await btn(pg, "Begin").click();
+  await pg.keyboard.press("Space"); // skip the first-run intro
   await playing(pg);
   const s1 = await stored(pg);
-  check(s1?.version === 1 && s1.checkpoint === "start" && s1.missions["malacca-1511"].attempts === 1, "mission start writes checkpoint and attempt under keris:save");
+  check(s1?.version === 2 && s1.checkpoint === "start" && s1.missions["malacca-1511"].attempts === 1, "mission start writes checkpoint and attempt under keris:save");
 
   await reload(pg);
   t = await text(pg);
@@ -126,7 +127,7 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   await pg.locator("summary").click();
   await btn(pg, "Export").click();
   const code = await pg.locator("textarea").inputValue();
-  check(/^[A-Za-z0-9+/]+=*$/.test(code) && JSON.parse(Buffer.from(code, "base64").toString()).version === 1, "export gives a base64 JSON code");
+  check(/^[A-Za-z0-9+/]+=*$/.test(code) && JSON.parse(Buffer.from(code, "base64").toString()).version === 2, "export gives a base64 JSON code");
   await pg.locator("textarea").fill("not a code");
   await btn(pg, "Import").click();
   check(/not valid/.test(await text(pg)), "invalid import code is rejected");
@@ -178,6 +179,7 @@ for (const [name, init] of cases) {
   const t = await text(pg);
   check(/Begin/.test(t) && !/Continue/.test(t), "falls back to defaults (Begin, no Continue)");
   await btn(pg, "Begin").click();
+  await pg.keyboard.press("Space"); // skip the first-run intro
   await playing(pg);
   await pg.evaluate(() => window.__keris.pause());
   check((await dbg(pg)).phase === "paused", "game plays normally");

@@ -11,9 +11,11 @@ interface Props {
   /** ?quality=low|high in the URL: wins over the saved value for this session */
   urlQuality: string | null;
   onClose: () => void;
+  /** offered from the title screen only: plays the intro cutscene again without changing the save */
+  onReplayIntro?: () => void;
 }
 
-export default function SettingsPanel({ store, save, canChangeQuality, urlQuality, onClose }: Props) {
+export default function SettingsPanel({ store, save, canChangeQuality, urlQuality, onClose, onReplayIntro }: Props) {
   const s = save.settings;
   const [confirming, setConfirming] = useState(false);
   const [code, setCode] = useState("");
@@ -57,6 +59,12 @@ export default function SettingsPanel({ store, save, canChangeQuality, urlQualit
           <span>Invert vertical look</span>
           <input type="checkbox" checked={s.invertY} onChange={(e) => set({ invertY: e.target.checked })} aria-label="Invert vertical look" />
         </label>
+
+        {onReplayIntro && (
+          <button className="btn ghost" onClick={onReplayIntro}>
+            Replay intro
+          </button>
+        )}
 
         <details className="codebox">
           <summary>Back up or move your save</summary>

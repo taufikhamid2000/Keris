@@ -55,6 +55,7 @@ for (const s of sizes) {
   await pg.screenshot({ path: `${out}/mobile-title-${s.name}.png` });
 
   await pg.locator("text=Tap to play").tap();
+  await pg.locator(".intro-skip").tap(); // skip the first-run intro
   await pg.waitForFunction(() => window.__keris.debug().phase === "playing", null, { timeout: 10000 });
   check((await pg.locator(".tbtn").count()) === 7, "touch controls rendered (6 action buttons + pause)");
   check((await pg.locator(".joy-hint").count()) === 1, "joystick zone rendered");

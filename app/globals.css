@@ -124,3 +124,14 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .best { margin: 8px 0 0; font-size: .9rem; color: #ffcf8a; }
 .best.new { color: #ffd24a; font-weight: 600; }
 .root.touch-ui .overlay.settings .panel { max-width: min(520px, calc(100vw - 24px)); }
+
+/* intro cutscene: letterbox bars, captions, black fade, skip button */
+.intro { position: absolute; inset: 0; z-index: 12; cursor: pointer; touch-action: none; user-select: none; }
+.intro-bar { position: absolute; left: 0; right: 0; height: 9%; background: #000; }
+.intro-bar.top { top: 0; }
+.intro-bar.bottom { bottom: 0; }
+.intro-fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+.intro-caption { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); width: min(780px, calc(100vw - 48px)); margin: 0; text-align: center; font-size: clamp(1rem, 2.6vw, 1.6rem); line-height: 1.4; color: #ffe9c8; letter-spacing: .02em; text-shadow: 0 2px 8px #000, 0 0 2px #000; pointer-events: none; }
+.intro-skip { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); margin: 0; padding: 8px 22px; background: rgba(20, 10, 24, .55); min-height: 40px; }
+.intro-hint { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: .72rem; opacity: .55; pointer-events: none; }
+@media (max-height: 480px) { .intro-caption { bottom: 13%; font-size: clamp(.9rem, 2.4vw, 1.2rem); } .intro-skip { padding: 6px 18px; } }

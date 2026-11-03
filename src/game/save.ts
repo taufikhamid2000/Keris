@@ -3,7 +3,7 @@
 // try/catch and degrades to in-memory when localStorage is missing or blocked (private mode, SSR).
 
 export const SAVE_KEY = "keris:save";
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const MISSION_ID = "malacca-1511";
 
 export type Checkpoint = "start" | "kapitan";
@@ -31,6 +31,8 @@ export interface SaveData {
   checkpoint: Checkpoint | null;
   missions: Record<string, MissionStats>;
   settings: SaveSettings;
+  /** the intro cutscene has been shown (or skipped) once; Reset progress clears it */
+  seenIntro: boolean;
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -45,7 +47,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, missions: {}, settings: defaultSettings() };
+  return { version: SAVE_VERSION, checkpoint: null, missions: {}, settings: defaultSettings(), seenIntro: false };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -110,12 +112,24 @@ export function sanitize(v: unknown): SaveData {
     checkpoint: v.checkpoint === "start" || v.checkpoint === "kapitan" ? v.checkpoint : null,
     missions,
     settings: cleanSettings(v.settings),
+    seenIntro: v.seenIntro === true,
   };
 }
 
-/** Migration step N upgrades version N data to version N+1. Empty today: v1 is the first format. */
+/** Migration step N upgrades version N data to version N+1. */
 export type Migrations = Record<number, (old: Record<string, unknown>) => Record<string, unknown>>;
-export const MIGRATIONS: Migrations = {};
+export const MIGRATIONS: Migrations = {
+  // v1 -> v2: adds seenIntro. Anyone who already started or finished the mission has played past where
+  // the intro would show, so they are not shown it; a v1 save with no progress sees it once.
+  1: (old) => {
+    const missions = isObj(old.missions) ? Object.values(old.missions) : [];
+    const played =
+      old.checkpoint === "start" ||
+      old.checkpoint === "kapitan" ||
+      missions.some((m) => isObj(m) && (m.completed === true || (typeof m.attempts === "number" && m.attempts > 0)));
+    return { ...old, seenIntro: played };
+  },
+};
 
 /**
  * Turn any parsed value into current SaveData, or null if it cannot be used (not an object, no integer
@@ -199,7 +213,17 @@ export function recordWin(d: SaveData, r: RunResult, mission = MISSION_ID): WinO
   return { data: { ...d, checkpoint: "start", missions: { ...d.missions, [mission]: next } }, rating, newBestTime, newBestRating };
 }
 
-/** Clear progress and stats but keep the player's settings. */
+/** The intro has been shown or skipped. */
+export function markIntroSeen(d: SaveData): SaveData {
+  return d.seenIntro ? d : { ...d, seenIntro: true };
+}
+
+/** The intro plays automatically before the first mission only. */
+export function shouldShowIntro(d: SaveData): boolean {
+  return !d.seenIntro;
+}
+
+/** Clear progress and stats (including the seen-intro flag) but keep the player's settings. */
 export function resetProgress(d: SaveData): SaveData {
   return { ...defaultSave(), settings: d.settings };
 }

@@ -12,6 +12,7 @@ try {
   await pg.goto(url, { waitUntil: "networkidle" });
   await pg.waitForFunction(() => window.__keris, null, { timeout: 30000 });
   await pg.click("text=Begin");
+  await pg.keyboard.press("Space"); // skip the first-run intro
   await pg.waitForTimeout(500);
   const spot = await pg.evaluate(() => window.__keris.debugRoofSpot());
   if (!spot) throw new Error("no climbable rooftop spot found in the nav graph");

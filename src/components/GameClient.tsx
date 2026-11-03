@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Game, HudState, LoseReason, Phase } from "@/game/engine";
+import type { Game, HudState, IntroView, LoseReason, Phase } from "@/game/engine";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
 import {
   MISSION_ID,
@@ -9,6 +9,8 @@ import {
   formatTime,
   getSaveStore,
   hasProgress,
+  markIntroSeen,
+  shouldShowIntro,
   ratingLabel,
   recordStart,
   recordWin,
@@ -148,6 +150,9 @@ export default function GameClient() {
   const [failed, setFailed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [win, setWin] = useState<WinResult | null>(null);
+  const [introView, setIntroView] = useState<IntroView | null>(null);
+  /** what to do when the cutscene ends: go on into the mission, or back to the title (replay) */
+  const introMode = useRef<"mission" | "replay">("mission");
   const store = getSaveStore();
   const save = useSyncExternalStore(store.subscribe, store.getSnapshot, () => SERVER_SAVE);
   const mission = save.missions[MISSION_ID];
@@ -175,9 +180,19 @@ export default function GameClient() {
               setPhase(p);
               setReason(r);
             },
+            onIntro: setIntroView,
+            onIntroEnd: () => {
+              if (!inst) return;
+              setIntroView(null);
+              if (introMode.current === "mission") {
+                store.update(markIntroSeen);
+                setWin(null);
+                inst.start("start");
+              } else inst.showTitle();
+            },
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d) : withCheckpoint(d, cp))),
           },
-          { quality: pickQuality(touch, window.location.search, qualityPref) },
+          { quality: pickQuality(touch, window.location.search, qualityPref), touch },
         );
         window.__keris = inst;
         setGame(inst);
@@ -197,14 +212,22 @@ export default function GameClient() {
   // a rotated phone must not keep playing under the "rotate" prompt
   useEffect(() => {
     if (portrait) game?.pause();
-  }, [portrait, game]);
+  }, [portrait, game, phase]);
 
   const g = () => game;
   const begin = (from: "start" | "kapitan" = "start") => {
     if (touch) enterFullscreenLandscape();
     setWin(null);
-    g()?.start(from);
+    // the cutscene plays before the very first mission only; "Replay intro" in Settings shows it again
+    if (from === "start" && shouldShowIntro(store.get())) playIntro("mission");
+    else g()?.start(from);
   };
+  const playIntro = (mode: "mission" | "replay") => {
+    introMode.current = mode;
+    setIntroView(null);
+    g()?.playIntro(mq("(prefers-reduced-motion: reduce)"));
+  };
+  const skipIntro = () => g()?.skipIntro();
   const canContinue = hasProgress(save);
   const settingsBtn = (
     <button className="btn ghost" onClick={() => setShowSettings(true)}>
@@ -259,6 +282,25 @@ export default function GameClient() {
           <div className="hint">
             WASD move · Shift run · C crouch · Space climb · E tikam · Q throw · F carry body · V Mata Helang · Esc pause
           </div>
+        </div>
+      )}
+
+      {phase === "intro" && (
+        <div className="intro" onPointerDown={skipIntro} role="region" aria-label="Intro cutscene">
+          <div className="intro-bar top" />
+          <div className="intro-bar bottom" />
+          <div className="intro-fade" style={{ opacity: introView?.fade ?? 1 }} />
+          <p className="intro-caption" style={{ opacity: introView?.opacity ?? 0 }} aria-live="polite">
+            {introView?.text}
+          </p>
+          <button
+            className="btn ghost intro-skip"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={skipIntro}
+          >
+            Skip
+          </button>
+          {!touch && <span className="intro-hint">Space, Enter or Esc to skip</span>}
         </div>
       )}
 
@@ -360,11 +402,19 @@ export default function GameClient() {
           save={save}
           canChangeQuality={phase === "title"}
           urlQuality={qualityFromUrl(window.location.search)}
+          onReplayIntro={
+            phase === "title" && game
+              ? () => {
+                  setShowSettings(false);
+                  playIntro("replay");
+                }
+              : undefined
+          }
           onClose={() => setShowSettings(false)}
         />
       )}
 
-      {portrait && (
+      {portrait && phase !== "intro" && (
         <div className="overlay rotate" role="alert">
           <div className="panel">
             <div className="rotate-icon" aria-hidden="true" />

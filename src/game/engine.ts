@@ -25,11 +25,12 @@ import {
   type Vec2,
 } from "./logic";
 import { NavDebug } from "./navDebug";
+import { advanceIntro, cameraAt, captionAt, fadeAt, isSkipKey, skipIntro, startIntro, type IntroState } from "./intro";
 import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
-export type Phase = "title" | "playing" | "paused" | "won" | "lost";
+export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 export type LoseReason = "caught" | null;
 
 export interface HudState {
@@ -62,6 +63,18 @@ export interface GameCallbacks {
   onPhase: (p: Phase, reason: LoseReason) => void;
   /** a checkpoint was reached: at mission start, or when the Kapitan goes down */
   onCheckpoint?: (cp: Checkpoint) => void;
+  /** intro cutscene view (caption, caption opacity, black fade), sent when it visibly changes */
+  onIntro?: (v: IntroView) => void;
+  /** the intro finished or was skipped; the caller must now call start() or showTitle() */
+  onIntroEnd?: (skipped: boolean) => void;
+}
+
+export interface IntroView {
+  text: string;
+  /** 0..1 */
+  opacity: number;
+  /** black overlay alpha, 0..1 */
+  fade: number;
 }
 
 const VIS = { range: 16, halfAngle: 0.6 };
@@ -251,6 +264,10 @@ export class Game {
   private toastText = "";
   private toastT = 0;
   private lockedOnce = false;
+  /** touch mode never takes pointer lock: while it is held, setPointerCapture in the touch controls throws */
+  private touch = false;
+  private intro: IntroState | null = null;
+  private introKey = "";
   private knifeMesh: THREE.Mesh;
   private knifeFly: { t: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
   private disposers: (() => void)[] = [];
@@ -263,8 +280,9 @@ export class Game {
   constructor(
     private container: HTMLElement,
     private cb: GameCallbacks,
-    opts: { quality?: Quality } = {},
+    opts: { quality?: Quality; touch?: boolean } = {},
   ) {
+    this.touch = !!opts.touch;
     this.quality = opts.quality ?? "high";
     const Q = QUALITY[this.quality];
     this.renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance" });
@@ -480,12 +498,23 @@ export class Game {
         this.navDbg.toggle();
         return;
       }
+      if (this.phase === "intro") {
+        if (isSkipKey(e.code)) {
+          e.preventDefault();
+          this.skipIntro();
+        }
+        return;
+      }
       if (this.phase !== "playing") return;
       if (["Space", "ArrowUp", "ArrowDown", "Tab"].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
       this.pressKey(e.code);
     });
     on("keyup", (e) => this.keys.delete(e.code));
+    // mouse look needs the pointer captured; after an intro that ended on its own there was no click to do it
+    el.addEventListener("click", () => {
+      if (this.phase === "playing" && document.pointerLockElement !== el) this.lock();
+    });
     on("blur", () => this.keys.clear());
     on("mousemove", (e) => {
       if (this.phase === "playing" && document.pointerLockElement === el) this.look(e.movementX, e.movementY);
@@ -512,6 +541,53 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ public API
+
+  /** Play the intro cutscene. The caller reacts to onIntroEnd with start() or showTitle(). */
+  playIntro(reduced = false) {
+    this.resetWorld();
+    this.intro = startIntro(reduced);
+    this.introKey = "";
+    this.setPhase("intro");
+    this.stepIntro(0);
+  }
+  /** Skip (or finish) the intro now. Safe to call at any time and more than once. */
+  skipIntro() {
+    if (this.phase !== "intro" || !this.intro) return;
+    this.intro = skipIntro(this.intro);
+    this.finishIntro();
+  }
+  /** Back to the title screen (after a replayed intro). */
+  showTitle() {
+    this.intro = null;
+    this.resetWorld();
+    this.setPhase("title");
+  }
+  /** Test hook: jump the cutscene to time t. */
+  debugIntroSeek(t: number) {
+    if (this.phase === "intro" && this.intro) this.intro = { ...this.intro, t };
+  }
+  private finishIntro() {
+    const s = this.intro;
+    if (!s || !s.done) return;
+    this.intro = null;
+    this.cb.onIntroEnd?.(s.skipped);
+  }
+  private stepIntro(dt: number) {
+    if (!this.intro) return;
+    this.intro = advanceIntro(this.intro, dt);
+    const { t, reduced } = this.intro;
+    const c = cameraAt(t, reduced);
+    this.camera.position.set(...c.pos);
+    this.camera.lookAt(...c.look);
+    const cap = captionAt(t, reduced);
+    const view: IntroView = { text: cap?.text ?? "", opacity: cap ? cap.opacity : 0, fade: fadeAt(t, reduced) };
+    const key = `${view.text}|${view.opacity.toFixed(2)}|${view.fade.toFixed(2)}`;
+    if (key !== this.introKey) {
+      this.introKey = key;
+      this.cb.onIntro?.(view);
+    }
+    if (this.intro.done) this.finishIntro();
+  }
 
   /** Begin the mission, from the beginning or from the "Kapitan down" checkpoint. Guard and alert state is never restored. */
   start(from: Checkpoint = "start") {
@@ -555,6 +631,7 @@ export class Game {
     }
   }
   private lock() {
+    if (this.touch) return;
     try {
       const r = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
       r?.catch?.(() => {});
@@ -591,6 +668,7 @@ export class Game {
   debug() {
     return {
       phase: this.phase,
+      introT: this.intro?.t ?? null,
       player: { x: this.p.x, y: this.p.y, z: this.p.z },
       guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget })),
       objective: this.objective,
@@ -664,6 +742,7 @@ export class Game {
     this.time += dt;
     if (this.phase === "playing") this.update(dt);
     if (this.phase === "title") this.attractCamera();
+    if (this.phase === "intro") this.stepIntro(dt);
     this.render(dt);
   };
 
@@ -1255,7 +1334,7 @@ export class Game {
     this.player.group.scale.y = crouch ? 0.72 : 1;
     this.player.body.rotation.z = p.running ? 0.12 : 0;
     this.player.group.position.y = p.y + bob;
-    this.player.group.visible = this.phase !== "title";
+    this.player.group.visible = this.phase !== "title" && this.phase !== "intro";
 
     for (const g of this.guards) {
       const showState = g.brain.state !== "patrol" && !g.dead;
@@ -1273,7 +1352,7 @@ export class Game {
     }
 
     // camera
-    if (this.phase !== "title") {
+    if (this.phase === "playing" || this.phase === "paused" || this.phase === "won" || this.phase === "lost") {
       const look = new THREE.Vector3(p.x, p.y + (crouch ? 1.1 : 1.55), p.z);
       const rx = -Math.cos(this.camYaw) * 0.45;
       const rz = Math.sin(this.camYaw) * 0.45;

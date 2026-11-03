@@ -9,6 +9,7 @@ import {
   formatTime,
   hasProgress,
   importCode,
+  markIntroSeen,
   migrate,
   parseSave,
   ratingLabel,
@@ -16,6 +17,7 @@ import {
   recordWin,
   resetProgress,
   sanitize,
+  shouldShowIntro,
   stealthRating,
   updateSettings,
   type StorageLike,
@@ -252,5 +254,58 @@ describe("SaveStore", () => {
     expect(s.importFrom(code)).toBe(true);
     expect(s.get().checkpoint).toBe("start");
     expect(importCode(s.exportCode())).toEqual(s.get());
+  });
+});
+
+describe("seenIntro flag", () => {
+  const v1 = (extra: Record<string, unknown> = {}) => ({ version: 1, checkpoint: null, missions: {}, settings: {}, ...extra });
+  it("is false by default and shown once", () => {
+    expect(defaultSave().seenIntro).toBe(false);
+    expect(shouldShowIntro(defaultSave())).toBe(true);
+    const seen = markIntroSeen(defaultSave());
+    expect(seen.seenIntro).toBe(true);
+    expect(shouldShowIntro(seen)).toBe(false);
+    expect(markIntroSeen(seen)).toBe(seen);
+  });
+  it("migrates v1: untouched saves see the intro, players with progress do not", () => {
+    expect(migrate(v1())?.seenIntro).toBe(false);
+    expect(migrate(v1())?.version).toBe(2);
+    expect(migrate(v1({ checkpoint: "start" }))?.seenIntro).toBe(true);
+    expect(migrate(v1({ checkpoint: "kapitan" }))?.seenIntro).toBe(true);
+    expect(migrate(v1({ missions: { [MISSION_ID]: { attempts: 2 } } }))?.seenIntro).toBe(true);
+    expect(migrate(v1({ missions: { [MISSION_ID]: { completed: true, attempts: 0 } } }))?.seenIntro).toBe(true);
+    expect(migrate(v1({ missions: { a: "junk" } }))?.seenIntro).toBe(false);
+  });
+  it("keeps other v1 data when migrating", () => {
+    const d = migrate(v1({ checkpoint: "kapitan", settings: { lookSens: 2, invertY: true } }));
+    expect(d?.checkpoint).toBe("kapitan");
+    expect(d?.settings.lookSens).toBe(2);
+    expect(d?.settings.invertY).toBe(true);
+  });
+  it("loads old v1 stored text and old export codes", () => {
+    const old = JSON.stringify(v1({ checkpoint: "start" }));
+    expect(parseSave(old).seenIntro).toBe(true);
+    expect(importCode(btoa(old))?.seenIntro).toBe(true);
+  });
+  it("rejects non-boolean values and round-trips through export/import", () => {
+    expect(sanitize({ version: 2, seenIntro: "yes" }).seenIntro).toBe(false);
+    expect(sanitize({ version: 2, seenIntro: 1 }).seenIntro).toBe(false);
+    const d = markIntroSeen(defaultSave());
+    expect(importCode(exportCode(d))).toEqual(d);
+  });
+  it("reset progress clears it but keeps settings", () => {
+    const d = updateSettings(markIntroSeen(recordStart(defaultSave())), { lookSens: 2 });
+    const r = resetProgress(d);
+    expect(r.seenIntro).toBe(false);
+    expect(r.settings.lookSens).toBe(2);
+    const s = new SaveStore(memStorage());
+    s.update(markIntroSeen);
+    s.reset();
+    expect(s.get().seenIntro).toBe(false);
+  });
+  it("persists across store instances", () => {
+    const st = memStorage();
+    new SaveStore(st).update(markIntroSeen);
+    expect(new SaveStore(st).get().seenIntro).toBe(true);
   });
 });

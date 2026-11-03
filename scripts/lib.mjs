@@ -18,6 +18,19 @@ export const gameReady = (pg, timeout = 30000) => pg.waitForFunction(() => windo
 export const waitPhase = (pg, phase, timeout = 15000) =>
   pg.waitForFunction((p) => window.__keris?.debug().phase === p, phase, { timeout });
 
+/** Resize the viewport, leaving fullscreen first. The window lags the document leaving fullscreen, so retry. */
+export async function resize(pg, width, height) {
+  for (let i = 0; ; i++) {
+    await pg.evaluate(() => document.fullscreenElement && document.exitFullscreen()).catch(() => {});
+    try {
+      return await pg.setViewportSize({ width, height });
+    } catch (e) {
+      if (i >= 20 || !/fullscreen/.test(e.message)) throw e;
+      await sleep(100);
+    }
+  }
+}
+
 /** Dismiss the "press any button" screen and wait until the menu is up. */
 export async function dismissSplash(pg) {
   await pg.locator(".overlay.splash").dispatchEvent("pointerdown");

@@ -1,6 +1,6 @@
 // Headless check of the intro cutscene: desktop + phone viewports, skip (keys and touch), first-run only, replay, reset, reduced motion.
 // Usage: node scripts/intro-check.mjs [url] [outDir]   (needs a running server, e.g. npm run build && npm start)
-import { launch, sleep, gameReady, waitPhase, dismissSplash } from "./lib.mjs";
+import { launch, sleep, gameReady, waitPhase, dismissSplash, resize } from "./lib.mjs";
 
 const url = process.argv[2] || "http://localhost:3000";
 const out = process.argv[3] || "docs";
@@ -128,17 +128,11 @@ for (const s of [
   const ctx = await b.newContext({ viewport: { width: s.w, height: s.h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const { pg, errs } = await open(ctx);
   // the existing rotate prompt covers the title in portrait, so start in landscape and rotate during the intro
-  if (s.name === "portrait") {
-    await pg.evaluate(() => document.fullscreenElement && document.exitFullscreen()).catch(() => {});
-    await sleep(300);
-    await pg.setViewportSize({ width: s.h, height: s.w });
-  }
+  if (s.name === "portrait") await resize(pg, s.h, s.w);
   await pg.getByRole("button", { name: "New game" }).tap();
   await waitPhase(pg, "intro");
   if (s.name === "portrait") {
-    await pg.evaluate(() => document.fullscreenElement && document.exitFullscreen()).catch(() => {});
-    await sleep(300);
-    await pg.setViewportSize({ width: s.w, height: s.h });
+    await resize(pg, s.w, s.h);
     await sleep(500);
   }
   await seek(pg, 12);

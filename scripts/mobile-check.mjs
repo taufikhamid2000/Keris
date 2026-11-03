@@ -1,6 +1,6 @@
 // Headless mobile check: touch emulation at two landscape sizes plus portrait.
 // Usage: node scripts/mobile-check.mjs [url] [outDir]   (needs a running server, e.g. npm run build && npm start)
-import { launch, sleep, gameReady, waitPhase } from "./lib.mjs";
+import { launch, sleep, gameReady, waitPhase, resize } from "./lib.mjs";
 
 const url = process.argv[2] || "http://localhost:3000";
 const out = process.argv[3] || "docs";
@@ -155,15 +155,13 @@ for (const s of sizes) {
   check((await dbg()).phase === "playing", "resume returns to play");
 
   // portrait (leave fullscreen first so the window can be resized)
-  await pg.evaluate(() => document.fullscreenElement && document.exitFullscreen()).catch(() => {});
-  await sleep(300);
-  await pg.setViewportSize({ width: s.h, height: s.w });
+  await resize(pg, s.h, s.w);
   await sleep(600);
   const rot = await pg.locator(".rotate").count();
   check(rot === 1, "portrait shows the rotate prompt");
   check((await dbg()).phase === "paused", "portrait pauses the game");
   if (s.name === "667x375") await pg.screenshot({ path: `${out}/mobile-portrait.png` });
-  await pg.setViewportSize({ width: s.w, height: s.h });
+  await resize(pg, s.w, s.h);
   await sleep(400);
   check((await pg.locator(".rotate").count()) === 0, "rotating back hides the prompt");
 

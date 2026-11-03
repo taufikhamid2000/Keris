@@ -96,3 +96,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 ## Credit
 
 Inspired by the stealth genre. Not affiliated with Ubisoft. Setting and story draw on my earlier Malacca 1511 prototype.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

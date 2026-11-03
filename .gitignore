@@ -6,3 +6,6 @@ next-env.d.ts
 .vercel
 .env*
 test-results
+
+# graphify (local code graph, rebuild with: graphify update .)
+graphify-out/

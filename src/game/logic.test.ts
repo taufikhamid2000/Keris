@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BODY,
   BRAIN,
+  AIR,
+  canAirAssassinate,
+  leapDuration,
+  leapHeight,
   approachPoint,
   bodyReaction,
   canSeeBody,
@@ -231,5 +235,28 @@ describe("body discovery", () => {
     expect(bodyReaction(BODY.noticeAt)).toBe("suspicious");
     expect(bodyReaction(1)).toBe("discovered");
     expect(stepBodyMeter(0.5, false, 5, 1)).toBeLessThan(0.5);
+  });
+});
+
+describe("air assassination", () => {
+  const roof: Box = { minX: -2, maxX: 2, minY: 0, maxY: 3, minZ: -2, maxZ: 2 };
+  const below = { x: 0, y: 0, z: 3 };
+
+  it("allows a leap from the roof edge onto a guard below", () => {
+    expect(canAirAssassinate({ x: 0, y: 3, z: 1.6 }, below, [roof])).toBe(true);
+  });
+  it("is blocked by the roof itself when the player stands back from the edge", () => {
+    expect(canAirAssassinate({ x: 0, y: 3, z: -1.5 }, below, [roof])).toBe(false);
+  });
+  it("needs a real drop, not more than a survivable one, and the guard within reach", () => {
+    expect(canAirAssassinate({ x: 0, y: AIR.minDrop - 0.1, z: 2.5 }, below, [])).toBe(false);
+    expect(canAirAssassinate({ x: 0, y: AIR.maxDrop + 0.1, z: 2.5 }, below, [])).toBe(false);
+    expect(canAirAssassinate({ x: 0, y: 3, z: 3 - AIR.reach - 0.1 }, below, [])).toBe(false);
+  });
+  it("leap arc starts and ends at the right heights and hops above the start", () => {
+    expect(leapHeight(3, 0, 0)).toBe(3);
+    expect(leapHeight(3, 0, 1)).toBeCloseTo(0);
+    expect(leapHeight(3, 0, 0.1)).toBeGreaterThan(3);
+    expect(leapDuration(5)).toBeGreaterThan(leapDuration(2));
   });
 });

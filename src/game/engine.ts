@@ -3,6 +3,7 @@ import { buildLevel, type Level } from "./level";
 import {
   BODY,
   bodyReaction,
+  canAirAssassinate,
   canSee,
   canSeeBody,
   isBodyHidden,
@@ -12,6 +13,8 @@ import {
   dist2D,
   forceAlert,
   isBehind,
+  leapDuration,
+  leapHeight,
   newBrain,
   noiseRadius,
   raycastBoxes,
@@ -259,6 +262,8 @@ export class Game {
   private camPitch = 0.35;
   private camPos = new THREE.Vector3();
   private climb: { t: number; dur: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
+  /** air assassination in flight: the player tracks the guard and kills him on landing */
+  private leap: { t: number; dur: number; from: THREE.Vector3; guard: Guard } | null = null;
   private eagle = false;
   private knives = START_KNIVES;
   private knifeCd = 0;
@@ -455,6 +460,7 @@ export class Game {
     this.camYaw = (3 * Math.PI) / 4;
     this.camPitch = 0.35;
     this.climb = null;
+    this.leap = null;
     this.eagle = false;
     this.knives = START_KNIVES;
     this.knifeCd = 0;
@@ -681,6 +687,7 @@ export class Game {
       introT: this.intro?.t ?? null,
       player: { x: this.p.x, y: this.p.y, z: this.p.z },
       guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget })),
+      leaping: !!this.leap,
       objective: this.objective,
       exit: { x: this.level.exit.x, z: this.level.exit.z },
       drawCalls: this.renderer.info.render.calls,
@@ -712,6 +719,36 @@ export class Game {
           }
         }
     return best;
+  }
+  /** Test hook: stand the player at a roof edge with a calm guard below, facing away. Returns the guard's index or -1. */
+  debugAirSetup(): number {
+    const L = this.level;
+    const gi = this.guards.findIndex((o, i) => i > 0 && !o.dead && !o.isTarget);
+    if (gi < 0) return -1;
+    const g = this.guards[gi];
+    for (const b of L.colliders) {
+      if (b.maxY < 2.5 || b.maxY > 6 || b.maxX - b.minX < 2 || b.maxZ - b.minZ < 2) continue;
+      const cx = (b.minX + b.maxX) / 2;
+      const cz = (b.minZ + b.maxZ) / 2;
+      const spots = [
+        [cx, b.minZ + 0.4, cx, b.minZ - 1.4],
+        [cx, b.maxZ - 0.4, cx, b.maxZ + 1.4],
+        [b.minX + 0.4, cz, b.minX - 1.4, cz],
+        [b.maxX - 0.4, cz, b.maxX + 1.4, cz],
+      ];
+      for (const [px, pz, gx, gz] of spots) {
+        // the guard's spot must be open ground with nothing overhead, the player's on top of this box
+        if (L.colliders.some((o) => gx > o.minX - 0.5 && gx < o.maxX + 0.5 && gz > o.minZ - 0.5 && gz < o.maxZ + 0.5 && o.minY < b.maxY + 2)) continue;
+        if (groundHeight(px, pz, b.maxY, L.colliders) !== b.maxY) continue;
+        const pp = { x: px, y: b.maxY, z: pz };
+        if (!canAirAssassinate(pp, { x: gx, y: 0, z: gz }, L.colliders)) continue;
+        Object.assign(this.p, pp, { vy: 0, grounded: true });
+        Object.assign(g, { x: gx, y: 0, z: gz, vy: 0, yaw: yawTo(pp, { x: gx, z: gz }), brain: newBrain(), meter: 0, wait: 30, climb: null });
+        g.agent.reset();
+        return gi;
+      }
+    }
+    return -1;
   }
   /** Test hook: put the player at a spot and alert every guard to it. */
   debugAlertAt(x: number, y: number, z: number) {
@@ -831,7 +868,28 @@ export class Game {
     const crouched = this.crouched;
     p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && len > 0;
 
-    if (this.climb) {
+    if (this.leap) {
+      const l = this.leap;
+      l.t += dt;
+      const k = clamp(l.t / l.dur, 0, 1);
+      const e = k * (2 - k);
+      const g = l.guard;
+      // land just behind the guard, following him if he keeps walking
+      const tx = g.x - Math.sin(g.yaw) * 0.5;
+      const tz = g.z - Math.cos(g.yaw) * 0.5;
+      p.x = l.from.x + (tx - l.from.x) * e;
+      p.z = l.from.z + (tz - l.from.z) * e;
+      p.y = leapHeight(l.from.y, g.y, k);
+      p.yaw = yawTo(p, g);
+      if (k >= 1) {
+        this.leap = null;
+        p.y = g.y;
+        p.vy = 0;
+        p.grounded = true;
+        if (!g.dead) this.killGuard(g, "Air assassination.");
+      }
+      p.moving = false;
+    } else if (this.climb) {
       const c = this.climb;
       c.t += dt;
       const k = clamp(c.t / c.dur, 0, 1);
@@ -920,7 +978,7 @@ export class Game {
   }
 
   private tryJumpOrClimb() {
-    if (this.climb) return;
+    if (this.climb || this.leap) return;
     if (this.tryClimb()) return;
     if (this.p.grounded) {
       this.p.vy = 7.2;
@@ -1208,7 +1266,8 @@ export class Game {
 
   // ------------------------------------------------------------------ actions
 
-  private takedownTarget(): { guard: Guard | null; near: boolean } {
+  /** Who E would kill: a guard within reach from behind, or failing that one below the player to leap onto. */
+  private takedownTarget(): { guard: Guard | null; near: boolean; air: boolean } {
     const p = this.p;
     let best: Guard | null = null;
     let near = false;
@@ -1220,13 +1279,30 @@ export class Game {
       const ok = g.stun > 0 || (g.brain.state !== "alert" && isBehind(g, g.yaw, p));
       if (ok && (!best || d < dist2D(best, p))) best = g;
     }
-    return { guard: best, near };
+    if (best || !p.grounded || this.carrying) return { guard: best, near, air: false };
+    // nobody looks up: from above, facing does not matter, only that he has not spotted the player
+    for (const g of this.guards) {
+      if (g.dead || g.climb || (g.brain.state === "alert" && g.stun <= 0)) continue;
+      if (!canAirAssassinate(p, g, this.level.colliders)) continue;
+      if (!best || dist2D(g, p) < dist2D(best, p)) best = g;
+    }
+    return { guard: best, near, air: !!best };
   }
 
   private tryTakedown() {
-    if (this.climb || this.carrying) return;
-    const { guard } = this.takedownTarget();
+    if (this.climb || this.leap || this.carrying) return;
+    const { guard, air } = this.takedownTarget();
     if (!guard) return;
+    if (air) {
+      const p = this.p;
+      this.leap = { t: 0, dur: leapDuration(p.y - guard.y), from: new THREE.Vector3(p.x, p.y, p.z), guard };
+      p.vy = 0;
+      return;
+    }
+    this.killGuard(guard, "Silent kill.");
+  }
+
+  private killGuard(guard: Guard, msg: string) {
     guard.dead = true;
     guard.meter = 0;
     guard.climb = null;
@@ -1244,12 +1320,12 @@ export class Game {
       (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
       this.toast("The Kapitan is down. Reach the jetty.");
       this.cb.onCheckpoint?.("kapitan");
-    } else this.toast(cover ? "Silent kill. Body hidden in cover." : "Silent kill.");
+    } else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
   }
 
   /** F: pick up the nearest body, or drop the one being carried (hidden if dropped inside cover). */
   private tryCarry() {
-    if (this.climb) return;
+    if (this.climb || this.leap) return;
     const p = this.p;
     if (this.carrying) {
       const b = this.carrying;
@@ -1279,7 +1355,7 @@ export class Game {
   }
 
   private tryThrow() {
-    if (this.knives <= 0 || this.knifeCd > 0 || this.climb) return;
+    if (this.knives <= 0 || this.knifeCd > 0 || this.climb || this.leap) return;
     this.knives--;
     this.knifeCd = 0.8;
     const dir = new THREE.Vector3();
@@ -1334,7 +1410,8 @@ export class Game {
     }
     const tg = this.takedownTarget();
     let prompt = "";
-    if (this.climb) prompt = "";
+    if (this.climb || this.leap) prompt = "";
+    else if (tg.guard && tg.air) prompt = tg.guard.isTarget ? "E  Leap down on the Kapitan" : "E  Air assassination";
     else if (tg.guard) prompt = tg.guard.isTarget ? "E  Strike the Kapitan with the keris" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";

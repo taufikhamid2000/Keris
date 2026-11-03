@@ -328,3 +328,28 @@ export function bodyReaction(meter: number): BodyReaction {
   if (meter >= BODY.discoverAt) return "discovered";
   return meter >= BODY.noticeAt ? "suspicious" : "none";
 }
+
+// ---------------------------------------------------------------- air assassination
+
+/** Drop height (metres) for a leap kill and how far out from under the player the guard may stand. */
+export const AIR = { minDrop: 1.8, maxDrop: 7, reach: 3.5 } as const;
+
+/**
+ * Can a player standing at `p` leap down onto a guard at `g`? The drop has to be a real leap but
+ * survivable, the guard within reach, and the line from the player's chest to the guard's head clear,
+ * so the edge of the roof the player stands on blocks it until they step up to the edge.
+ */
+export function canAirAssassinate(p: Vec3, g: Vec3, boxes: Box[]): boolean {
+  const drop = p.y - g.y;
+  if (drop < AIR.minDrop || drop > AIR.maxDrop) return false;
+  if (dist2D(p, g) > AIR.reach) return false;
+  return hasLineOfSight({ x: p.x, y: p.y + 0.9, z: p.z }, { x: g.x, y: g.y + 1.6, z: g.z }, boxes);
+}
+
+/** Leap time for a drop: a short hop out, then the fall. */
+export const leapDuration = (drop: number) => 0.35 + drop * 0.05;
+
+/** Height along a leap at progress k (0..1): falls with gravity-like easing plus a small hop off the edge. */
+export function leapHeight(fromY: number, toY: number, k: number): number {
+  return fromY + (toY - fromY) * k * k + 2.4 * k * (1 - k) * 0.5;
+}

@@ -1,5 +1,5 @@
 // Headless smoke check for guard pathfinding: put the player on a rooftop, alert the guards,
-// and assert a guard climbs up and reaches them. Simulated time is fast-forwarded, so it runs in seconds.
+// and assert a guard climbs up and reaches them. Before that, an air assassination: leap off a roof edge onto a guard. Simulated time is fast-forwarded, so it runs in seconds.
 // Usage: node scripts/smoke-ai.mjs [url] [simSeconds]
 import { launch, gameReady, waitPhase, dismissSplash } from "./lib.mjs";
 const url = process.argv[2] || "http://localhost:3000";
@@ -16,6 +16,18 @@ try {
   await pg.click("text=New game");
   await pg.keyboard.press("Space"); // skip the first-run intro
   await waitPhase(pg, "playing");
+  // air assassination: E from a roof edge leaps onto the calm guard below and kills him
+  const gi = await pg.evaluate(() => window.__keris.debugAirSetup());
+  if (gi < 0) throw new Error("no roof edge with open ground below found for the air assassination");
+  await pg.evaluate(() => window.__keris.debugAdvance(0.1));
+  const prompt = await pg.waitForFunction(() => /Air assassination/.test(document.body.innerText), null, { timeout: 3000 }).then(() => "Air assassination", () => "");
+  await pg.keyboard.press("KeyE");
+  const leaping = await pg.evaluate(() => window.__keris.debug().leaping);
+  const after = await pg.evaluate(() => (window.__keris.debugAdvance(1.5), window.__keris.debug()));
+  const g = after.guards[gi];
+  const air = { prompt: /Air assassination/.test(prompt), leaping, killed: g.dead, landed: after.player.y < 0.1 && Math.hypot(after.player.x - g.x, after.player.z - g.z) < 1.5 };
+  console.log("air", JSON.stringify(air));
+  if (!Object.values(air).every(Boolean)) throw new Error("air assassination failed");
   const spot = await pg.evaluate(() => window.__keris.debugRoofSpot());
   if (!spot) throw new Error("no climbable rooftop spot found in the nav graph");
   console.log("roof spot", JSON.stringify(spot));

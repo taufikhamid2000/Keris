@@ -38,12 +38,19 @@ Each folder takes:
 Characters are scaled to about 1.8 m automatically and faced along their walking direction, so the export
 size does not matter. Clips without In Place are fixed in code (the hips are pinned), but In Place looks better.
 
-## Hosting outside the repo
+## Putting them on the live site
 
-The FBX files are gitignored, so a deploy built from git has none. Upload the same folder layout to a public
-storage bucket (with CORS allowing GET and HEAD from the game's domain) and set `NEXT_PUBLIC_MODELS_URL` to its
-base URL in the Vercel project, e.g. `https://models.taufikhamid.com`. It is read at build time, so redeploy after
-changing it. Without it the game looks in `public/models/`.
+The FBX files are gitignored, so the live game loads them from a public Supabase Storage bucket instead
+(`keris-models` on the master_db project). Vercel has `NEXT_PUBLIC_MODELS_URL` pointing at it.
+
+```bash
+npm run models:upload
+```
+
+This uploads everything under `public/models/` with the same folder layout, overwriting files of the same name.
+The live site picks the new files up on the next page load (they are cached for up to an hour). Without
+`NEXT_PUBLIC_MODELS_URL`, as on `npm run dev` with no `.env.local`, the game reads `public/models/` directly.
+Free-plan limits: 50 MB per file, 1 GB stored, about 5 GB of downloads a month.
 
 ## Size and licence
 

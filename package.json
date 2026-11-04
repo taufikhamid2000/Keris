@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke:ai": "node scripts/smoke-ai.mjs",
-    "check:browser": "node scripts/check-all.mjs"
+    "check:browser": "node scripts/check-all.mjs",
+    "models:upload": "node scripts/upload-models.mjs"
   },
   "dependencies": {
     "next": "^16.4.4",

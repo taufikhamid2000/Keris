@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { buildLevel, type Level } from "./level";
 import { HARBOUR, type LevelDef } from "./levels";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
+import { loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
   BODY,
   bodyReaction,
@@ -124,7 +124,7 @@ const FLINCH = 0.35;
 const POISE = 1.5;
 const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
 /** sampan handling: cruise and Shift speeds (m/s), acceleration, drift-to-stop rate, turn rate (rad/s), reach to board */
-const BOAT = { speed: 3.2, fast: 5, accel: 2.5, drag: 1.5, turn: 1.4, board: 2.6, seatY: 0.15 };
+const BOAT = { speed: 3.2, fast: 5, accel: 2.5, drag: 1.5, turn: 1.4, board: 2.6, seatY: 0.15, modelLength: 4, modelY: -0.35 };
 
 interface Boat {
   group: THREE.Group;
@@ -463,6 +463,18 @@ export class Game {
         this.attachRigs();
       })
       .catch((e) => console.warn("[models] loading failed, keeping the built-in figures", e));
+    // the Quaternius CC0 boat (props/sampan.glb) replaces the built-in sampan mesh when it is there
+    loadProp("sampan", BOAT.modelLength)
+      .then((m) => {
+        if (this.disposed || !m) return;
+        for (const b of this.boats) {
+          b.group.clear();
+          const c = m.clone();
+          c.position.y = BOAT.modelY;
+          b.group.add(c);
+        }
+      })
+      .catch((e) => console.warn("[models] boat failed, keeping the built-in sampan", e));
 
     this.knifeMesh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 5), new THREE.MeshBasicMaterial({ color: 0xe6e6e6 }));
     this.knifeMesh.visible = false;

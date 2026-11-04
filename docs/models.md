@@ -10,6 +10,7 @@ public/models/
   guard/      every guard
   target/     optional: the Kapitan / clerk (uses guard/ when empty)
   shared/     optional: an animation library used by every role that has none of its own
+  props/      optional: sampan.glb, the boat
 ```
 
 ## Recommended: Quaternius (CC0, no account)
@@ -51,6 +52,12 @@ On itch.io choose "Download Now", then "No thanks, just take me to the downloads
 | sit | the player sitting in a sampan (falls back to crouch idle) | `sit` |
 
 A one-clip file (e.g. `run.fbx`) wins over the library's pick for that slot.
+
+## Props
+
+`public/models/props/sampan.glb` replaces the built-in sampan mesh. The live one is Quaternius's CC0 "Boat"
+(https://poly.pizza/m/OknDJkGeJ8, Download, GLB). It is scaled to 4 m long and turned so its long side runs along the
+boat's heading; `BOAT.modelLength` and `BOAT.modelY` at the top of `src/game/engine.ts` set the size and how low it sits.
 
 ## Mixamo (FBX, Adobe account)
 

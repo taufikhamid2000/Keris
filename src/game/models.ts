@@ -303,3 +303,32 @@ export class Rig {
     this.mixer.uncacheRoot(this.object);
   }
 }
+
+/**
+ * A static prop from props/<name>.(glb|gltf|fbx), scaled so its longest side is `length` metres, centred on x/z with
+ * its lowest point at y = 0, and turned so the long side runs along z. Null when the file is missing.
+ */
+export async function loadProp(name: string, length: number): Promise<THREE.Object3D | null> {
+  const m = await fetchJson<Manifest>(`${MODELS_URL}/manifest.json`);
+  const file = m?.folders.props?.find((f) => MODEL_EXT.test(f) && f.replace(MODEL_EXT, "").toLowerCase() === name);
+  if (!file) return null;
+  const obj = (await loadFile(`${MODELS_URL}/props/${file}`)).scene;
+  const wrap = new THREE.Group();
+  wrap.add(obj);
+  let box = new THREE.Box3().setFromObject(obj);
+  let size = box.getSize(new THREE.Vector3());
+  if (size.x > size.z) {
+    obj.rotation.y = Math.PI / 2;
+    obj.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(obj);
+    size = box.getSize(new THREE.Vector3());
+  }
+  const s = length / Math.max(size.z, 1e-6);
+  wrap.scale.setScalar(s);
+  const c = box.getCenter(new THREE.Vector3());
+  obj.position.set(-c.x, -box.min.y, -c.z).add(obj.position);
+  obj.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true;
+  });
+  return wrap;
+}

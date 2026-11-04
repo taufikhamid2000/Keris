@@ -65,6 +65,8 @@ export interface LevelDef {
   decks: (Rect & { rails?: boolean })[];
   /** sampans moored on the water, free to take (E) */
   boats: { x: number; z: number; rotY: number }[];
+  /** horses standing free to ride (E) */
+  horses?: { x: number; z: number; rotY: number }[];
   /** market stalls */
   stalls: Rect[];
   wells: Vec2[];
@@ -263,7 +265,7 @@ const RIVER = { x: 0, z: 41.5, w: 80, d: 9 };
  * and a narrow plank on the west side cross the river; the upper kampung has its own jetty on the river bank.
  * Every mission plays on this map and only sets its own guards, start, exit and wording.
  */
-const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "bounds"> = {
+const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "horses" | "bounds"> = {
   seed: 1511,
   shoreZ: -31,
   houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses],
@@ -299,6 +301,14 @@ const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "w
     { x: 3.4, z: 43, rotY: 0 },
     // the east end, under the kampung's south-east houses
     { x: 26, z: 44.4, rotY: Math.PI / 2 },
+  ],
+  horses: [
+    // by the Bridge Battery start, in the harbour's north-west corner
+    { x: -28.5, z: 28.5, rotY: Math.PI / 4 },
+    // on the north bank, west of the bridge
+    { x: -6, z: 50, rotY: Math.PI / 2 },
+    // by the Kampung Hulu start, at the north-east gate
+    { x: 28.5, z: 28.5 + KAMPUNG_DZ, rotY: -Math.PI / 2 },
   ],
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6 + KAMPUNG_DZ, jettyZ: -31, jettyHalf: 1.1 },
 };

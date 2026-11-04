@@ -309,10 +309,19 @@ export class Rig {
  * its lowest point at y = 0, and turned so the long side runs along z. Null when the file is missing.
  */
 export async function loadProp(name: string, length: number): Promise<THREE.Object3D | null> {
+  return (await loadCreature(name, length))?.object ?? null;
+}
+
+/** A prop with its animation clips (e.g. the horse), fitted like loadProp. Null when the file is missing. */
+export async function loadCreature(name: string, length: number): Promise<{ object: THREE.Object3D; clips: THREE.AnimationClip[] } | null> {
   const m = await fetchJson<Manifest>(`${MODELS_URL}/manifest.json`);
   const file = m?.folders.props?.find((f) => MODEL_EXT.test(f) && f.replace(MODEL_EXT, "").toLowerCase() === name);
   if (!file) return null;
-  const obj = (await loadFile(`${MODELS_URL}/props/${file}`)).scene;
+  const loaded = await loadFile(`${MODELS_URL}/props/${file}`);
+  return { object: fitModel(loaded.scene, length), clips: loaded.animations };
+}
+
+function fitModel(obj: THREE.Object3D, length: number): THREE.Object3D {
   const wrap = new THREE.Group();
   wrap.add(obj);
   let box = new THREE.Box3().setFromObject(obj);
@@ -328,7 +337,11 @@ export async function loadProp(name: string, length: number): Promise<THREE.Obje
   const c = box.getCenter(new THREE.Vector3());
   obj.position.set(-c.x, -box.min.y, -c.z).add(obj.position);
   obj.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true;
+    if ((o as THREE.Mesh).isMesh) {
+      o.castShadow = o.receiveShadow = true;
+      // skinned meshes are culled by their bind pose, which can pop out of view while animating
+      if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false;
+    }
   });
   return wrap;
 }

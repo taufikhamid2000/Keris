@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { buildLevel, type Level } from "./level";
 import { HARBOUR, type LevelDef } from "./levels";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
+import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
   BODY,
   bodyReaction,
@@ -125,6 +125,22 @@ const POISE = 1.5;
 const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
 /** sampan handling: cruise and Shift speeds (m/s), acceleration, drift-to-stop rate, turn rate (rad/s), reach to board */
 const BOAT = { speed: 3.2, fast: 5, accel: 2.5, drag: 1.5, turn: 1.4, board: 2.6, seatY: 0.15, modelLength: 4, modelY: -0.35 };
+
+/** horse handling: walk and gallop speeds (m/s), acceleration, braking, turn rate (rad/s), reach to mount, saddle height, body radius */
+const HORSE = { walk: 3.6, gallop: 9, accel: 5, drag: 6, turn: 2.6, mount: 2.4, saddleY: 1.0, r: 0.6, modelLength: 2.4 };
+
+interface Horse {
+  group: THREE.Group;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  speed: number;
+  home: { x: number; z: number; yaw: number };
+  mixer: THREE.AnimationMixer | null;
+  acts: Partial<Record<"idle" | "walk" | "gallop", THREE.AnimationAction>>;
+  cur: "idle" | "walk" | "gallop" | null;
+}
 
 interface Boat {
   group: THREE.Group;
@@ -354,6 +370,11 @@ export class Game {
   private boats: Boat[] = [];
   /** the sampan the player sits in, or null on foot */
   private boat: Boat | null = null;
+  private boatModel: THREE.Object3D | null = null;
+  private horses: Horse[] = [];
+  /** the horse the player rides, or null */
+  private horse: Horse | null = null;
+  private horseModel: { object: THREE.Object3D; clips: THREE.AnimationClip[] } | null = null;
   /** jetties and other decks a boat cannot pass (bridges and planks span the river and it slips under them) */
   private boatBlockers: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   /** main: the level's objective (kill or steal) is still to do */
@@ -453,6 +474,7 @@ export class Game {
     this.level = buildLevel(this.levelDef, { lampLights: Q.lampLights });
     this.loot = this.buildLoot();
     this.takeBoats();
+    this.takeHorses();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
@@ -467,14 +489,18 @@ export class Game {
     loadProp("sampan", BOAT.modelLength)
       .then((m) => {
         if (this.disposed || !m) return;
-        for (const b of this.boats) {
-          b.group.clear();
-          const c = m.clone();
-          c.position.y = BOAT.modelY;
-          b.group.add(c);
-        }
+        this.boatModel = m;
+        for (const b of this.boats) this.dressBoat(b);
       })
       .catch((e) => console.warn("[models] boat failed, keeping the built-in sampan", e));
+    // the Quaternius CC0 horse (props/horse.glb), animated; else a block horse
+    loadCreature("horse", HORSE.modelLength)
+      .then((m) => {
+        if (this.disposed || !m) return;
+        this.horseModel = m;
+        for (const h of this.horses) this.dressHorse(h);
+      })
+      .catch((e) => console.warn("[models] horse failed, keeping the block horse", e));
 
     this.knifeMesh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 5), new THREE.MeshBasicMaterial({ color: 0xe6e6e6 }));
     this.knifeMesh.visible = false;
@@ -617,6 +643,8 @@ export class Game {
     this.carrying = null;
     this.boat = null;
     for (const b of this.boats) Object.assign(b, { ...b.home, speed: 0 });
+    this.horse = null;
+    for (const h of this.horses) Object.assign(h, { ...h.home, y: 0, speed: 0 });
     this.crouchToggle = false;
     this.lowCeiling = false;
     this.toastText = "";
@@ -894,6 +922,8 @@ export class Game {
       windup: GUARD_ATK.windup,
       leaping: !!this.leap,
       boat: !!this.boat,
+      horse: !!this.horse,
+      horses: this.horses.map((h) => ({ x: h.x, z: h.z, yaw: h.yaw })),
       boats: this.boats.map((b) => ({ x: b.x, z: b.z, yaw: b.yaw })),
       objective: this.objective,
       exit: { x: this.level.exit.x, z: this.level.exit.z },
@@ -1023,6 +1053,7 @@ export class Game {
   /** Test hook: stand the player at a spot (on the ground or whatever is under it). */
   debugPlace(x: number, z: number) {
     this.boat = null;
+    this.horse = null;
     Object.assign(this.p, { x, z, y: groundHeight(x, z, 1.0, this.level.colliders), vy: 0, grounded: true });
   }
   /** Test hook: point the camera (and so "forward") along a yaw. */
@@ -1052,6 +1083,7 @@ export class Game {
     this.lampTimer = 0;
     this.loot = this.buildLoot();
     this.takeBoats();
+    this.takeHorses();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     if (this.navDbg) {
@@ -1083,13 +1115,26 @@ export class Game {
   }
   /** Pick each character's animation from what it is doing, and advance the mixers. */
   private animateRigs(dt: number) {
+    for (const h of this.horses) {
+      if (!h.mixer) continue;
+      const s = Math.abs(h.speed);
+      const want = s > HORSE.walk + 1 && h.acts.gallop ? "gallop" : s > 0.3 && h.acts.walk ? "walk" : "idle";
+      if (want !== h.cur && h.acts[want]) {
+        const next = h.acts[want]!;
+        next.reset().fadeIn(0.25).play();
+        if (h.cur) h.acts[h.cur]?.fadeOut(0.25);
+        h.cur = want;
+      }
+      if (h.cur && h.cur !== "idle") h.acts[h.cur]!.timeScale = clamp(s / (h.cur === "gallop" ? HORSE.gallop : HORSE.walk), 0.5, 1.3);
+      h.mixer.update(dt);
+    }
     const p = this.p;
     const pr = this.playerRig;
     if (pr) {
       this.stabT = Math.max(0, this.stabT - dt);
       this.hurtAnimT = Math.max(0, this.hurtAnimT - dt);
       let a: Anim;
-      if (this.boat) a = "sit";
+      if (this.boat || this.horse) a = "sit";
       else if (this.roll) a = "roll";
       else if (this.hurtAnimT > 0 && pr.has("hit")) a = "hit";
       else if (this.stabT > 0 && pr.has("stab")) a = this.swing?.heavy ? "heavy" : "stab";
@@ -1237,6 +1282,11 @@ export class Game {
       const sprint = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run);
       p.running = false;
       this.paddle(dt, fwd, str, len, sprint);
+    } else if (this.horse) {
+      const sprint = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run);
+      this.ride(dt, fwd, str, len, sprint);
+      // a gallop is as loud as a sprint
+      p.running = this.horse.speed > HORSE.walk + 1;
     } else if (this.leap) {
       const l = this.leap;
       l.t += dt;
@@ -1314,7 +1364,7 @@ export class Game {
       if (this.keys.has("Space") && p.moving) this.tryClimb();
     }
 
-    this.lowCeiling = this.phase === "playing" && L.colliders.some((b) => b.minY > p.y + STEP_H && b.minY < p.y + STAND_H && p.x > b.minX - 0.15 && p.x < b.maxX + 0.15 && p.z > b.minZ - 0.15 && p.z < b.maxZ + 0.15);
+    this.lowCeiling = this.phase === "playing" && !this.horse && L.colliders.some((b) => b.minY > p.y + STEP_H && b.minY < p.y + STAND_H && p.x > b.minX - 0.15 && p.x < b.maxX + 0.15 && p.z > b.minZ - 0.15 && p.z < b.maxZ + 0.15);
 
     // ---- hiding
     this.hidden = L.hides.some((h) => p.y < 1 && dist2D(p, h) < h.r);
@@ -1340,7 +1390,7 @@ export class Game {
     }
 
     // ---- escape
-    if (this.objective === "escape" && dist2D(p, L.exit) < (this.boat ? 3.5 : 2.4)) {
+    if (this.objective === "escape" && dist2D(p, L.exit) < (this.boat ? 3.5 : this.horse ? 3 : 2.4)) {
       this.setPhase("won");
       return;
     }
@@ -1374,7 +1424,7 @@ export class Game {
   }
 
   private tryJumpOrClimb() {
-    if (this.climb || this.leap || this.boat) return;
+    if (this.climb || this.leap || this.mounted) return;
     if (this.tryClimb()) return;
     if (this.p.grounded) {
       this.p.vy = 7.2;
@@ -1700,6 +1750,10 @@ export class Game {
       this.goAshore();
       return;
     }
+    if (this.horse) {
+      this.dismount();
+      return;
+    }
     if (this.climb || this.leap || this.carrying) return;
     if (this.nearLoot()) {
       this.taken = true;
@@ -1710,7 +1764,9 @@ export class Game {
     const { guard, air } = this.takedownTarget();
     if (!guard) {
       const b = this.nearBoat();
+      const h = b ? null : this.nearHorse();
       if (b) this.board(b);
+      else if (h) this.mountHorse(h);
       else this.startCharge();
       return;
     }
@@ -1729,6 +1785,7 @@ export class Game {
   private takeBoats() {
     this.boats = this.level.boats.map((b) => ({ ...b, speed: 0, home: { x: b.x, z: b.z, yaw: b.yaw } }));
     this.boat = null;
+    for (const b of this.boats) this.dressBoat(b);
     const { water, decks } = this.level.bounds;
     const spans = (d: (typeof decks)[number]) =>
       water.some((w) => (d.minZ <= w.minZ && d.maxZ >= w.maxZ) || (d.minX <= w.minX && d.maxX >= w.maxX));
@@ -1791,8 +1848,11 @@ export class Game {
 
   /** A dry spot beside the boat to step out onto (bank or deck), or null when the boat is out in the stream. */
   private shoreSpot(): { x: number; y: number; z: number } | null {
-    const b = this.boat;
-    if (!b) return null;
+    return this.boat ? this.stepOffSpot(this.boat, 0) : null;
+  }
+
+  /** A clear dry spot beside something the player sits on (a sampan, a horse), near ground level `groundY`. */
+  private stepOffSpot(b: { x: number; z: number; yaw: number }, groundY: number): { x: number; y: number; z: number } | null {
     const C = this.level.colliders;
     const B = this.level.bounds;
     const fx = Math.sin(b.yaw);
@@ -1804,8 +1864,8 @@ export class Game {
       const x = b.x + fz * side + fx * along;
       const z = b.z - fx * side + fz * along;
       if (x < B.minX || x > B.maxX || z < B.minZ || z > B.maxZ || this.wet(x, z)) continue;
-      const y = groundHeight(x, z, 1.0, C);
-      if (y > 0.45) continue;
+      const y = groundHeight(x, z, groundY + 1.0, C);
+      if (y > groundY + 0.45) continue;
       const q = { x, z };
       pushOut(q, PLAYER_R, C, y);
       if (Math.hypot(q.x - x, q.z - z) > 0.01) continue;
@@ -1826,6 +1886,124 @@ export class Game {
     Object.assign(this.p, { ...s, vy: 0, grounded: true, moving: false });
   }
 
+  // ------------------------------------------------------------------ horses
+
+  private get mounted() {
+    return !!this.boat || !!this.horse;
+  }
+
+  /** Put the level's horses out, each with a model (or a block horse while none is loaded). */
+  private takeHorses() {
+    this.horse = null;
+    this.horses = (this.def.horses ?? []).map((d) => {
+      const group = new THREE.Group();
+      this.level.root.add(group);
+      const h: Horse = { group, x: d.x, y: 0, z: d.z, yaw: d.rotY, speed: 0, home: { x: d.x, z: d.z, yaw: d.rotY }, mixer: null, acts: {}, cur: null };
+      this.dressHorse(h);
+      return h;
+    });
+  }
+
+  private dressHorse(h: Horse) {
+    h.group.clear();
+    h.mixer = null;
+    h.acts = {};
+    h.cur = null;
+    const m = this.horseModel;
+    if (!m) {
+      h.group.add(blockHorse());
+      return;
+    }
+    const o = cloneSkinned(m.object);
+    h.group.add(o);
+    h.mixer = new THREE.AnimationMixer(o);
+    // the pack names clips both "Gallop" and "AnimalArmature|Gallop"; take the plain one, else the prefixed one
+    const clip = (n: string) => m.clips.find((c) => c.name === n) ?? m.clips.find((c) => c.name.endsWith("|" + n));
+    for (const [slot, n] of [["idle", "Idle"], ["walk", "Walk"], ["gallop", "Gallop"]] as const) {
+      const c = clip(n);
+      if (c) h.acts[slot] = h.mixer.clipAction(c);
+    }
+    h.acts.idle?.play();
+    h.cur = h.acts.idle ? "idle" : null;
+  }
+
+  private dressBoat(b: Boat) {
+    if (!this.boatModel) return;
+    b.group.clear();
+    const c = this.boatModel.clone();
+    c.position.y = BOAT.modelY;
+    b.group.add(c);
+  }
+
+  /** Like walking, the stick or WASD points where to go; the horse turns toward it, walks, or gallops with Shift. */
+  private ride(dt: number, fwd: number, str: number, len: number, sprint: boolean) {
+    const h = this.horse!;
+    const p = this.p;
+    const C = this.level.colliders;
+    const B = this.level.bounds;
+    if (len > 0) {
+      const mx = Math.sin(this.camYaw) * fwd - Math.cos(this.camYaw) * str;
+      const mz = Math.cos(this.camYaw) * fwd + Math.sin(this.camYaw) * str;
+      const diff = wrapAngle(Math.atan2(mx, mz) - h.yaw);
+      h.yaw += clamp(diff, -HORSE.turn * dt, HORSE.turn * dt);
+      const want = (sprint ? HORSE.gallop : HORSE.walk) * Math.max(0.2, Math.cos(diff));
+      h.speed += clamp(want - h.speed, -HORSE.drag * dt, HORSE.accel * dt);
+    } else h.speed += clamp(-h.speed, -HORSE.drag * dt, HORSE.drag * dt);
+    const step = h.speed * dt;
+    const q = { x: h.x + Math.sin(h.yaw) * step, z: h.z + Math.cos(h.yaw) * step };
+    pushOut(q, HORSE.r, C, h.y);
+    q.x = clamp(q.x, B.minX, B.maxX);
+    q.z = clamp(q.z, B.minZ, B.maxZ);
+    if (q.z < B.jettyZ) q.x = clamp(q.x, -B.jettyHalf, B.jettyHalf);
+    if (this.wet(q.x, q.z)) {
+      // no swimming: slide along the bank
+      if (!this.wet(h.x, q.z)) q.x = h.x;
+      else if (!this.wet(q.x, h.z)) q.z = h.z;
+      else {
+        q.x = h.x;
+        q.z = h.z;
+      }
+    }
+    // pulling up against a wall
+    if (step > 0.01 && Math.hypot(q.x - h.x, q.z - h.z) < step * 0.3) h.speed *= 0.8;
+    h.x = q.x;
+    h.z = q.z;
+    h.y = groundHeight(h.x, h.z, h.y, C);
+    Object.assign(p, { x: h.x, y: h.y + HORSE.saddleY, z: h.z, vy: 0, grounded: true, yaw: h.yaw, moving: Math.abs(h.speed) > 0.3 });
+  }
+
+  private nearHorse(): Horse | null {
+    const p = this.p;
+    if (this.carrying || this.mounted || !p.grounded) return null;
+    let best: Horse | null = null;
+    for (const h of this.horses) if (Math.abs(h.y - p.y) < 0.8 && dist2D(h, p) < HORSE.mount && (!best || dist2D(h, p) < dist2D(best, p))) best = h;
+    return best;
+  }
+
+  private mountHorse(h: Horse) {
+    this.horse = h;
+    h.speed = 0;
+    this.crouchToggle = false;
+    this.swing = null;
+    this.charge = null;
+    this.toast("On horseback. Shift gallops, but guards hear it. E to dismount.");
+  }
+
+  private horseSpot() {
+    return this.horse ? this.stepOffSpot(this.horse, this.horse.y) : null;
+  }
+
+  private dismount() {
+    const s = this.horseSpot();
+    if (!s) {
+      this.toast("No room to get down here.");
+      return;
+    }
+    this.horse!.speed = 0;
+    this.horse = null;
+    Object.assign(this.p, { ...s, vy: 0, grounded: true, moving: false });
+  }
+
   // ------------------------------------------------------------------ fighting
 
   private hostileNear(r: number): Guard | null {
@@ -1842,7 +2020,7 @@ export class Game {
   /** X: roll in the move direction (or forward). The first part of it cannot be hit. */
   private tryRoll() {
     const p = this.p;
-    if (this.roll || this.rollCd > 0 || this.climb || this.leap || this.carrying || this.boat || !p.grounded) return;
+    if (this.roll || this.rollCd > 0 || this.climb || this.leap || this.carrying || this.mounted || !p.grounded) return;
     const d = p.moving ? this.moveDir : { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
     const n = Math.hypot(d.x, d.z) || 1;
     this.roll = { t: 0, dx: d.x / n, dz: d.z / n };
@@ -1867,7 +2045,7 @@ export class Game {
 
   /** E / left click with no takedown on offer, an alert guard close: start readying a strike. Letting go swings it. */
   private startCharge() {
-    if (this.charge !== null || this.swing || this.roll || this.climb || this.leap || this.carrying || this.boat || !this.p.grounded) return;
+    if (this.charge !== null || this.swing || this.roll || this.climb || this.leap || this.carrying || this.mounted || !this.p.grounded) return;
     if (!this.hostileNear(SWING.reach + 0.6)) return;
     this.charge = 0;
   }
@@ -2039,7 +2217,7 @@ export class Game {
 
   /** F: pick up the nearest body, or drop the one being carried (hidden if dropped inside cover). */
   private tryCarry() {
-    if (this.climb || this.leap || this.boat) return;
+    if (this.climb || this.leap || this.mounted) return;
     const p = this.p;
     if (this.carrying) {
       const b = this.carrying;
@@ -2129,6 +2307,8 @@ export class Game {
     const foe = this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
     else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
+    else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
+    else if (this.horse) prompt = this.horseSpot() ? "E  Dismount" : "";
     else if (this.charge !== null) prompt = this.charge >= HEAVY.hold ? "Let go: heavy strike" : "Hold for a heavy strike";
     else if (this.nearLoot() && !this.carrying) prompt = `E  ${this.level.text.take ?? "Take it"}`;
     else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : "E  Air assassination";
@@ -2136,8 +2316,8 @@ export class Game {
     else if (foe && !this.carrying) prompt = "E  Strike (hold: heavy)  ·  R  Parry  ·  X  Roll";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
-    else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
     else if (this.nearBoat()) prompt = "E  Board the sampan";
+    else if (this.nearHorse()) prompt = "E  Mount the horse";
     else if (this.nearestBody()) prompt = "F  Carry body";
     else if (this.hidden) prompt = "Hidden";
 
@@ -2172,6 +2352,10 @@ export class Game {
     const p = this.p;
     this.player.group.position.set(p.x, p.y, p.z);
     this.player.group.rotation.y = p.yaw;
+    for (const h of this.horses) {
+      h.group.position.set(h.x, h.y, h.z);
+      h.group.rotation.y = h.yaw;
+    }
     for (const b of this.boats) {
       // a gentle rock on the current
       b.group.position.set(b.x, Math.sin(this.time * 1.4 + b.home.x) * 0.03, b.z);
@@ -2283,4 +2467,27 @@ export class Game {
 
     this.renderer.render(this.scene, this.camera);
   }
+}
+
+/** A horse of boxes, for when the horse model is not loaded: body, neck, head, legs and tail, facing +z. */
+function blockHorse(): THREE.Group {
+  const g = new THREE.Group();
+  const coat = std(0x6b4423);
+  const dark = std(0x2b1d12);
+  const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, rx = 0) => {
+    const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    o.position.set(x, y, z);
+    o.rotation.x = rx;
+    o.castShadow = true;
+    g.add(o);
+  };
+  box(0.55, 0.6, 1.6, coat, 0, 1.15, 0);
+  box(0.3, 0.75, 0.35, coat, 0, 1.6, 0.85, -0.6);
+  box(0.28, 0.3, 0.6, coat, 0, 1.95, 1.15);
+  box(0.08, 0.55, 0.2, dark, 0, 1.75, 0.75, -0.6);
+  for (const [x, z] of [[-0.18, 0.6], [0.18, 0.6], [-0.18, -0.6], [0.18, -0.6]]) box(0.14, 0.9, 0.14, coat, x, 0.45, z);
+  box(0.1, 0.6, 0.1, dark, 0, 1.05, -0.85, 0.4);
+  // saddle cloth
+  box(0.62, 0.08, 0.6, std(0x8c1c13), 0, 1.47, 0);
+  return g;
 }

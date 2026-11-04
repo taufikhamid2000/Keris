@@ -39,8 +39,8 @@ import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
-/** caught: grabbed by an alert guard; detected: any alarm, on a mission that must stay unseen */
-export type LoseReason = "caught" | "detected" | null;
+/** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
+export type LoseReason = "slain" | "detected" | null;
 
 export interface HudState {
   meter: number;
@@ -55,7 +55,13 @@ export interface HudState {
   prompt: string;
   carrying: boolean;
   toast: string;
-  caught: number;
+  /** player health, 0..maxHp (fractional while it regenerates) */
+  hp: number;
+  maxHp: number;
+  /** an alert guard is close: show the health bar */
+  combat: boolean;
+  /** a guard is winding up a strike at the player: parry or roll now */
+  incoming: boolean;
 }
 
 export interface RunStats {
@@ -99,7 +105,24 @@ const FOG_EAGLE = 0x4a5878;
 // dusk fill levels; Mata Helang drops them for contrast
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
-const CATCH_SECONDS = 2;
+// ---- combat: stealth stays the better option, but being seen is a fight you can win, not an instant loss
+const MAX_HP = 3;
+/** seconds without being hit before health creeps back, and seconds per point after that */
+const REGEN_DELAY = 6;
+const REGEN_STEP = 3;
+/** the first iframes seconds of a roll cannot be hit */
+const ROLL = { dur: 0.55, iframes: 0.4, speed: 7.5, cd: 0.3 };
+/** a parry is live for win seconds, then cannot be repeated for cd (a successful parry resets it) */
+const PARRY = { win: 0.3, cd: 0.45 };
+/** guard strike: winds up (the tell), lands, recovers; then waits cdMin..cdMin+cdRand before the next */
+const GUARD_ATK = { reach: 2.1, windup: 0.65, recover: 0.5, cdMin: 1.1, cdRand: 0.8, maxAtOnce: 2 };
+const GUARD_HP = 3;
+/** a parried guard reels this long, open to a killing blow */
+const STAGGER = 1.8;
+/** a hit interrupts the guard's swing, but only once per poise seconds, so mashing does not lock him */
+const FLINCH = 0.35;
+const POISE = 1.5;
+const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
 const START_KNIVES = 6;
 const HEAD_H = 1.75;
 /** standing needs this much headroom; under a stilt house the player is held in a crouch */
@@ -138,6 +161,15 @@ interface Guard {
   investigateY: number;
   lastKnownY: number;
   bodyMeter: number;
+  hp: number;
+  /** seconds into a strike, or null */
+  atk: number | null;
+  atkCd: number;
+  stagger: number;
+  flinch: number;
+  lastFlinch: number;
+  /** a one-shot clip to restart on the next animation frame */
+  animKick: Anim | null;
   bodyTarget: Guard | null;
   carried: boolean;
   discovered: boolean;
@@ -287,7 +319,17 @@ export class Game {
   private eagle = false;
   private knives = START_KNIVES;
   private knifeCd = 0;
-  private caught = 0;
+  private hp = MAX_HP;
+  private hurtT = 99;
+  private hurtAnimT = 0;
+  private roll: { t: number; dx: number; dz: number } | null = null;
+  private rollCd = 0;
+  private parryT = 0;
+  private parryCd = 0;
+  private swing: { t: number; hit: boolean } | null = null;
+  private lastGuardSwing = -9;
+  private moveDir = { x: 0, z: 1 };
+  private playerKick: Anim | null = null;
   /** main: the level's objective (kill or steal) is still to do */
   private objective: "main" | "escape" = "main";
   /** steal objectives: the item's mesh, and whether it has been taken */
@@ -486,6 +528,13 @@ export class Game {
       climb: null,
       lastKnownY: 0,
       bodyMeter: 0,
+      hp: GUARD_HP,
+      atk: null,
+      atkCd: 0,
+      stagger: 0,
+      flinch: 0,
+      lastFlinch: -9,
+      animKick: null,
       bodyTarget: null,
       carried: false,
       discovered: false,
@@ -510,7 +559,15 @@ export class Game {
     this.eagle = false;
     this.knives = START_KNIVES;
     this.knifeCd = 0;
-    this.caught = 0;
+    this.hp = MAX_HP;
+    this.hurtT = 99;
+    this.hurtAnimT = 0;
+    this.roll = null;
+    this.rollCd = 0;
+    this.parryT = 0;
+    this.parryCd = 0;
+    this.swing = null;
+    this.stabT = 0;
     this.objective = "main";
     this.taken = false;
     this.detected = false;
@@ -529,6 +586,12 @@ export class Game {
       g.brain = newBrain();
       g.meter = 0;
       g.stun = 0;
+      g.hp = GUARD_HP;
+      g.atk = null;
+      g.atkCd = 0;
+      g.stagger = 0;
+      g.flinch = 0;
+      g.lastFlinch = -9;
       g.dead = false;
       g.fall = 0;
       g.wait = 0;
@@ -581,6 +644,13 @@ export class Game {
     el.addEventListener("click", () => {
       if (this.phase === "playing" && document.pointerLockElement !== el) this.lock();
     });
+    on("mousedown", (e) => {
+      if (this.phase !== "playing" || document.pointerLockElement !== el) return;
+      if (e.button === 0) this.pressKey("Mouse0");
+      if (e.button === 2) this.pressKey("Mouse2");
+    });
+    on("mouseup", (e) => this.keys.delete(`Mouse${e.button}`));
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
     on("blur", () => this.keys.clear());
     on("mousemove", (e) => {
       if (this.phase === "playing" && document.pointerLockElement === el) this.look(e.movementX, e.movementY);
@@ -738,11 +808,13 @@ export class Game {
       /* pointer lock unavailable (e.g. headless); keyboard still works */
     }
   }
-  /** Key press as the keyboard handler sees it. Touch buttons call this with the same codes (KeyE, KeyQ, KeyF, KeyV, KeyC, Space). */
+  /** Key press as the keyboard handler sees it. Touch buttons call this with the same codes (KeyE, KeyQ, KeyF, KeyV, KeyC, KeyR, KeyX, Space). */
   pressKey(code: string) {
     if (this.phase !== "playing") return;
     this.keys.add(code);
-    if (code === "KeyE") this.tryTakedown();
+    if (code === "KeyE" || code === "Mouse0") this.tryTakedown();
+    if (code === "KeyR" || code === "Mouse2") this.tryParry();
+    if (code === "KeyX") this.tryRoll();
     if (code === "KeyQ") this.tryThrow();
     if (code === "KeyF") this.tryCarry();
     if (code === "KeyV") this.eagle = !this.eagle;
@@ -917,13 +989,18 @@ export class Game {
     const pr = this.playerRig;
     if (pr) {
       this.stabT = Math.max(0, this.stabT - dt);
+      this.hurtAnimT = Math.max(0, this.hurtAnimT - dt);
       let a: Anim;
-      if (this.stabT > 0 && pr.has("stab")) a = "stab";
+      if (this.roll) a = "roll";
+      else if (this.hurtAnimT > 0 && pr.has("hit")) a = "hit";
+      else if (this.stabT > 0 && pr.has("stab")) a = "stab";
+      else if (this.parryT > 0) a = "block";
       else if (this.leap || this.climb || (!p.grounded && pr.has("jump"))) a = "jump";
       else if (this.carrying) a = "carry";
       else if (this.phase !== "title" && this.crouched) a = p.moving ? "crouchWalk" : "crouchIdle";
       else a = p.moving ? (p.running ? "run" : "walk") : "idle";
-      pr.play(a);
+      pr.play(a, 0.12, a === this.playerKick);
+      this.playerKick = null;
       pr.update(dt);
     }
     for (const g of this.guards) {
@@ -931,7 +1008,21 @@ export class Game {
       g.px = g.x;
       g.pz = g.z;
       if (!g.rig) continue;
-      g.rig.play(g.dead ? "death" : g.stun > 0 ? "idle" : speed > 4 ? "run" : speed > 0.3 ? "walk" : "idle");
+      const a: Anim = g.dead
+        ? "death"
+        : g.stagger > 0 || g.flinch > 0
+          ? "hit"
+          : g.atk !== null
+            ? "stab"
+            : g.stun > 0
+              ? "idle"
+              : speed > 4
+                ? "run"
+                : speed > 0.3
+                  ? "walk"
+                  : "idle";
+      g.rig.play(a, 0.12, a === g.animKick);
+      g.animKick = null;
       g.rig.update(dt);
     }
   }
@@ -1012,6 +1103,13 @@ export class Game {
     this.run.time += dt;
     this.toastT = Math.max(0, this.toastT - dt);
     this.knifeCd = Math.max(0, this.knifeCd - dt);
+    if (this.roll) {
+      this.roll.t += dt;
+      if (this.roll.t >= ROLL.dur) {
+        this.roll = null;
+        this.rollCd = ROLL.cd;
+      }
+    } else this.rollCd = Math.max(0, this.rollCd - dt);
     const L = this.level;
     const p = this.p;
 
@@ -1032,7 +1130,7 @@ export class Game {
       str /= len;
     }
     const crouched = this.crouched;
-    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && len > 0;
+    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && !this.swing && len > 0;
 
     if (this.leap) {
       const l = this.leap;
@@ -1072,15 +1170,22 @@ export class Game {
       }
       p.moving = false;
     } else {
-      const speed = this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
+      const speed = this.swing ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       const rx = -Math.cos(this.camYaw);
       const rz = Math.sin(this.camYaw);
       const mx = fx * fwd + rx * str;
       const mz = fz * fwd + rz * str;
-      p.moving = len > 0;
-      if (p.moving) {
+      p.moving = len > 0 || !!this.roll;
+      if (this.roll) {
+        const r = this.roll;
+        const sp = ROLL.speed * (1 - (0.5 * r.t) / ROLL.dur);
+        p.x += r.dx * sp * dt;
+        p.z += r.dz * sp * dt;
+        p.yaw = Math.atan2(r.dx, r.dz);
+      } else if (p.moving) {
+        this.moveDir = { x: mx, z: mz };
         const target = Math.atan2(mx, mz);
         p.yaw += clamp(wrapAngle(target - p.yaw), -12 * dt, 12 * dt);
         p.x += mx * speed * dt;
@@ -1116,11 +1221,10 @@ export class Game {
     // ---- guards
     for (const g of this.guards) this.updateGuard(g, dt, stance);
 
-    // ---- caught
-    const grabbing = this.guards.some((g) => !g.dead && g.stun <= 0 && g.brain.state === "alert" && dist2D(g, p) < 2.3 && Math.abs(p.y - g.y) < 2.2);
-    this.caught = clamp(this.caught + (grabbing ? dt : -dt * 0.6), 0, CATCH_SECONDS);
-    if (this.caught >= CATCH_SECONDS) {
-      this.setPhase("lost", "caught");
+    // ---- fighting
+    this.stepCombat(dt);
+    if (this.hp <= 0) {
+      this.setPhase("lost", "slain");
       return;
     }
 
@@ -1227,7 +1331,14 @@ export class Game {
       }
     }
 
+    g.atkCd = Math.max(0, g.atkCd - dt);
+    if (g.stagger > 0 || g.flinch > 0) {
+      g.stagger = Math.max(0, g.stagger - dt);
+      g.flinch = Math.max(0, g.flinch - dt);
+      return;
+    }
     if (g.stun > 0) {
+      g.atk = null;
       g.stun -= dt;
       g.meter = Math.max(0, g.meter - dt * 0.3);
       if (g.stun <= 0) {
@@ -1261,6 +1372,7 @@ export class Game {
     const noisePoint = g.noiseFlag ? g.investigate : null;
     g.noiseFlag = false;
     const now = g.brain.state;
+    if (now !== "alert") g.atk = null;
     if (now !== prev) {
       if (now === "alert") {
         this.run.alerts++;
@@ -1325,6 +1437,7 @@ export class Game {
         break;
       }
       case "alert": {
+        if (this.fight(g, dt)) break;
         const pt = g.lastKnown ?? { x: p.x, z: p.z };
         const ptY = g.lastKnown ? g.lastKnownY : p.y;
         if (dist2D(g, pt) > 1.0 || ptY > g.y + 0.6) this.chase(g, pt, ptY, 4.0, dt, 9);
@@ -1450,7 +1563,7 @@ export class Game {
       const d = dist2D(g, p);
       if (d > 2.0 || Math.abs(p.y - g.y) > 1.8) continue;
       near = true;
-      const ok = g.stun > 0 || (g.brain.state !== "alert" && isBehind(g, g.yaw, p));
+      const ok = g.stun > 0 || g.stagger > 0 || (g.brain.state !== "alert" && isBehind(g, g.yaw, p));
       if (ok && (!best || d < dist2D(best, p))) best = g;
     }
     if (best || !p.grounded || this.carrying) return { guard: best, near, air: false };
@@ -1472,14 +1585,174 @@ export class Game {
       return;
     }
     const { guard, air } = this.takedownTarget();
-    if (!guard) return;
+    if (!guard) {
+      this.trySwing();
+      return;
+    }
     if (air) {
       const p = this.p;
       this.leap = { t: 0, dur: leapDuration(p.y - guard.y), from: new THREE.Vector3(p.x, p.y, p.z), guard };
       p.vy = 0;
       return;
     }
-    this.killGuard(guard, "Silent kill.");
+    this.killGuard(guard, guard.stagger > 0 ? "Counter kill." : "Silent kill.");
+  }
+
+  // ------------------------------------------------------------------ fighting
+
+  private hostileNear(r: number): Guard | null {
+    const p = this.p;
+    let best: Guard | null = null;
+    for (const g of this.guards) {
+      if (g.dead || g.stun > 0 || g.brain.state !== "alert" || Math.abs(p.y - g.y) > 1.3) continue;
+      const d = dist2D(g, p);
+      if (d < r && (!best || d < dist2D(best, p))) best = g;
+    }
+    return best;
+  }
+
+  /** X: roll in the move direction (or forward). The first part of it cannot be hit. */
+  private tryRoll() {
+    const p = this.p;
+    if (this.roll || this.rollCd > 0 || this.climb || this.leap || this.carrying || !p.grounded) return;
+    const d = p.moving ? this.moveDir : { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
+    const n = Math.hypot(d.x, d.z) || 1;
+    this.roll = { t: 0, dx: d.x / n, dz: d.z / n };
+    this.swing = null;
+    this.parryT = 0;
+    this.crouchToggle = false;
+    this.playerKick = "roll";
+  }
+
+  /** R / right click: a short parry window. A strike that lands inside it staggers the guard. */
+  private tryParry() {
+    if (this.parryCd > 0 || this.roll || this.climb || this.leap || this.carrying) return;
+    this.parryT = PARRY.win;
+    this.parryCd = PARRY.win + PARRY.cd;
+    this.swing = null;
+    this.playerKick = "block";
+    const g = this.hostileNear(4);
+    if (g) this.p.yaw = yawTo(this.p, g);
+  }
+
+  /** E / left click with no takedown on offer: an open keris strike at an alert guard in front. */
+  private trySwing() {
+    const p = this.p;
+    if (this.swing || this.roll || this.climb || this.leap || this.carrying || !p.grounded) return;
+    const g = this.hostileNear(SWING.reach + 0.6);
+    if (!g) return;
+    p.yaw = yawTo(p, g);
+    this.swing = { t: 0, hit: false };
+    this.stabT = SWING.dur;
+    this.playerKick = "stab";
+  }
+
+  private stepCombat(dt: number) {
+    const p = this.p;
+    this.parryT = Math.max(0, this.parryT - dt);
+    this.parryCd = Math.max(0, this.parryCd - dt);
+    this.hurtT += dt;
+    if (this.hurtT > REGEN_DELAY) this.hp = Math.min(MAX_HP, this.hp + dt / REGEN_STEP);
+    const s = this.swing;
+    if (!s) return;
+    s.t += dt;
+    if (!s.hit && s.t >= SWING.hitAt) {
+      s.hit = true;
+      let g: Guard | null = null;
+      for (const o of this.guards) {
+        if (o.dead || Math.abs(p.y - o.y) > 1.3) continue;
+        const d = dist2D(o, p);
+        if (d > SWING.reach || Math.abs(wrapAngle(yawTo(p, o) - p.yaw)) > 1.0) continue;
+        if (!g || d < dist2D(g, p)) g = o;
+      }
+      if (g) this.strikeGuard(g);
+    }
+    if (s.t >= SWING.dur) this.swing = null;
+  }
+
+  private strikeGuard(g: Guard) {
+    if (g.stagger > 0 || g.stun > 0) {
+      this.killGuard(g, "Counter kill.");
+      return;
+    }
+    g.hp--;
+    if (g.hp <= 0) {
+      this.killGuard(g, "Cut down.");
+      return;
+    }
+    // a guard struck while unaware turns and fights
+    if (g.brain.state !== "alert") {
+      g.brain = forceAlert();
+      g.meter = 1;
+      this.run.alerts++;
+      if (this.def.undetected) this.detected = true;
+    }
+    g.lastKnown = { x: this.p.x, z: this.p.z };
+    g.lastKnownY = this.p.y;
+    if (this.time - g.lastFlinch > POISE) {
+      g.flinch = FLINCH;
+      g.lastFlinch = this.time;
+      g.atk = null;
+      g.animKick = "hit";
+    }
+    for (const o of this.guards) if (!o.dead && o !== g && dist2D(o, g) < 9) this.hear(o, g);
+  }
+
+  /** An alert guard within reach fights instead of chasing. Returns false when he is out of reach. */
+  private fight(g: Guard, dt: number): boolean {
+    const p = this.p;
+    if (g.atk !== null) {
+      // he tracks the player early in the swing and commits late, so a sideways roll gets clear
+      this.turnToward(g, yawTo(g, p), g.atk < GUARD_ATK.windup * 0.6 ? 8 : 1.5, dt);
+      const before = g.atk;
+      g.atk += dt;
+      if (before < GUARD_ATK.windup && g.atk >= GUARD_ATK.windup) this.guardStrikes(g);
+      if (g.atk !== null && g.atk >= GUARD_ATK.windup + GUARD_ATK.recover) {
+        g.atk = null;
+        g.atkCd = GUARD_ATK.cdMin + Math.random() * GUARD_ATK.cdRand;
+      }
+      return true;
+    }
+    if (dist2D(g, p) > GUARD_ATK.reach || Math.abs(p.y - g.y) > 1.2 || this.climb || this.leap) return false;
+    this.turnToward(g, yawTo(g, p), 9, dt);
+    const swinging = this.guards.filter((o) => o.atk !== null).length;
+    if (g.atkCd <= 0 && swinging < GUARD_ATK.maxAtOnce && this.time - this.lastGuardSwing > 0.45) {
+      g.atk = 0;
+      g.animKick = "stab";
+      this.lastGuardSwing = this.time;
+    }
+    return true;
+  }
+
+  private guardStrikes(g: Guard) {
+    const p = this.p;
+    const facing = Math.abs(wrapAngle(yawTo(g, p) - g.yaw)) < 0.9;
+    if (dist2D(g, p) > GUARD_ATK.reach + 0.5 || Math.abs(p.y - g.y) > 1.3 || !facing) return;
+    if (this.roll && this.roll.t < ROLL.iframes) {
+      this.toast("Dodged.");
+      return;
+    }
+    if (this.parryT > 0) {
+      g.atk = null;
+      g.stagger = STAGGER;
+      g.atkCd = STAGGER + 0.6;
+      g.animKick = "hit";
+      this.parryT = 0;
+      this.parryCd = 0;
+      this.toast("Parried! Strike now.");
+      return;
+    }
+    this.hp = Math.max(0, this.hp - 1);
+    this.hurtT = 0;
+    this.hurtAnimT = 0.4;
+    this.playerKick = "hit";
+    this.swing = null;
+    // knocked back a step
+    const d = dist2D(g, p) || 1;
+    p.x += ((p.x - g.x) / d) * 0.5;
+    p.z += ((p.z - g.z) / d) * 0.5;
+    pushOut(p, PLAYER_R, this.level.colliders, p.y);
+    if (this.hp > 0) this.toast(this.hp < 1.5 ? "Badly hurt. Break away!" : "Cut!");
   }
 
   private killGuard(guard: Guard, msg: string) {
@@ -1560,6 +1833,7 @@ export class Game {
     this.knifeFly = { t: 0, from: chest, to: hit };
     if (hitGuard) {
       hitGuard.stun = 5;
+      hitGuard.atk = null;
       hitGuard.meter = 0;
       this.toast("Guard stunned.");
     } else {
@@ -1587,10 +1861,14 @@ export class Game {
     }
     const tg = this.takedownTarget();
     let prompt = "";
+    const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
+    const foe = this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
+    else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
     else if (this.nearLoot() && !this.carrying) prompt = `E  ${this.level.text.take ?? "Take it"}`;
     else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : "E  Air assassination";
-    else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
+    else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stagger > 0 ? "E  Finish him" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
+    else if (foe && !this.carrying) prompt = "E  Strike  ·  R  Parry  ·  X  Roll";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
     else if (this.nearestBody()) prompt = "F  Carry body";
@@ -1614,7 +1892,10 @@ export class Game {
       prompt,
       carrying: !!this.carrying,
       toast: this.toastT > 0 ? this.toastText : "",
-      caught: this.caught / CATCH_SECONDS,
+      hp: this.hp,
+      maxHp: MAX_HP,
+      combat: this.hp < MAX_HP || !!this.hostileNear(8),
+      incoming,
     };
   }
 
@@ -1654,8 +1935,9 @@ export class Game {
       g.cone.visible = showAll;
       g.marker.visible = showAll || showState;
       g.marker.rotation.y += dt * 2.5;
-      g.marker.scale.setScalar(1 + Math.sin(this.time * 6) * 0.12 * (g.brain.state === "alert" ? 1.5 : 0.5));
-      const col = g.brain.state === "patrol" && g.isTarget ? 0xffd24a : STATE_COLOR[g.brain.state];
+      const winding = g.atk !== null && g.atk < GUARD_ATK.windup;
+      g.marker.scale.setScalar(winding ? 1.8 : 1 + Math.sin(this.time * 6) * 0.12 * (g.brain.state === "alert" ? 1.5 : 0.5));
+      const col = winding ? 0xffffff : g.stagger > 0 ? 0xffd24a : g.brain.state === "patrol" && g.isTarget ? 0xffd24a : STATE_COLOR[g.brain.state];
       (g.marker.material as THREE.MeshBasicMaterial).color.setHex(col);
       g.coneMat.color.setHex(col);
       const beam = g.group.getObjectByName("beam");

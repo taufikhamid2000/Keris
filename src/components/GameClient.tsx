@@ -36,7 +36,10 @@ const EMPTY: HudState = {
   prompt: "",
   toast: "",
   carrying: false,
-  caught: 0,
+  hp: 3,
+  maxHp: 3,
+  combat: false,
+  incoming: false,
 };
 
 const SERVER_SAVE = defaultSave();
@@ -78,12 +81,14 @@ const CONTROLS: [string, string][] = [
   ["C / Ctrl", "Crouch (quieter)"],
   ["Space", "Jump / climb ledge"],
   ["Mouse", "Look"],
-  ["E", "Tikam: keris takedown from behind"],
+  ["E / Left click", "Tikam: keris takedown from behind; in a fight, strike"],
+  ["R / Right click", "Parry: just before a guard strikes (his marker flashes white), then strike to finish him"],
+  ["X", "Roll: dodge a strike or break away"],
   ["Q", "Pisau lempar: stun / distract"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
-  ["Controller", "Sticks move / look, A jump, X tikam, RT knife, Y carry, B crouch, RB vision, LB run, Start pause"],
+  ["Controller", "Sticks move / look, A jump, X tikam / strike, LT parry, B roll, RT knife, Y carry, R3 crouch, RB vision, LB run, Start pause"],
 ];
 
 const TOUCH_CONTROLS: [string, string][] = [
@@ -91,7 +96,9 @@ const TOUCH_CONTROLS: [string, string][] = [
   ["Drag right side", "Look"],
   ["Jump", "Jump / climb a ledge (hold at a wall)"],
   ["C", "Crouch toggle (quieter)"],
-  ["E", "Tikam: takedown from behind"],
+  ["E", "Tikam: takedown from behind; in a fight, strike"],
+  ["R", "Parry: just before a guard strikes (his marker flashes white)"],
+  ["X", "Roll: dodge a strike or break away"],
   ["Q", "Pisau lempar: stun / distract"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["V", "Mata Helang vision"],
@@ -365,16 +372,19 @@ export default function GameClient() {
             </div>
           </div>
           <Compass north={hud.northDeg} obj={hud.objDeg} />
-          {hud.caught > 0.02 && (
-            <div className="caught">
-              <span>Caught!</span>
-              <div style={{ width: `${hud.caught * 100}%` }} />
+          {hud.combat && (
+            <div className={`hp ${hud.incoming ? "incoming" : ""}`} aria-label={`Health ${Math.ceil(hud.hp)} of ${hud.maxHp}`}>
+              {Array.from({ length: hud.maxHp }, (_, i) => (
+                <div key={i}>
+                  <div style={{ width: `${Math.round(Math.min(1, Math.max(0, hud.hp - i)) * 100)}%` }} />
+                </div>
+              ))}
             </div>
           )}
-          {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/^[EF]s+/, "") : hud.prompt}</div>}
+          {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : hud.prompt}</div>}
           {hud.toast && <div className="toast">{hud.toast}</div>}
           <div className="hint">
-            WASD move · Shift run · C crouch · Space climb · E tikam · Q throw · F carry body · V Mata Helang · Esc pause
+            WASD move · Shift run · C crouch · Space climb · E / click tikam · R / right-click parry · X roll · Q throw · F carry body · V Mata Helang · Esc pause
           </div>
         </div>
       )}
@@ -525,8 +535,12 @@ export default function GameClient() {
       {phase === "lost" && (
         <div className="overlay lost">
           <div className="panel">
-            <h2>{reason === "caught" ? "You were caught" : reason === "detected" ? "You were seen" : "Mission failed"}</h2>
-            <p>{reason === "detected" ? "This had to be done unseen, and the alarm is up. Try another route." : "The alarm spread through the lanes. Try another route."}</p>
+            <h2>{reason === "slain" ? "You were cut down" : reason === "detected" ? "You were seen" : "Mission failed"}</h2>
+            <p>{reason === "detected"
+              ? "This had to be done unseen, and the alarm is up. Try another route."
+              : reason === "slain"
+                ? "Parry as his marker flashes white, roll away from a crowd, and fight one at a time. Or better, stay unseen."
+                : "The alarm spread through the lanes. Try another route."}</p>
             {checkpointHere === "target" && (
               <button className="btn" onClick={() => begin("target")}>
                 Retry from checkpoint

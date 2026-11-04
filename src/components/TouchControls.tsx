@@ -160,7 +160,9 @@ export default function TouchControls({ game, hud }: { game: Game | null; hud: H
         <Btn game={game} code="KeyF" label="F" sub={hud.carrying ? "Drop" : "Carry"} cls="carry" on={hud.carrying || t.startsWith("F")} />
         <Btn game={game} code="KeyC" label="C" sub="Crouch" cls="crouch" on={hud.crouched} />
         <Btn game={game} code="KeyQ" label="Q" sub={`Lempar x${hud.knives}`} cls="throw" dim={hud.knives <= 0} />
-        <Btn game={game} code="KeyE" label="E" sub="Tikam" cls="stab" on={t.startsWith("E")} />
+        <Btn game={game} code="KeyX" label="X" sub="Roll" cls="roll" />
+        <Btn game={game} code="KeyR" label="R" sub="Parry" cls="parry" on={hud.incoming} />
+        <Btn game={game} code="KeyE" label="E" sub={hud.combat && !t.startsWith("E  Keris") ? "Strike" : "Tikam"} cls="stab" on={t.startsWith("E")} />
         <Btn game={game} code="Space" label="Jump" sub="Climb" cls="jump" />
       </div>
     </div>

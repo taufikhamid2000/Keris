@@ -17,15 +17,17 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | C or Ctrl | Crouch (quieter). Ctrl+W closes the tab in most browsers, so C is the safe choice |
 | Space | Jump, or climb a ledge in front of you |
 | Mouse | Look (pointer lock) |
-| E | Tikam: keris takedown from behind, or on a stunned guard |
+| E or left click | Tikam: keris takedown from behind, or on a stunned or parried guard. In a fight, an open strike |
+| R or right click | Parry: press just before a guard's strike lands (his marker flashes white) to stagger him |
+| X | Roll: dodge a strike or break away from a crowd |
 | Q | Pisau lempar: throw a knife to stun a guard, or make noise to distract |
 | F | Carry the nearest body, or drop it. Drop it inside a haystack or bush to hide it |
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause |
 
-A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam, RT throw knife, Y carry, B crouch, RB Mata Helang, LB or L3 run, Start pause. On menus the d-pad moves between buttons and A or Start picks one; any button gets past the start screen, and A or Start skips the intro.
+A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam / strike, LT parry, B roll, RT throw knife, Y carry, R3 crouch, RB Mata Helang, LB or L3 run, Start pause. On menus the d-pad moves between buttons and A or Start picks one; any button gets past the start screen, and A or Start skips the intro.
 
-Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. If an alert guard keeps you in reach for 2 seconds, you are caught and can restart.
+Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. Being seen is a fight, not an instant loss. An alert guard in reach winds up a strike (his marker grows and flashes white): parry it to stagger him and finish him with E, or roll clear. Open strikes take three hits per guard, at most two guards swing at once, and you can take three cuts; health comes back slowly once you break away. On a mission that must stay unseen, the alarm still ends it.
 
 ## Playing on phone
 
@@ -33,7 +35,7 @@ Touch controls appear on touch devices (detected by `pointer: coarse`, not user 
 
 - Left thumb: floating joystick. Push to the edge to run (louder).
 - Drag the right side: look.
-- Buttons: Jump/Climb, C crouch (toggle), E Tikam, Q knife, F carry/drop, V Mata Helang, and a pause button. Multi-touch works, so you can move, look and press at once.
+- Buttons: Jump/Climb, C crouch (toggle), E Tikam / Strike, R parry, X roll, Q knife, F carry/drop, V Mata Helang, and a pause button. Multi-touch works, so you can move, look and press at once.
 - Phones default to a lighter quality tier (pixel ratio capped at 1.5, no antialiasing, smaller basic shadows, shorter fog, 5 real lantern lights). Force it with `?quality=low` or `?quality=high`. `?touch=1` or `?touch=0` forces the control scheme.
 
 ![Phone title screen](docs/mobile-title-667x375.png)

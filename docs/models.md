@@ -40,10 +40,13 @@ On itch.io choose "Download Now", then "No thanks, just take me to the downloads
 | run | running (falls back to walk) | `run` |
 | crouchIdle | crouched, still (falls back to idle) | `crouch-idle` |
 | crouchWalk | crouched, moving (falls back to walk) | `crouch-walk` |
-| stab | the player's takedown | `stab` |
+| stab | the player's takedown and strikes, and a guard's strike | `stab` |
 | jump | the player's climbs and leaps | `jump` |
 | carry | the player carrying a body (falls back to walk) | `carry` |
 | death | guards when killed (else they tip over) | `death` |
+| roll | the player's dodge roll (falls back to jump) | `roll` |
+| hit | flinching from a blow, and a parried guard reeling | `hit` |
+| block | the player's parry stance (falls back to idle) | `block` |
 
 A one-clip file (e.g. `run.fbx`) wins over the library's pick for that slot.
 

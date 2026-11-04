@@ -3,11 +3,13 @@
 /** Standard-mapping button index → the key code it acts as. */
 export const PAD_KEYS: Record<number, string> = {
   0: "Space", // A / Cross: jump, hold against a wall to climb
-  1: "KeyC", // B / Circle: crouch toggle
-  2: "KeyE", // X / Square: takedown
+  1: "KeyX", // B / Circle: roll
+  2: "KeyE", // X / Square: takedown, or strike in a fight
   3: "KeyF", // Y / Triangle: carry body
   5: "KeyV", // RB / R1: eagle vision
+  6: "KeyR", // LT / L2: parry
   7: "KeyQ", // RT / R2: throw knife
+  11: "KeyC", // right stick click: crouch toggle
 };
 export const PAD_RUN = [4, 10]; // LB / L1 or left stick click
 export const PAD_START = 9;

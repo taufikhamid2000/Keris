@@ -47,8 +47,10 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .prompt { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); background: rgba(20,10,24,.7); padding: 6px 16px; border-radius: 6px; border: 1px solid rgba(255,200,140,.4); }
 .toast { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); font-size: 1.1rem; color: #ffd9a0; }
 .hint { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: .72rem; opacity: .6; }
-.caught { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); width: 240px; text-align: center; color: #ff6a5c; font-weight: 700; }
-.caught div { height: 6px; background: #ff3b30; margin-top: 4px; border-radius: 3px; }
+.hp { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); display: flex; gap: 6px; }
+.hp > div { width: 46px; height: 8px; background: rgba(20,10,24,.6); border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; }
+.hp > div > div { height: 100%; background: #ff3b30; }
+.hp.incoming > div { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,.7); }
 
 /* ------------------------------------------------------------------ touch + small screens */
 .root.touch-ui { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -72,6 +74,7 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .tbtn.on { border-color: #ffd24a; background: rgba(120,70,20,.6); box-shadow: 0 0 10px rgba(255,210,74,.5); }
 .tbtn.dim { opacity: .45; }
 .tbtn.jump { background: rgba(192,57,43,.65); }
+.tbtn.parry.on { border-color: #fff; box-shadow: 0 0 12px rgba(255,255,255,.8); }
 .pause-btn { position: absolute; left: 50%; top: max(8px, env(safe-area-inset-top)); margin-left: -20px; width: 40px; height: 40px; font-size: .8rem; font-weight: 700; }
 
 .overlay.rotate { z-index: 50; background: rgba(20,10,24,.96); }
@@ -104,7 +107,7 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
   .compass { top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); transform: scale(.7); transform-origin: top right; }
   .prompt { bottom: 17%; font-size: .8rem; padding: 4px 12px; }
   .toast { top: 12%; font-size: .95rem; }
-  .caught { top: 24%; }
+  .hp { top: 24%; }
 }
 @media (max-height: 480px) and (pointer: coarse) {
   .panel.wide > .small { font-size: .65rem; }

@@ -9,3 +9,6 @@ test-results
 
 # graphify (local code graph, rebuild with: graphify update .)
 graphify-out/
+
+# Mixamo models: free to use in the game, not to redistribute as raw files (see docs/models.md)
+public/models/**/*.fbx

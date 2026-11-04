@@ -43,5 +43,5 @@ size does not matter. Clips without In Place are fixed in code (the hips are pin
 - A character with textures is often 5 to 30 MB; animations without skin are about 1 MB each. Pick low-poly
   characters for the web, the whole folder is downloaded by every player.
 - Mixamo characters and animations are free to use in games, but Adobe's terms do not allow redistributing
-  the raw files on their own. This repo is public, so committing the FBX files puts them up for download on
-  GitHub; decide on that before committing them.
+  the raw files on their own. This repo is public, so `public/models/**/*.fbx` is gitignored: the files stay on
+  your machine and are not pushed to GitHub, which also means a deploy built from git has no models.

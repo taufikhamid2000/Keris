@@ -470,7 +470,8 @@ export default function GameClient() {
               <>
                 <h2>Credits</h2>
                 <p>Design by Taufik Hamid. Code written with Claude Code from the designer&apos;s spec.</p>
-                <p>Built with three.js, Next.js and React. Procedural geometry, no audio.</p>
+                <p>Built with three.js, Next.js and React. Procedural world, no audio.</p>
+                <p>Character models and animations by Quaternius (CC0).</p>
                 <p>Hang Tuah is a figure of Malay legend. The story here is fiction.</p>
                 <p className="dim small">Inspired by the stealth genre. Not affiliated with Ubisoft.</p>
               </>

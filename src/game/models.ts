@@ -28,6 +28,8 @@ const FALLBACK: Partial<Record<Anim, Anim>> = { run: "walk", crouchIdle: "idle",
 const ROLE_FALLBACK: Partial<Record<Role, Role>> = { target: "guard" };
 /** characters are scaled to this height (metres), whatever size the file was exported at */
 const HEIGHT: Record<Role, number> = { pendekar: 1.8, guard: 1.85, target: 1.8 };
+/** colour multiplied into a role's materials, so guards sharing the player's model still read as guards */
+const TINT: Partial<Record<Role, number>> = { guard: 0xc8705a };
 
 export interface RigTemplate {
   role: Role;
@@ -151,6 +153,12 @@ async function loadRole(role: Role, m: Manifest): Promise<RigTemplate | null> {
       mesh.castShadow = true;
       // skinned meshes are culled by their bind-pose bounds, which can pop them out of view mid-animation
       mesh.frustumCulled = false;
+      const tint = TINT[role];
+      if (tint !== undefined)
+        for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          const c = (mat as THREE.MeshStandardMaterial).color;
+          if (c && !/eye/i.test(mat.name)) c.multiply(new THREE.Color(tint));
+        }
     }
   });
   // normalise height and stand the feet on y=0

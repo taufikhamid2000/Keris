@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { buildLevel, type Level } from "./level";
-import { HARBOUR } from "./levels";
+import { HARBOUR, type LevelDef } from "./levels";
 import {
   BODY,
   bodyReaction,
@@ -292,13 +292,16 @@ export class Game {
   private invertY = false;
   private run: RunStats = { time: 0, alerts: 0, fromStart: true };
   readonly quality: Quality;
+  /** the mission being played */
+  readonly levelDef: LevelDef;
 
   constructor(
     private container: HTMLElement,
     private cb: GameCallbacks,
-    opts: { quality?: Quality; touch?: boolean } = {},
+    opts: { quality?: Quality; touch?: boolean; level?: LevelDef } = {},
   ) {
     this.touch = !!opts.touch;
+    this.levelDef = opts.level ?? HARBOUR;
     this.quality = opts.quality ?? "high";
     const Q = QUALITY[this.quality];
     this.renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance" });
@@ -350,7 +353,7 @@ export class Game {
     sunDisc.position.set(-180, 26, 140);
     this.scene.add(sunDisc);
 
-    this.level = buildLevel(HARBOUR, { lampLights: Q.lampLights });
+    this.level = buildLevel(this.levelDef, { lampLights: Q.lampLights });
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
@@ -699,6 +702,18 @@ export class Game {
       eagle: this.eagle,
       knives: this.knives,
       pixelRatio: this.renderer.getPixelRatio(),
+      level: this.levelDef.id,
+    };
+  }
+  /** Test hook: can the mission be walked on the ground, start to target and target to exit? */
+  debugRoute(): { toTarget: boolean; toExit: boolean } {
+    const L = this.level;
+    const t = this.guards.find((g) => g.isTarget);
+    if (!t) return { toTarget: false, toExit: false };
+    const at = (p: Vec2) => ({ x: p.x, y: 0, z: p.z });
+    return {
+      toTarget: !!this.nav.findPath(at(L.start), at(t))?.found,
+      toExit: !!this.nav.findPath(at(t), at(L.exit))?.found,
     };
   }
   /** Test hook: a rooftop spot a guard can path to by climbing (used by the automated browser check). */

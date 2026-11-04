@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, Phase } from "@/game/engine";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
+import { LEVELS, levelFromSearch, type LevelDef } from "@/game/levels";
 import {
-  MISSION_ID,
   defaultSave,
   formatTime,
   getSaveStore,
@@ -16,6 +16,7 @@ import {
   recordWin,
   withCheckpoint,
   type MissionStats,
+  type SaveData,
 } from "@/game/save";
 import KerisEmblem from "./KerisEmblem";
 import SettingsPanel from "./SettingsPanel";
@@ -187,7 +188,9 @@ export default function GameClient() {
   const [view, setView] = useState<MenuView>("main");
   const store = getSaveStore();
   const save = useSyncExternalStore(store.subscribe, store.getSnapshot, () => SERVER_SAVE);
-  const mission = save.missions[MISSION_ID];
+  // ?level=<id> picks the mission until there is a mission list on the title screen
+  const [level, setLevel] = useState<LevelDef>(LEVELS[0]);
+  const mission = save.missions[level.missionId];
   const qualityPref = save.settings.quality;
   const touch = useSyncExternalStore(subscribeTouch, touchSnapshot, () => false);
   const portrait = useSyncExternalStore(subscribePortrait, portraitSnapshot, () => false) && touch;
@@ -196,6 +199,11 @@ export default function GameClient() {
     if (!mount.current) return;
     let disposed = false;
     let inst: Game | null = null;
+    const lv = levelFromSearch(window.location.search);
+    setLevel(lv);
+    // the save holds one checkpoint, kept for the first mission; other missions record attempts and bests but leave it alone
+    const keepsCheckpoint = lv === LEVELS[0];
+    const keepCp = (before: SaveData, after: SaveData) => (keepsCheckpoint ? after : { ...after, checkpoint: before.checkpoint });
     import("@/game/engine")
       .then(({ Game }) => {
         if (disposed || !mount.current) return;
@@ -205,8 +213,8 @@ export default function GameClient() {
             onHud: setHud,
             onPhase: (p, r) => {
               if (p === "won" && inst) {
-                const out = recordWin(store.get(), inst.stats());
-                store.set(out.data);
+                const out = recordWin(store.get(), inst.stats(), lv.missionId);
+                store.set(keepCp(store.get(), out.data));
                 setWin({ time: inst.stats().time, rating: out.rating, newBestTime: out.newBestTime, newBestRating: out.newBestRating });
               }
               setPhase(p);
@@ -230,9 +238,9 @@ export default function GameClient() {
               setStarted(true);
               return true;
             },
-            onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d) : withCheckpoint(d, cp))),
+            onCheckpoint: (cp) => store.update((d) => keepCp(d, cp === "start" ? recordStart(d, lv.missionId) : withCheckpoint(d, cp))),
           },
-          { quality: pickQuality(touch, window.location.search, qualityPref), touch },
+          { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
         );
         window.__keris = inst;
         setGame(inst);
@@ -287,7 +295,7 @@ export default function GameClient() {
     if (touch) enterFullscreenLandscape();
     setWin(null);
     // the cutscene plays before the very first mission only; "Replay intro" in Settings shows it again
-    if (from === "start" && shouldShowIntro(store.get())) playIntro("mission");
+    if (from === "start" && level.intro && shouldShowIntro(store.get())) playIntro("mission");
     else g()?.start(from);
   };
   const playIntro = (mode: "mission" | "replay") => {
@@ -296,7 +304,7 @@ export default function GameClient() {
     g()?.playIntro(mq("(prefers-reduced-motion: reduce)"));
   };
   const skipIntro = () => g()?.skipIntro();
-  const canContinue = hasProgress(save);
+  const canContinue = hasProgress(save) && level === LEVELS[0];
   const settingsBtn = (
     <button className="btn ghost" onClick={() => setShowSettings(true)}>
       Settings
@@ -513,7 +521,7 @@ export default function GameClient() {
           canChangeQuality={phase === "title"}
           urlQuality={qualityFromUrl(window.location.search)}
           onReplayIntro={
-            phase === "title" && game
+            phase === "title" && game && level.intro
               ? () => {
                   setShowSettings(false);
                   playIntro("replay");

@@ -1,6 +1,9 @@
 // Headless smoke check for guard pathfinding: put the player on a rooftop, alert the guards,
-// and assert a guard climbs up and reaches them. Before that, an air assassination: leap off a roof edge onto a guard. Simulated time is fast-forwarded, so it runs in seconds.
+// and assert a guard climbs up and reaches them. Before that, an air assassination: leap off a roof edge onto a guard.
+// After it, every other level in src/game/levels.ts is loaded with ?level=<id>: the target and the exit must be
+// reachable on foot and a minute of patrols must run without errors. Simulated time is fast-forwarded, so it runs in seconds.
 // Usage: node scripts/smoke-ai.mjs [url] [simSeconds]
+import { readFileSync } from "node:fs";
 import { launch, gameReady, waitPhase, dismissSplash } from "./lib.mjs";
 const url = process.argv[2] || "http://localhost:3000";
 const simSeconds = Number(process.argv[3] || 90);
@@ -54,7 +57,37 @@ try {
     if (d.phase !== "playing") break;
   }
   console.log(JSON.stringify({ reached, sawClimb, maxGuardY: +maxY.toFixed(2), minRoofDist: Number.isFinite(minD) ? +minD.toFixed(2) : null, simSeconds: sim, wallSeconds: +((Date.now() - t0) / 1000).toFixed(1), errors: errs }));
-  code = reached && !errs.length ? 0 : 1;
+  let levelsOk = true;
+  const ids = [...readFileSync(new URL("../src/game/levels.ts", import.meta.url), "utf8").matchAll(/^  id: "([\w-]+)",$/gm)].map((m) => m[1]).slice(1);
+  for (const id of ids) {
+    const lp = await b.newPage({ viewport: { width: 640, height: 360 } });
+    const lerrs = [];
+    lp.on("pageerror", (e) => lerrs.push(String(e)));
+    await lp.goto(`${url}/?quality=low&level=${id}`, { waitUntil: "load" });
+    await gameReady(lp);
+    await dismissSplash(lp);
+    await lp.click("text=New game");
+    await waitPhase(lp, "playing");
+    const r = await lp.evaluate(() => {
+      const k = window.__keris;
+      const route = k.debugRoute();
+      // patrols loop, so track how far each guard ever gets from his post rather than where he ends up
+      const g0 = k.debug().guards.map((g) => [g.x, g.z]);
+      const far = g0.map(() => 0);
+      for (let t = 0; t < 60; t++) {
+        k.debugAdvance(1);
+        k.debug().guards.forEach((g, i) => (far[i] = Math.max(far[i], Math.hypot(g.x - g0[i][0], g.z - g0[i][1]))));
+      }
+      const d = k.debug();
+      const moved = far.filter((m) => m > 1).length;
+      return { level: d.level, ...route, moved, guards: d.guards.length, phase: d.phase };
+    });
+    const ok = r.level === id && r.toTarget && r.toExit && r.moved >= r.guards - 1 && !lerrs.length;
+    console.log("level", JSON.stringify({ ...r, errors: lerrs, ok }));
+    levelsOk &&= ok;
+    await lp.close();
+  }
+  code = reached && levelsOk && !errs.length ? 0 : 1;
 } catch (e) {
   console.error("smoke failed:", e.message);
 } finally {

@@ -3,10 +3,11 @@
 // try/catch and degrades to in-memory when localStorage is missing or blocked (private mode, SSR).
 
 export const SAVE_KEY = "keris:save";
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const MISSION_ID = "malacca-1511";
 
-export type Checkpoint = "start" | "kapitan";
+/** "target": the mission's target is down and the player only has to escape */
+export type Checkpoint = "start" | "target";
 export type QualityPref = "auto" | "low" | "high";
 
 export interface MissionStats {
@@ -29,6 +30,8 @@ export interface SaveData {
   version: number;
   /** last checkpoint reached in the current attempt, null if the player never started */
   checkpoint: Checkpoint | null;
+  /** the mission that attempt belongs to (Continue resumes it); starting another mission replaces it */
+  checkpointMission: string | null;
   missions: Record<string, MissionStats>;
   settings: SaveSettings;
   /** the intro cutscene has been shown (or skipped) once; Reset progress clears it */
@@ -47,7 +50,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, missions: {}, settings: defaultSettings(), seenIntro: false };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -107,9 +110,13 @@ export function sanitize(v: unknown): SaveData {
   if (isObj(v.missions)) {
     for (const k of Object.keys(v.missions)) if (k.length <= 64 && Object.keys(missions).length < 32) missions[k] = cleanMission(v.missions[k]);
   }
+  const checkpoint = v.checkpoint === "start" || v.checkpoint === "target" ? v.checkpoint : null;
+  const cpMission = typeof v.checkpointMission === "string" && v.checkpointMission.length <= 64 ? v.checkpointMission : null;
   return {
     version: SAVE_VERSION,
-    checkpoint: v.checkpoint === "start" || v.checkpoint === "kapitan" ? v.checkpoint : null,
+    // a checkpoint is only usable with the mission it belongs to
+    checkpoint: cpMission ? checkpoint : null,
+    checkpointMission: checkpoint ? cpMission : null,
     missions,
     settings: cleanSettings(v.settings),
     seenIntro: v.seenIntro === true,
@@ -128,6 +135,12 @@ export const MIGRATIONS: Migrations = {
       old.checkpoint === "kapitan" ||
       missions.some((m) => isObj(m) && (m.completed === true || (typeof m.attempts === "number" && m.attempts > 0)));
     return { ...old, seenIntro: played };
+  },
+  // v2 -> v3: the checkpoint names the mission it belongs to (there was only the first one), and the
+  // first mission's "kapitan" checkpoint becomes the generic "target".
+  2: (old) => {
+    const checkpoint = old.checkpoint === "kapitan" ? "target" : old.checkpoint;
+    return { ...old, checkpoint, checkpointMission: checkpoint === "start" || checkpoint === "target" ? MISSION_ID : null };
   },
 };
 
@@ -171,14 +184,20 @@ export function serializeSave(d: SaveData): string {
 
 // ---------------------------------------------------------------- pure updates
 
+/** A checkpoint reached in the current attempt (of the mission that attempt started on). */
 export function withCheckpoint(d: SaveData, cp: Checkpoint | null): SaveData {
-  return { ...d, checkpoint: cp };
+  return { ...d, checkpoint: cp, checkpointMission: cp ? d.checkpointMission : null };
 }
 
-/** The player started the mission from the beginning. */
+/** The player started a mission from the beginning: it becomes the attempt that Continue resumes. */
 export function recordStart(d: SaveData, mission = MISSION_ID): SaveData {
   const m = d.missions[mission] ?? defaultMission();
-  return { ...d, checkpoint: "start", missions: { ...d.missions, [mission]: { ...m, attempts: m.attempts + 1 } } };
+  return { ...d, checkpoint: "start", checkpointMission: mission, missions: { ...d.missions, [mission]: { ...m, attempts: m.attempts + 1 } } };
+}
+
+/** The checkpoint to resume `mission` from: its own, or the start if the saved attempt is another mission's. */
+export function checkpointFor(d: SaveData, mission: string): Checkpoint {
+  return d.checkpointMission === mission && d.checkpoint ? d.checkpoint : "start";
 }
 
 export interface RunResult {
@@ -210,7 +229,7 @@ export function recordWin(d: SaveData, r: RunResult, mission = MISSION_ID): WinO
     bestTime: newBestTime ? time : m.bestTime,
     bestRating: newBestRating ? rating : m.bestRating,
   };
-  return { data: { ...d, checkpoint: "start", missions: { ...d.missions, [mission]: next } }, rating, newBestTime, newBestRating };
+  return { data: { ...d, checkpoint: "start", checkpointMission: mission, missions: { ...d.missions, [mission]: next } }, rating, newBestTime, newBestRating };
 }
 
 /** The intro has been shown or skipped. */

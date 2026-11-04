@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, Phase } from "@/game/engine";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
-import { LEVELS, levelFromSearch, type LevelDef } from "@/game/levels";
+import { LEVELS, initialLevel, type LevelDef } from "@/game/levels";
 import {
+  checkpointFor,
   defaultSave,
   formatTime,
   getSaveStore,
@@ -15,8 +16,8 @@ import {
   recordStart,
   recordWin,
   withCheckpoint,
+  type Checkpoint,
   type MissionStats,
-  type SaveData,
 } from "@/game/save";
 import KerisEmblem from "./KerisEmblem";
 import SettingsPanel from "./SettingsPanel";
@@ -188,8 +189,9 @@ export default function GameClient() {
   const [view, setView] = useState<MenuView>("main");
   const store = getSaveStore();
   const save = useSyncExternalStore(store.subscribe, store.getSnapshot, () => SERVER_SAVE);
-  // ?level=<id> picks the mission until there is a mission list on the title screen
+  // the mission picked on the title screen; the ref lets engine callbacks read the current one
   const [level, setLevel] = useState<LevelDef>(LEVELS[0]);
+  const levelRef = useRef<LevelDef | null>(null);
   const mission = save.missions[level.missionId];
   const qualityPref = save.settings.quality;
   const touch = useSyncExternalStore(subscribeTouch, touchSnapshot, () => false);
@@ -199,11 +201,11 @@ export default function GameClient() {
     if (!mount.current) return;
     let disposed = false;
     let inst: Game | null = null;
-    const lv = levelFromSearch(window.location.search);
+    // first load: ?level=<id> or the mission with a saved attempt; a rebuilt engine (quality change) keeps the pick
+    const lv = levelRef.current ?? initialLevel(window.location.search, store.get().checkpointMission);
+    levelRef.current = lv;
     setLevel(lv);
-    // the save holds one checkpoint, kept for the first mission; other missions record attempts and bests but leave it alone
-    const keepsCheckpoint = lv === LEVELS[0];
-    const keepCp = (before: SaveData, after: SaveData) => (keepsCheckpoint ? after : { ...after, checkpoint: before.checkpoint });
+    const missionId = () => (levelRef.current ?? lv).missionId;
     import("@/game/engine")
       .then(({ Game }) => {
         if (disposed || !mount.current) return;
@@ -213,8 +215,8 @@ export default function GameClient() {
             onHud: setHud,
             onPhase: (p, r) => {
               if (p === "won" && inst) {
-                const out = recordWin(store.get(), inst.stats(), lv.missionId);
-                store.set(keepCp(store.get(), out.data));
+                const out = recordWin(store.get(), inst.stats(), missionId());
+                store.set(out.data);
                 setWin({ time: inst.stats().time, rating: out.rating, newBestTime: out.newBestTime, newBestRating: out.newBestRating });
               }
               setPhase(p);
@@ -238,7 +240,7 @@ export default function GameClient() {
               setStarted(true);
               return true;
             },
-            onCheckpoint: (cp) => store.update((d) => keepCp(d, cp === "start" ? recordStart(d, lv.missionId) : withCheckpoint(d, cp))),
+            onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d, missionId()) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
         );
@@ -291,11 +293,18 @@ export default function GameClient() {
   });
 
   const g = () => game;
-  const begin = (from: "start" | "kapitan" = "start") => {
+  /** Pick a mission on the title screen: the engine swaps the map in place. */
+  const pickLevel = (l: LevelDef) => {
+    levelRef.current = l;
+    setLevel(l);
+    game?.setLevel(l);
+  };
+  const begin = (from: Checkpoint = "start", l: LevelDef = level) => {
     if (touch) enterFullscreenLandscape();
     setWin(null);
+    if (l !== level) pickLevel(l);
     // the cutscene plays before the very first mission only; "Replay intro" in Settings shows it again
-    if (from === "start" && level.intro && shouldShowIntro(store.get())) playIntro("mission");
+    if (from === "start" && l.intro && shouldShowIntro(store.get())) playIntro("mission");
     else g()?.start(from);
   };
   const playIntro = (mode: "mission" | "replay") => {
@@ -304,7 +313,11 @@ export default function GameClient() {
     g()?.playIntro(mq("(prefers-reduced-motion: reduce)"));
   };
   const skipIntro = () => g()?.skipIntro();
-  const canContinue = hasProgress(save) && level === LEVELS[0];
+  // Continue resumes the saved attempt, whichever mission it is on
+  const continueLevel = LEVELS.find((l) => l.missionId === save.checkpointMission) ?? null;
+  const canContinue = hasProgress(save) && continueLevel !== null;
+  const checkpointHere = checkpointFor(save, level.missionId);
+  const savedHere = save.checkpointMission === level.missionId && save.checkpoint !== null;
   const settingsBtn = (
     <button className="btn ghost" onClick={() => setShowSettings(true)}>
       Settings
@@ -404,8 +417,8 @@ export default function GameClient() {
               </div>
             </div>
             {canContinue && (
-              <button className="btn" onClick={() => begin(save.checkpoint ?? "start")} disabled={!game}>
-                Continue
+              <button className="btn" onClick={() => continueLevel && begin(checkpointFor(save, continueLevel.missionId), continueLevel)} disabled={!game}>
+                {continueLevel === level ? "Continue" : `Continue: ${continueLevel?.name}`}
               </button>
             )}
             <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
@@ -425,14 +438,19 @@ export default function GameClient() {
           <section className="songket menu-pane" aria-live="polite">
             {view === "main" && (
               <>
-                <h2>The mission</h2>
-                <p className="story">
-                  The Portuguese fleet lies in the roads and their battery commands the bridge. The elder Hang Tuah has chosen you, Pendekar, to
-                  silence the Kapitan before the guns are turned on the town. Move over the atap roofs and through the kampung lanes, strike once with
-                  your keris, and slip out by the jetty.
-                </p>
-                {canContinue && (
-                  <p className="dim small">{save.checkpoint === "kapitan" ? "Checkpoint: the Kapitan is down" : "Checkpoint: mission start"}</p>
+                <h2>Missions</h2>
+                <div className="missions">
+                  {LEVELS.map((l) => (
+                    <button key={l.id} className={`btn ghost${l === level ? " on" : ""}`} aria-pressed={l === level} onClick={() => pickLevel(l)} disabled={!game}>
+                      {l.name}
+                      {save.missions[l.missionId]?.completed ? " ✓" : ""}
+                    </button>
+                  ))}
+                </div>
+                <h3>{level.name}</h3>
+                <p className="story">{level.story}</p>
+                {savedHere && (
+                  <p className="dim small">{checkpointHere === "target" ? `Checkpoint: ${level.checkpointLabel}` : "Checkpoint: mission start"}</p>
                 )}
                 <Best m={mission} />
               </>
@@ -480,8 +498,8 @@ export default function GameClient() {
       {phase === "won" && (
         <div className="overlay">
           <div className="panel">
-            <h2>The Kapitan is silenced</h2>
-            <p>You reached the jetty and vanished into the harbour. The battery will wait for a new commander.</p>
+            <h2>{level.win.title}</h2>
+            <p>{level.win.body}</p>
             {win && (
               <p className={`best ${win.newBestTime || win.newBestRating ? "new" : ""}`}>
                 Time {formatTime(win.time)} · {ratingLabel(win.rating)}
@@ -501,13 +519,13 @@ export default function GameClient() {
           <div className="panel">
             <h2>{reason === "caught" ? "You were caught" : "Mission failed"}</h2>
             <p>The alarm spread through the lanes. Try another route.</p>
-            {save.checkpoint === "kapitan" && (
-              <button className="btn" onClick={() => begin("kapitan")}>
+            {checkpointHere === "target" && (
+              <button className="btn" onClick={() => begin("target")}>
                 Retry from checkpoint
               </button>
             )}
-            <button className={`btn${save.checkpoint === "kapitan" ? " ghost" : ""}`} onClick={() => begin("start")}>
-              {save.checkpoint === "kapitan" ? "Restart mission" : "Restart"}
+            <button className={`btn${checkpointHere === "target" ? " ghost" : ""}`} onClick={() => begin("start")}>
+              {checkpointHere === "target" ? "Restart mission" : "Restart"}
             </button>
             <Best m={mission} />
           </div>

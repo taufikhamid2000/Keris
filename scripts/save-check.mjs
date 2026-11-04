@@ -45,18 +45,18 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   await pg.keyboard.press("Space"); // skip the first-run intro
   await playing(pg);
   const s1 = await stored(pg);
-  check(s1?.version === 2 && s1.checkpoint === "start" && s1.missions["malacca-1511"].attempts === 1, "mission start writes checkpoint and attempt under keris:save");
+  check(s1?.version === 3 && s1.checkpoint === "start" && s1.checkpointMission === "malacca-1511" && s1.missions["malacca-1511"].attempts === 1, "mission start writes checkpoint, its mission and attempt under keris:save");
 
   await reload(pg);
   t = await text(pg);
   check(/Continue/.test(t) && /New game/.test(t) && /Checkpoint: mission start/.test(t), "after reload: Continue + New game + checkpoint shown");
 
-  // kapitan checkpoint saved, restored on Continue
+  // target-down checkpoint saved, restored on Continue
   await btn(pg, "Continue").click();
   await playing(pg);
-  await pg.evaluate(() => window.__keris.start("kapitan"));
+  await pg.evaluate(() => window.__keris.start("target"));
   await playing(pg);
-  check((await stored(pg)).checkpoint === "kapitan", "kapitan checkpoint saved");
+  check((await stored(pg)).checkpoint === "target", "target-down checkpoint saved");
   await reload(pg);
   check(/Checkpoint: the Kapitan is down/.test(await text(pg)), "title shows the kapitan checkpoint");
   await btn(pg, "Continue").click();
@@ -127,7 +127,7 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   await pg.locator("summary").click();
   await btn(pg, "Export").click();
   const code = await pg.locator("textarea").inputValue();
-  check(/^[A-Za-z0-9+/]+=*$/.test(code) && JSON.parse(Buffer.from(code, "base64").toString()).version === 2, "export gives a base64 JSON code");
+  check(/^[A-Za-z0-9+/]+=*$/.test(code) && JSON.parse(Buffer.from(code, "base64").toString()).version === 3, "export gives a base64 JSON code");
   await pg.locator("textarea").fill("not a code");
   await btn(pg, "Import").click();
   check(/not valid/.test(await text(pg)), "invalid import code is rejected");
@@ -152,6 +152,45 @@ const btn = (pg, name) => pg.getByRole("button", { name, exact: false }).first()
   await btn(pg, "Close").click();
   check(/Continue/.test(await text(pg)), "importing the exported code restores progress");
 
+  check(errs.length === 0, `no console errors ${JSON.stringify(errs)}`);
+  await ctx.close();
+}
+
+// ---------------------------------------------------------------- mission select
+{
+  console.log("\n== mission select: pick, play, checkpoint, continue across missions ==");
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
+  const { pg, errs } = await open(ctx);
+  let t = await text(pg);
+  check(/The Bridge Battery/.test(t) && /Kampung Hulu/.test(t) && /Kapitan/.test(t), "title lists both missions, the first selected");
+  await btn(pg, "Kampung Hulu").click();
+  t = await text(pg);
+  check((await dbg(pg)).level === "kampung" && /clerk/.test(t) && !/Kapitan/.test(t), "picking Kampung Hulu swaps the map and the story");
+  await btn(pg, "New game").click();
+  await playing(pg); // no intro on this mission
+  let d = await dbg(pg);
+  const s1 = await stored(pg);
+  check(d.level === "kampung" && s1.checkpointMission === "kampung-hulu" && s1.missions["kampung-hulu"].attempts === 1, "starts with no intro and saves the attempt to kampung-hulu");
+  check(/clerk/.test(await text(pg)), "HUD objective names the clerk");
+  await pg.evaluate(() => window.__keris.start("target"));
+  await playing(pg);
+  await reload(pg);
+  t = await text(pg);
+  check((await dbg(pg)).level === "kampung" && /Checkpoint: the clerk is silenced/.test(t), "reload opens on the saved mission with its checkpoint");
+  await btn(pg, "The Bridge Battery").click();
+  check((await dbg(pg)).level === "harbour" && /Continue: Kampung Hulu/.test(await text(pg)), "picking another mission keeps Continue pointing at the saved one");
+  await btn(pg, "Continue").click();
+  await playing(pg);
+  d = await dbg(pg);
+  check(d.level === "kampung" && d.objective === "escape" && d.guards.some((g) => g.target && g.dead), "Continue switches back and restores the clerk-down checkpoint");
+  await pg.evaluate(() => {
+    const e = window.__keris.debug().exit;
+    window.__keris.debugAlertAt(e.x, 0, e.z);
+  });
+  await pg.waitForFunction(() => window.__keris.debug().phase === "won", null, { timeout: 20000 });
+  await sleep(300);
+  const s2 = await stored(pg);
+  check(/The clerk is silenced/.test(await text(pg)) && s2.missions["kampung-hulu"].completed && !s2.missions["malacca-1511"]?.completed, "win screen and save belong to Kampung Hulu");
   check(errs.length === 0, `no console errors ${JSON.stringify(errs)}`);
   await ctx.close();
 }

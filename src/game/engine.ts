@@ -67,7 +67,7 @@ export interface RunStats {
 export interface GameCallbacks {
   onHud: (h: HudState) => void;
   onPhase: (p: Phase, reason: LoseReason) => void;
-  /** a checkpoint was reached: at mission start, or when the Kapitan goes down */
+  /** a checkpoint was reached: at mission start, or when the target goes down */
   onCheckpoint?: (cp: Checkpoint) => void;
   /** intro cutscene view (caption, caption opacity, black fade), sent when it visibly changes */
   onIntro?: (v: IntroView) => void;
@@ -292,8 +292,11 @@ export class Game {
   private invertY = false;
   private run: RunStats = { time: 0, alerts: 0, fromStart: true };
   readonly quality: Quality;
+  private def: LevelDef;
   /** the mission being played */
-  readonly levelDef: LevelDef;
+  get levelDef(): LevelDef {
+    return this.def;
+  }
 
   constructor(
     private container: HTMLElement,
@@ -301,7 +304,7 @@ export class Game {
     opts: { quality?: Quality; touch?: boolean; level?: LevelDef } = {},
   ) {
     this.touch = !!opts.touch;
-    this.levelDef = opts.level ?? HARBOUR;
+    this.def = opts.level ?? HARBOUR;
     this.quality = opts.quality ?? "high";
     const Q = QUALITY[this.quality];
     this.renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance" });
@@ -609,16 +612,16 @@ export class Game {
     if (this.intro.done) this.finishIntro();
   }
 
-  /** Begin the mission, from the beginning or from the "Kapitan down" checkpoint. Guard and alert state is never restored. */
+  /** Begin the mission, from the beginning or from the "target down" checkpoint. Guard and alert state is never restored. */
   start(from: Checkpoint = "start") {
     this.resetWorld();
     this.run = { time: 0, alerts: 0, fromStart: from === "start" };
-    if (from === "kapitan") this.applyKapitanCheckpoint();
+    if (from === "target") this.applyTargetCheckpoint();
     this.cb.onCheckpoint?.(from);
     this.setPhase("playing");
     this.lock();
   }
-  private applyKapitanCheckpoint() {
+  private applyTargetCheckpoint() {
     const t = this.guards.find((g) => g.isTarget);
     if (!t) return;
     t.dead = true;
@@ -787,6 +790,26 @@ export class Game {
       this.time += step;
       this.update(step);
     }
+  }
+  /** Switch missions on the title screen: rebuild the map, nav grid and guards in place, no reload. */
+  setLevel(def: LevelDef) {
+    if (def === this.def || (this.phase !== "title" && this.phase !== "won" && this.phase !== "lost")) return;
+    this.scene.remove(this.level.root);
+    // geometries are per level; materials come from a shared cache, so they are kept
+    this.level.root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    for (const g of this.guards) this.scene.remove(g.group);
+    this.guards = [];
+    this.def = def;
+    this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
+    this.nav = buildNav(this.level.colliders, this.level.bounds);
+    this.scene.add(this.level.root);
+    if (this.navDbg) {
+      this.scene.remove(this.navDbg.group);
+      this.navDbg = new NavDebug(this.nav);
+      this.scene.add(this.navDbg.group);
+    }
+    this.level.guards.forEach((gd, i) => this.guards.push(this.makeGuard(gd.waypoints, !!gd.isTarget, i)));
+    this.resetWorld();
   }
   dispose() {
     cancelAnimationFrame(this.raf);
@@ -1335,7 +1358,7 @@ export class Game {
       this.objective = "escape";
       (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
       this.toast(this.level.text.targetDown);
-      this.cb.onCheckpoint?.("kapitan");
+      this.cb.onCheckpoint?.("target");
     } else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
   }
 

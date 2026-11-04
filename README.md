@@ -48,7 +48,8 @@ Checked with `node scripts/mobile-check.mjs <url>` (headless Chromium, touch emu
 
 Progress is saved in your browser's localStorage under the single key `keris:save` (versioned, with a migration path). It is per browser and per device, and clearing site data erases it. Nothing is sent to a server.
 
-- Saved: the last checkpoint (mission start, or "Kapitan is down"), your best time and stealth rating, and settings (quality, look sensitivity, invert Y). Guard and alert state is never saved, so Continue rebuilds the world with guards on patrol.
+- Saved: the last checkpoint and the mission it belongs to (mission start, or the target is down), best time and stealth rating per mission, and settings (quality, look sensitivity, invert Y). Continue resumes that mission even if another is picked on the title. Guard and alert state is never saved, so Continue rebuilds the world with guards on patrol.
+- Two missions, picked on the title screen: The Bridge Battery (the harbour) and Kampung Hulu. Both are built from one kit of procedural parts; a mission is a data definition in `src/game/levels.ts`.
 - Start screen: "Press any button" ("Tap to start" on touch), then a main menu over a slow harbour camera drift: Continue (only when a save exists), New game, Settings, Controls and Credits. Settings has Reset progress (with a confirm step) and an export/import save code (base64 of the JSON, validated on import).
 - `?quality=low|high` in the URL beats the saved quality for that session without changing it.
 - Corrupt, unrecognised or newer-version data falls back to defaults, and if storage is blocked the game runs with in-memory progress.

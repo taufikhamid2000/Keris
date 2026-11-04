@@ -68,6 +68,11 @@ export interface LevelDef {
   start: Vec2;
   exit: Vec2;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number; jettyZ: number; jettyHalf: number };
+  /** mission wording on the title screen and the win screen */
+  story: string;
+  /** shown on the title when the target-down checkpoint is saved, e.g. "the Kapitan is down" */
+  checkpointLabel: string;
+  win: { title: string; body: string };
   /** mission wording shown in the HUD */
   text: {
     objective: string;
@@ -161,6 +166,15 @@ export const HARBOUR: LevelDef = {
   start: { x: -31.5, z: 31.5 },
   exit: { x: 0, z: -36 },
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6, jettyZ: -31, jettyHalf: 1.1 },
+  story:
+    "The Portuguese fleet lies in the roads and their battery commands the bridge. The elder Hang Tuah has chosen you, Pendekar, to " +
+    "silence the Kapitan before the guns are turned on the town. Move over the atap roofs and through the kampung lanes, strike once with " +
+    "your keris, and slip out by the jetty.",
+  checkpointLabel: "the Kapitan is down",
+  win: {
+    title: "The Kapitan is silenced",
+    body: "You reached the jetty and vanished into the harbour. The battery will wait for a new commander.",
+  },
   text: {
     objective: "Find and silence the Kapitan of the bridge battery",
     escape: "Slip away to the jetty",
@@ -256,6 +270,15 @@ export const KAMPUNG: LevelDef = {
   start: { x: 31.5, z: 31.5 },
   exit: { x: 0, z: -36 },
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6, jettyZ: -31, jettyHalf: 1.1 },
+  story:
+    "Someone sold the battery's plans to the Portuguese, and the trail leads to a harbour clerk hiding in the upper kampung. " +
+    "He paces in front of the penghulu's hall, guarded and nervous. Cross the rooftops from the north-east gate, deal with him before " +
+    "he can sell anything more, and leave by the jetty.",
+  checkpointLabel: "the clerk is silenced",
+  win: {
+    title: "The clerk is silenced",
+    body: "You slipped out by the jetty before the kampung woke. Whatever he knew stays in the upper kampung.",
+  },
   text: {
     objective: "Find the turncoat clerk who sold the battery plans",
     escape: "Slip away to the jetty",
@@ -273,4 +296,10 @@ export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG];
 export function levelFromSearch(search: string): LevelDef {
   const id = new URLSearchParams(search).get("level");
   return LEVELS.find((l) => l.id === id) ?? LEVELS[0];
+}
+
+/** The mission selected when the title opens: ?level=<id>, else the one with a saved attempt, else the first. */
+export function initialLevel(search: string, checkpointMission: string | null): LevelDef {
+  if (new URLSearchParams(search).has("level")) return levelFromSearch(search);
+  return LEVELS.find((l) => l.missionId === checkpointMission) ?? LEVELS[0];
 }

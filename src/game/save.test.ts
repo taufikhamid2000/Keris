@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkpointFor,
+  withCheckpoint,
   MISSION_ID,
   SAVE_KEY,
   SAVE_VERSION,
@@ -102,12 +104,12 @@ describe("versioning and migration", () => {
   it("runs a migration chain in order", () => {
     const seen: number[] = [];
     const migrations = {
-      1: (o: Record<string, unknown>) => (seen.push(1), { ...o, checkpoint: "kapitan" }),
+      1: (o: Record<string, unknown>) => (seen.push(1), { ...o, checkpoint: "target", checkpointMission: "m" }),
       2: (o: Record<string, unknown>) => (seen.push(2), { ...o, settings: { quality: "low" } }),
     };
     const d = migrate({ version: 1 }, migrations, 3);
     expect(seen).toEqual([1, 2]);
-    expect(d?.checkpoint).toBe("kapitan");
+    expect(d?.checkpoint).toBe("target");
     expect(d?.settings.quality).toBe("low");
     expect(d?.version).toBe(SAVE_VERSION);
   });
@@ -190,7 +192,8 @@ describe("export / import code", () => {
   });
   it("sanitizes imported values", () => {
     const d = importCode(btoa(JSON.stringify({ version: 1, checkpoint: "kapitan", settings: { lookSens: 1e9 } })));
-    expect(d?.checkpoint).toBe("kapitan");
+    expect(d?.checkpoint).toBe("target");
+    expect(d?.checkpointMission).toBe(MISSION_ID);
     expect(d?.settings.lookSens).toBe(2.5);
   });
 });
@@ -269,7 +272,7 @@ describe("seenIntro flag", () => {
   });
   it("migrates v1: untouched saves see the intro, players with progress do not", () => {
     expect(migrate(v1())?.seenIntro).toBe(false);
-    expect(migrate(v1())?.version).toBe(2);
+    expect(migrate(v1())?.version).toBe(SAVE_VERSION);
     expect(migrate(v1({ checkpoint: "start" }))?.seenIntro).toBe(true);
     expect(migrate(v1({ checkpoint: "kapitan" }))?.seenIntro).toBe(true);
     expect(migrate(v1({ missions: { [MISSION_ID]: { attempts: 2 } } }))?.seenIntro).toBe(true);
@@ -278,7 +281,7 @@ describe("seenIntro flag", () => {
   });
   it("keeps other v1 data when migrating", () => {
     const d = migrate(v1({ checkpoint: "kapitan", settings: { lookSens: 2, invertY: true } }));
-    expect(d?.checkpoint).toBe("kapitan");
+    expect(d?.checkpoint).toBe("target");
     expect(d?.settings.lookSens).toBe(2);
     expect(d?.settings.invertY).toBe(true);
   });
@@ -307,5 +310,34 @@ describe("seenIntro flag", () => {
     const st = memStorage();
     new SaveStore(st).update(markIntroSeen);
     expect(new SaveStore(st).get().seenIntro).toBe(true);
+  });
+});
+
+describe("checkpoint per mission (v3)", () => {
+  const v2 = (extra: Record<string, unknown> = {}) => ({ version: 2, checkpoint: null, missions: {}, settings: {}, seenIntro: true, ...extra });
+  it("migrates v2: the checkpoint belongs to the first mission and kapitan becomes target", () => {
+    expect(migrate(v2({ checkpoint: "kapitan" }))).toMatchObject({ version: 3, checkpoint: "target", checkpointMission: MISSION_ID });
+    expect(migrate(v2({ checkpoint: "start" }))).toMatchObject({ checkpoint: "start", checkpointMission: MISSION_ID });
+    expect(migrate(v2())).toMatchObject({ checkpoint: null, checkpointMission: null });
+  });
+  it("drops a checkpoint with no mission, and a mission with no checkpoint", () => {
+    expect(sanitize({ version: 3, checkpoint: "target" })).toMatchObject({ checkpoint: null, checkpointMission: null });
+    expect(sanitize({ version: 3, checkpointMission: "x" })).toMatchObject({ checkpoint: null, checkpointMission: null });
+    expect(sanitize({ version: 3, checkpoint: "kapitan", checkpointMission: "x" }).checkpoint).toBeNull();
+  });
+  it("starting another mission replaces the attempt; checkpoints stay with it", () => {
+    let d = withCheckpoint(recordStart(defaultSave(), "a"), "target");
+    expect(checkpointFor(d, "a")).toBe("target");
+    expect(checkpointFor(d, "b")).toBe("start");
+    d = recordStart(d, "b");
+    expect(d).toMatchObject({ checkpoint: "start", checkpointMission: "b" });
+    expect(checkpointFor(d, "a")).toBe("start");
+    expect(d.missions.a.attempts).toBe(1);
+    expect(d.missions.b.attempts).toBe(1);
+  });
+  it("a win resets that mission's attempt to its start", () => {
+    const d = recordWin(withCheckpoint(recordStart(defaultSave(), "b"), "target"), { time: 60, alerts: 0, fromStart: false }, "b").data;
+    expect(d).toMatchObject({ checkpoint: "start", checkpointMission: "b" });
+    expect(d.missions.b.completed).toBe(true);
   });
 });

@@ -158,6 +158,10 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .menu-pane { align-self: center; width: min(460px, 46vw); max-height: 100%; overflow-y: auto; }
 .menu-pane h2 { margin: 0 0 12px; color: #ffcf8a; letter-spacing: .08em; }
 .menu-pane p { line-height: 1.55; font-size: .92rem; }
+.menu-pane h3 { margin: 4px 0 4px; letter-spacing: .06em; }
+.missions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.missions .btn { margin: 0; padding: 6px 14px; font-size: .9rem; }
+.missions .btn.on { color: #ffcf8a; border-color: #ffcf8a; background: rgba(47, 143, 138, .35); }
 .songket { position: relative; padding: 30px 28px; background: rgba(20,10,24,.78); border: 1px solid #ffcf8a; outline: 1px solid rgba(255,207,138,.35); outline-offset: 4px; }
 .songket::before, .songket::after { content: ""; position: absolute; left: 10px; right: 10px; height: 8px; opacity: .8;
   background: repeating-linear-gradient(45deg, #ffcf8a 0 2px, transparent 2px 7px), repeating-linear-gradient(-45deg, #2f8f8a 0 2px, transparent 2px 7px); }
@@ -178,6 +182,9 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
   .menu-pane { padding: 18px 16px; }
   .menu-pane h2 { font-size: 1rem; margin-bottom: 6px; }
   .menu-pane p { font-size: .72rem; line-height: 1.4; margin: 6px 0; }
+  .menu-pane h3 { font-size: .85rem; margin: 2px 0; }
+  .missions { margin-bottom: 6px; gap: 6px; }
+  .missions .btn { padding: 4px 10px; font-size: .75rem; }
   .splash-inner .emblem { width: 28px; height: 84px; }
   .splash-inner h1 { font-size: 2.6rem; }
   .press { margin-top: 16px; }

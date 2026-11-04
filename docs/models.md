@@ -1,61 +1,74 @@
-# Character models (Mixamo)
+# Character models
 
-The game runs with its built-in block figures. Drop Mixamo FBX files into `public/models/` and it uses them instead,
-no code change needed. Anything missing falls back: no files for a role keeps the block figure, a missing clip falls
-back to a similar one (run to walk, crouch walk to walk, and so on).
+The game runs with its built-in block figures. Put model files in `public/models/` and it uses them instead, with
+no code change. GLB / glTF and FBX all work. Anything missing falls back: a role with no character keeps the block
+figure, and a missing clip falls back to a similar one (run to walk, crouch walk to walk, and so on).
 
 ```
 public/models/
   pendekar/   the player
   guard/      every guard
   target/     optional: the Kapitan / clerk (uses guard/ when empty)
+  shared/     optional: an animation library used by every role that has none of its own
 ```
 
-Each folder takes:
+## Recommended: Quaternius (CC0, no account)
 
-| File | Mixamo search (any similar clip works) | Needed? |
+Two free packs built on the same skeleton, so the animations fit the characters without retargeting:
+
+- **Universal Base Characters**: https://quaternius.itch.io/universal-base-characters (Standard, free)
+- **Universal Animation Library**: https://quaternius.itch.io/universal-animation-library (Standard, free, 45 clips)
+
+On itch.io choose "Download Now", then "No thanks, just take me to the downloads" to skip paying.
+
+1. From the characters zip, copy one character's glTF/GLB file (and its `.bin` and textures, if any) into
+   `public/models/pendekar/`, and another into `public/models/guard/`. Any file name works; `character.glb` is only
+   needed when a folder holds more than one model.
+2. From the animation zip, copy the GLB that holds all the clips into `public/models/shared/` and name it
+   `animations.glb`.
+3. Run `npm run models:manifest`, then `npm run dev`. The browser console prints which clip went to each slot:
+   `[models] pendekar: idle=Idle_Loop walk=Walk_Loop ...`.
+4. If a slot got the wrong clip (or none), add `clips.json` next to the files, in the role folder or in `shared/`:
+   `{ "stab": "Sword_Attack", "crouchWalk": "Crouch_Fwd_Loop" }`. Names are the ones printed in step 3.
+
+## Slots
+
+| Slot | Used for | File name for a one-clip file |
 |---|---|---|
-| `character.fbx` | the character itself | yes |
-| `idle.fbx` | Idle | yes |
-| `walk.fbx` | Walking | yes |
-| `run.fbx` | Running | recommended |
-| `crouch-idle.fbx` | Crouch Idle | player |
-| `crouch-walk.fbx` | Crouched Walking / Sneak Walk | player |
-| `stab.fbx` | Stabbing | player |
-| `jump.fbx` | Jump | player |
-| `carry.fbx` | Carrying / walking with a load | player, optional |
-| `death.fbx` | Dying / Death | guards |
+| idle | standing | `idle.glb` / `idle.fbx` |
+| walk | walking | `walk` |
+| run | running (falls back to walk) | `run` |
+| crouchIdle | crouched, still (falls back to idle) | `crouch-idle` |
+| crouchWalk | crouched, moving (falls back to walk) | `crouch-walk` |
+| stab | the player's takedown | `stab` |
+| jump | the player's climbs and leaps | `jump` |
+| carry | the player carrying a body (falls back to walk) | `carry` |
+| death | guards when killed (else they tip over) | `death` |
 
-## Downloading from Mixamo
+A one-clip file (e.g. `run.fbx`) wins over the library's pick for that slot.
 
-1. Sign in at mixamo.com with a free Adobe account.
-2. **Characters** tab: pick a character, then **Download** with Format `FBX Binary (.fbx)`, Pose `T-pose`.
-   Save it as `character.fbx` in the role's folder.
-3. **Animations** tab, with that same character selected: search a clip, tick **In Place** when it is offered,
-   then **Download** with Format `FBX Binary`, Skin `Without Skin`, 30 fps. Save it under the name in the table.
-4. Reload the game. The browser console shows `[models] ...` warnings if a file failed to load.
+## Mixamo (FBX, Adobe account)
 
-Characters are scaled to about 1.8 m automatically and faced along their walking direction, so the export
-size does not matter. Clips without In Place are fixed in code (the hips are pinned), but In Place looks better.
+Characters from mixamo.com: **Download** with `FBX Binary`, Pose `T-pose`, into the role folder. Animations with
+the same character selected: tick **In Place**, then `FBX Binary`, Skin `Without Skin`, 30 fps, saved under the slot
+file names above. Clips without In Place are fixed in code (the root bone is pinned), but In Place looks better.
 
 ## Putting them on the live site
 
-The FBX files are gitignored, so the live game loads them from a public Supabase Storage bucket instead
-(`keris-models` on the master_db project). Vercel has `NEXT_PUBLIC_MODELS_URL` pointing at it.
+Model files are gitignored. The live game loads them from a public Supabase Storage bucket (`keris-models` on the
+master_db project); Vercel's `NEXT_PUBLIC_MODELS_URL` points at it.
 
 ```bash
 npm run models:upload
 ```
 
-This uploads everything under `public/models/` with the same folder layout, overwriting files of the same name.
-The live site picks the new files up on the next page load (they are cached for up to an hour). Without
-`NEXT_PUBLIC_MODELS_URL`, as on `npm run dev` with no `.env.local`, the game reads `public/models/` directly.
-Free-plan limits: 50 MB per file, 1 GB stored, about 5 GB of downloads a month.
+This writes `manifest.json` and uploads everything under `public/models/` with the same layout, overwriting
+files of the same name. The live site picks them up on the next load (models are cached for up to an hour).
+Without `NEXT_PUBLIC_MODELS_URL`, as with `npm run dev`, the game reads `public/models/` directly.
+Supabase free plan: 50 MB per file, 1 GB stored, about 5 GB of downloads a month.
 
 ## Size and licence
 
-- A character with textures is often 5 to 30 MB; animations without skin are about 1 MB each. Pick low-poly
-  characters for the web, the whole folder is downloaded by every player.
-- Mixamo characters and animations are free to use in games, but Adobe's terms do not allow redistributing
-  the raw files on their own. This repo is public, so `public/models/**/*.fbx` is gitignored: the files stay on
-  your machine and are not pushed to GitHub, which also means a deploy built from git has no models.
+- Every player downloads the models, so prefer low-poly characters; a few MB per role is plenty.
+- Quaternius packs are CC0 (public domain). Mixamo files are free to use in games, but Adobe's terms do not allow
+  redistributing the raw files, which is why model files stay out of this public repo.

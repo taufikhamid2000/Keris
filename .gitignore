@@ -10,5 +10,7 @@ test-results
 # graphify (local code graph, rebuild with: graphify update .)
 graphify-out/
 
-# Mixamo models: free to use in the game, not to redistribute as raw files (see docs/models.md)
-public/models/**/*.fbx
+# model files are uploaded to Supabase Storage, not committed (Mixamo files may not be redistributed; see docs/models.md)
+public/models/*/*
+!public/models/*/.gitkeep
+public/models/manifest.json

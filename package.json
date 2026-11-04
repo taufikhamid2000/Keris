@@ -12,7 +12,8 @@
     "test": "vitest run",
     "smoke:ai": "node scripts/smoke-ai.mjs",
     "check:browser": "node scripts/check-all.mjs",
-    "models:upload": "node scripts/upload-models.mjs"
+    "models:upload": "node scripts/upload-models.mjs",
+    "models:manifest": "node scripts/models-manifest.mjs"
   },
   "dependencies": {
     "next": "^16.4.4",

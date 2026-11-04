@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { buildLevel, type Level } from "./level";
-import { HARBOUR, type LevelDef } from "./levels";
+import { buildLevel, instanced, type Level } from "./level";
+import { HARBOUR, type LevelDef, type Placed } from "./levels";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
@@ -126,6 +126,8 @@ const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
 /** sampan handling: cruise and Shift speeds (m/s), acceleration, drift-to-stop rate, turn rate (rad/s), reach to board */
 const BOAT = { speed: 3.2, fast: 5, accel: 2.5, drag: 1.5, turn: 1.4, board: 2.6, seatY: 0.15, modelLength: 4, modelY: -0.35 };
 
+/** jungle tree model height (m) before each tree's own scale */
+const JUNGLE_TREE_H = 11;
 /** horse handling: walk and gallop speeds (m/s), acceleration, braking, turn rate (rad/s), reach to mount, saddle height, body radius */
 const HORSE = { walk: 3.6, gallop: 9, accel: 5, drag: 6, turn: 2.6, mount: 2.4, saddleY: 0.7, r: 0.6, modelLength: 2.4 };
 
@@ -371,6 +373,7 @@ export class Game {
   /** the sampan the player sits in, or null on foot */
   private boat: Boat | null = null;
   private boatModel: THREE.Object3D | null = null;
+  private plantModels: { trees: THREE.Object3D[]; fern: THREE.Object3D | null } | null = null;
   private horses: Horse[] = [];
   /** the horse the player rides, or null */
   private horse: Horse | null = null;
@@ -493,6 +496,14 @@ export class Game {
         for (const b of this.boats) this.dressBoat(b);
       })
       .catch((e) => console.warn("[models] boat failed, keeping the built-in sampan", e));
+    // Quaternius CC0 jungle trees and ferns (props/tree_a, tree_b, fern), instanced over the level's spots
+    Promise.all([loadProp("tree_a", JUNGLE_TREE_H, "height"), loadProp("tree_b", JUNGLE_TREE_H, "height"), loadProp("fern", 1, "height")])
+      .then(([a, b, f]) => {
+        if (this.disposed) return;
+        this.plantModels = { trees: [a, b].filter((m): m is THREE.Object3D => !!m), fern: f };
+        this.dressFoliage();
+      })
+      .catch((e) => console.warn("[models] plants failed, keeping the built-in trees", e));
     // the Quaternius CC0 horse (props/horse.glb), animated; else a block horse
     loadCreature("horse", HORSE.modelLength)
       .then((m) => {
@@ -1084,6 +1095,7 @@ export class Game {
     this.loot = this.buildLoot();
     this.takeBoats();
     this.takeHorses();
+    this.dressFoliage();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     if (this.navDbg) {
@@ -1893,6 +1905,21 @@ export class Game {
   }
 
   /** Put the level's horses out, each with a model (or a block horse while none is loaded). */
+  /** Replace the built-in jungle trees and ferns with the loaded models, if any. */
+  private dressFoliage() {
+    const m = this.plantModels;
+    const fo = this.level.foliage;
+    if (!m) return;
+    if (m.trees.length && fo.trees.length) {
+      fo.treeGroup.clear();
+      m.trees.forEach((model, k) => fo.treeGroup.add(instanceModel(model, fo.trees.filter((_, i) => i % m.trees.length === k), true)));
+    }
+    if (m.fern && fo.ferns.length) {
+      fo.fernGroup.clear();
+      fo.fernGroup.add(instanceModel(m.fern, fo.ferns, false));
+    }
+  }
+
   private takeHorses() {
     this.horse = null;
     this.horses = (this.def.horses ?? []).map((d) => {
@@ -2491,5 +2518,18 @@ function blockHorse(): THREE.Group {
   box(0.1, 0.6, 0.1, dark, 0, 1.05, -0.85, 0.4);
   // saddle cloth
   box(0.62, 0.08, 0.6, std(0x8c1c13), 0, 1.47, 0);
+  return g;
+}
+
+/** Every mesh of a loaded model as one InstancedMesh, at each of the spots. */
+function instanceModel(model: THREE.Object3D, list: Placed[], shadow: boolean): THREE.Group {
+  const g = new THREE.Group();
+  model.updateMatrixWorld(true);
+  model.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
+    g.add(instanced(geo, m.material, list, shadow));
+  });
   return g;
 }

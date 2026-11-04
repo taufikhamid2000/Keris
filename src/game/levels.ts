@@ -17,6 +17,14 @@ export interface HouseDef {
   stilts?: boolean;
 }
 
+/** A scattered plant: position, scale and turn. */
+export interface Placed {
+  x: number;
+  z: number;
+  s: number;
+  r: number;
+}
+
 /** Axis-aligned footprint on the ground: centre plus width (x) and depth (z). */
 export interface Rect {
   x: number;
@@ -67,6 +75,16 @@ export interface LevelDef {
   boats: { x: number; z: number; rotY: number }[];
   /** horses standing free to ride (E) */
   horses?: { x: number; z: number; rotY: number }[];
+  /** inner palisades across the map (west to east at z), solid except at the gates */
+  fences?: { z: number; minX: number; maxX: number; gates: { x: number; w: number }[] }[];
+  /** jungle trees (solid trunks that block sight) and ferns (scenery only); s scales, r turns */
+  trees?: Placed[];
+  ferns?: Placed[];
+  /** dirt trails (polylines) and bare clearings, painted on the ground */
+  trails?: Vec2[][];
+  clearings?: { x: number; z: number; r: number }[];
+  /** darker forest floor */
+  forestFloor?: Rect[];
   /** market stalls */
   stalls: Rect[];
   wells: Vec2[];
@@ -260,30 +278,98 @@ const northArea = (a: Area): Area => ({
 const KAMPUNG_N = northArea(KAMPUNG_AREA);
 const RIVER = { x: 0, z: 41.5, w: 80, d: 9 };
 
+// ---------------------------------------------------------------------------------------------------------------
+// Hutan: the jungle beyond Kampung Hulu's north fence (z = 112) up to the map's north edge.
+const JUNGLE_Z0 = 35 + KAMPUNG_DZ;
+const JUNGLE_Z1 = 166;
+/** the Portuguese scouts' camp, in a clearing */
+const CAMP = { x: 2, z: 143, r: 10 };
+/** gates in the kampung's north fence: the main lane, and the north-east gate by the Kampung Hulu start */
+const JUNGLE_GATES = [
+  { x: 0, w: 4 },
+  { x: 31, w: 4 },
+];
+const JUNGLE_TRAILS: Vec2[][] = [
+  // main gate up to the camp
+  [{ x: 0, z: JUNGLE_Z0 - 1 }, { x: -4, z: 120 }, { x: 1, z: 128 }, { x: CAMP.x, z: CAMP.z - CAMP.r + 1 }],
+  // north-east gate, winding west to the camp
+  [{ x: 31, z: JUNGLE_Z0 - 1 }, { x: 26, z: 122 }, { x: 17, z: 132 }, { x: CAMP.x + 8, z: CAMP.z - 4 }],
+  // the old trail west out of the camp
+  [{ x: CAMP.x - 8, z: CAMP.z + 4 }, { x: -14, z: 152 }, { x: -25, z: 157 }, { x: -31, z: 162 }],
+];
+function segDist(p: Vec2, a: Vec2, b: Vec2) {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t));
+}
+const trailDist = (p: Vec2) => Math.min(...JUNGLE_TRAILS.flatMap((t) => t.slice(1).map((b, i) => segDist(p, t[i], b))));
+/** Jittered grid over the jungle, clear of the trails, the camp, the fence and the map edge. Seeded: always the same. */
+function scatter(spacing: number, trailClear: number, campClear: number, seed: number, scale: [number, number]): Placed[] {
+  let s = seed;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296), s / 4294967296);
+  const out: Placed[] = [];
+  for (let z = JUNGLE_Z0 + 3; z < JUNGLE_Z1 - 2; z += spacing)
+    for (let x = -32.5; x < 32.5; x += spacing) {
+      const p = { x: x + (rnd() - 0.5) * spacing * 0.8, z: z + (rnd() - 0.5) * spacing * 0.8 };
+      const sc = scale[0] + rnd() * (scale[1] - scale[0]);
+      const r = rnd() * Math.PI * 2;
+      if (Math.abs(p.x) > 32.6 || p.z < JUNGLE_Z0 + 2.5 || p.z > JUNGLE_Z1 - 2) continue;
+      if (trailDist(p) < trailClear || Math.hypot(p.x - CAMP.x, p.z - CAMP.z) < CAMP.r + campClear) continue;
+      out.push({ ...p, s: sc, r });
+    }
+  return out;
+}
+const JUNGLE = {
+  trees: scatter(6, 3.4, 4.5, 7, [0.8, 1.25]),
+  ferns: scatter(2.8, 1.3, 0, 11, [0.8, 1.5]),
+  // undergrowth thick enough to hide in, beside the trails
+  bushes: [
+    { x: 3, z: 118 }, { x: -6.5, z: 124 }, { x: 4, z: 131 }, { x: 29, z: 117 }, { x: 22.5, z: 129 }, { x: 13, z: 136 },
+    { x: -9, z: 144 }, { x: 13.5, z: 145 }, { x: -12, z: 155.5 }, { x: -22, z: 154 }, { x: 2, z: 155.5 },
+  ],
+  houses: [
+    // the scouts' huts, low and solid, roofs in reach
+    { x: -3.5, z: 149, w: 5, d: 4, h: 3.2, stilts: false, wall: 0x5f4630, roof: 0x7d6b45, windows: false },
+    { x: 8, z: 149, w: 5, d: 4, h: 3.2, stilts: false, wall: 0x5f4630, roof: 0x7d6b45, windows: false },
+  ],
+  towers: [{ x: 15.5, z: 140 }],
+  stalls: [{ x: 2, z: 139.5, w: 2.6, d: 1.6 }],
+  hay: [{ x: -6, z: 139 }],
+  lamps: [{ x: -2, z: 141.5 }, { x: 6.5, z: 145 }, { x: 2, z: 151.5 }, { x: 0.5, z: 114 }, { x: 29.5, z: 114 }],
+};
+
 /**
  * Malacca, 1511, as one map: the harbour on the sea, the river north of it, Kampung Hulu beyond. A guarded bridge
  * and a narrow plank on the west side cross the river; the upper kampung has its own jetty on the river bank.
  * Every mission plays on this map and only sets its own guards, start, exit and wording.
  */
-const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "horses" | "bounds"> = {
+const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "horses" | "fences" | "trees" | "ferns" | "trails" | "clearings" | "forestFloor" | "bounds"> = {
   seed: 1511,
   shoreZ: -31,
-  houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses],
+  houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses, ...JUNGLE.houses],
   finials: [...HARBOUR_AREA.finials, ...KAMPUNG_N.finials],
   steps: [...HARBOUR_AREA.steps, ...KAMPUNG_N.steps],
-  towers: [...HARBOUR_AREA.towers, ...KAMPUNG_N.towers],
-  stalls: [...HARBOUR_AREA.stalls, ...KAMPUNG_N.stalls],
+  towers: [...HARBOUR_AREA.towers, ...KAMPUNG_N.towers, ...JUNGLE.towers],
+  stalls: [...HARBOUR_AREA.stalls, ...KAMPUNG_N.stalls, ...JUNGLE.stalls],
   wells: [...HARBOUR_AREA.wells, ...KAMPUNG_N.wells],
   cannons: [...HARBOUR_AREA.cannons, ...KAMPUNG_N.cannons],
-  hay: [...HARBOUR_AREA.hay, ...KAMPUNG_N.hay],
+  hay: [...HARBOUR_AREA.hay, ...KAMPUNG_N.hay, ...JUNGLE.hay],
   // the river banks get a little cover, for the plank crossing in particular
-  bushes: [...HARBOUR_AREA.bushes, ...KAMPUNG_N.bushes, { x: -26.5, z: 34.8 }, { x: -27, z: 48.6 }, { x: 24, z: 34.8 }],
+  bushes: [...HARBOUR_AREA.bushes, ...KAMPUNG_N.bushes, { x: -26.5, z: 34.8 }, { x: -27, z: 48.6 }, { x: 24, z: 34.8 }, ...JUNGLE.bushes],
   palms: [...HARBOUR_AREA.palms, ...KAMPUNG_N.palms, { x: 4, z: 35 }, { x: -18, z: 35.2 }, { x: 30, z: 48 }],
   prahus: [...HARBOUR_AREA.prahus, ...KAMPUNG_N.prahus],
   ships: [...HARBOUR_AREA.ships, ...KAMPUNG_N.ships],
   // bridge lanterns at both ends
-  lamps: [...HARBOUR_AREA.lamps, ...KAMPUNG_N.lamps, { x: 14.2, z: 35 }, { x: 9.8, z: 48 }],
-  palisade: { minX: -35, maxX: 35, minZ: -31, maxZ: 35 + KAMPUNG_DZ },
+  lamps: [...HARBOUR_AREA.lamps, ...KAMPUNG_N.lamps, { x: 14.2, z: 35 }, { x: 9.8, z: 48 }, ...JUNGLE.lamps],
+  palisade: { minX: -35, maxX: 35, minZ: -31, maxZ: JUNGLE_Z1 },
+  // the kampung's old north wall, now between it and the jungle
+  fences: [{ z: JUNGLE_Z0, minX: -35, maxX: 35, gates: JUNGLE_GATES }],
+  trees: JUNGLE.trees,
+  ferns: JUNGLE.ferns,
+  trails: JUNGLE_TRAILS,
+  clearings: [CAMP],
+  forestFloor: [{ x: 0, z: (JUNGLE_Z0 + JUNGLE_Z1) / 2, w: 70, d: JUNGLE_Z1 - JUNGLE_Z0 }],
   jetty: { x: 0, z: -34, w: 3, d: 8 },
   water: [RIVER],
   decks: [
@@ -309,8 +395,10 @@ const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "w
     { x: -6, z: 50, rotY: Math.PI / 2 },
     // by the Kampung Hulu start, at the north-east gate
     { x: 28.5, z: 28.5 + KAMPUNG_DZ, rotY: -Math.PI / 2 },
+    // just outside that gate, on the jungle side
+    { x: 26.5, z: 115.5, rotY: -Math.PI / 2 },
   ],
-  bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6 + KAMPUNG_DZ, jettyZ: -31, jettyHalf: 1.1 },
+  bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: JUNGLE_Z1 - 1.4, jettyZ: -31, jettyHalf: 1.1 },
 };
 
 /** Patrols of the harbour, on every mission. */
@@ -442,8 +530,45 @@ export const PLANS: LevelDef = {
   },
 };
 
+/** The scouts in the hutan: trail patrols, a round of the camp, and their captain. */
+const JUNGLE_GUARDS: GuardDef[] = [
+  { waypoints: [{ x: -1, z: 118 }, { x: 1.5, z: 130 }] },
+  { waypoints: [{ x: 25, z: 123 }, { x: 15, z: 134 }] },
+  { waypoints: [{ x: -6, z: 136.5 }, { x: 10, z: 136.5 }, { x: 11, z: 152 }, { x: -6, z: 152 }] },
+  { waypoints: [{ x: -11, z: 151 }, { x: -25, z: 157 }] },
+];
+
+/** Hutan: a Portuguese scouting party camped in the jungle north of Kampung Hulu. */
+export const JUNGLE_CAMP: LevelDef = {
+  ...WORLD,
+  id: "jungle",
+  name: "The Jungle Camp",
+  missionId: "hutan-camp",
+  guards: [...JUNGLE_GUARDS, { waypoints: [{ x: -1, z: 144.5 }, { x: 5, z: 144.5 }], isTarget: true }, ...KAMPUNG_GUARDS],
+  objective: { kind: "kill" },
+  start: { x: 31, z: 114.5 },
+  exit: RIVER_EXIT,
+  story:
+    "A Portuguese scouting party has made camp in the hutan north of Kampung Hulu, mapping the jungle trails to take Malacca from behind. " +
+    "Slip through the trees from the north-east gate, silence their captain in his camp, then get back through the kampung to the " +
+    "river jetty before the scouts raise the alarm. A horse waits by the gate.",
+  checkpointLabel: "the scout captain is down",
+  win: {
+    title: "The scouts are leaderless",
+    body: "Their captain lies in the clearing and his maps of the trails went with you. The hutan keeps Malacca's back door shut.",
+  },
+  text: {
+    objective: "Find the scout captain in the jungle camp",
+    escape: "Get back to the river jetty",
+    targetDown: "The captain is down. Back through the kampung to the river jetty.",
+    targetSpotted: "The captain has seen you!",
+    strike: "Strike the captain with the keris",
+    leap: "Leap down on the captain",
+  },
+};
+
 /** Every mission, in play order. */
-export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS];
+export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP];
 
 /** The level named by ?level=<id> in a query string, else the first mission. */
 export function levelFromSearch(search: string): LevelDef {

@@ -10,7 +10,7 @@ public/models/
   guard/      every guard
   target/     optional: the Kapitan / clerk (uses guard/ when empty)
   shared/     optional: an animation library used by every role that has none of its own
-  props/      optional: sampan.glb (the boat) and horse.glb (animated: Idle, Walk, Gallop)
+  props/      optional: sampan.glb (the boat), horse.glb (animated: Idle, Walk, Gallop), tree_a/tree_b/fern.glb (jungle)
 ```
 
 ## Recommended: Quaternius (CC0, no account)
@@ -62,6 +62,10 @@ boat's heading; `BOAT.modelLength` and `BOAT.modelY` at the top of `src/game/eng
 `public/models/props/horse.glb` replaces the block horse: Quaternius's CC0 animated "Horse"
 (https://poly.pizza/m/qvTrSG9pZF). It is scaled to `HORSE.modelLength` (2.4 m) and plays its Idle, Walk and Gallop
 clips by speed; `HORSE.saddleY` sets how high the rider sits.
+
+`tree_a.glb`, `tree_b.glb` and `fern.glb` in `props/` are the jungle plants, all Quaternius CC0 from poly.pizza
+(https://poly.pizza/m/qZtx0AHhcy, https://poly.pizza/m/t9KbsfYdXz, https://poly.pizza/m/jqcanvH7D6). Each is drawn
+as one instanced mesh over the spots in `levels.ts`; trees are scaled to `JUNGLE_TREE_H` (11 m) times each tree's own scale.
 
 ## Mixamo (FBX, Adobe account)
 

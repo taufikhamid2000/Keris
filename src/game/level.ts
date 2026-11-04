@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Box, Vec2 } from "./logic";
-import { HARBOUR, type GuardDef, type LevelDef } from "./levels";
+import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { spreadIndices } from "./touch";
 
 // Fully procedural kit for a Malacca-1511 kampung: timber stilt houses with atap roofs,
@@ -40,6 +40,26 @@ export interface Level {
   lampLights: THREE.PointLight[];
   /** sampans: their meshes (in root) and where they were moored */
   boats: { group: THREE.Group; x: number; z: number; yaw: number }[];
+  /** jungle plants: where they stand, and the groups holding their (instanced) meshes, so models can replace them */
+  foliage: { trees: Placed[]; treeGroup: THREE.Group; ferns: Placed[]; fernGroup: THREE.Group };
+}
+
+/** One InstancedMesh per geometry, placed at each spot (turned by r, scaled by s). */
+export function instanced(geo: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], list: Placed[], shadow = true) {
+  const im = new THREE.InstancedMesh(geo, m, Math.max(list.length, 1));
+  im.count = list.length;
+  const o = new THREE.Object3D();
+  list.forEach((t, i) => {
+    o.position.set(t.x, 0, t.z);
+    o.rotation.set(0, t.r, 0);
+    o.scale.setScalar(t.s);
+    o.updateMatrix();
+    im.setMatrixAt(i, o.matrix);
+  });
+  im.castShadow = shadow;
+  im.receiveShadow = true;
+  im.computeBoundingSphere();
+  return im;
 }
 
 /** Height of the open space under a stilt house's floor. */
@@ -204,6 +224,56 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     for (const s of [-1, 1]) root.add(mesh(new THREE.BoxGeometry(r.w, 0.1, 1.0), mat(0x5b4a35), r.x, 0.03, r.z + s * (r.d / 2 + 0.3), false));
   }
 
+  // ---------------------------------------------------------------- jungle: forest floor, trails, clearings
+  for (const r of def.forestFloor ?? []) {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), mat(0x3e4a2a));
+    f.rotation.x = -Math.PI / 2;
+    f.position.set(r.x, 0.006, r.z);
+    f.receiveShadow = true;
+    root.add(f);
+  }
+  for (const c of def.clearings ?? []) {
+    const f = new THREE.Mesh(new THREE.CircleGeometry(c.r, 20), mat(0x6a5236));
+    f.rotation.x = -Math.PI / 2;
+    f.position.set(c.x, 0.012, c.z);
+    f.receiveShadow = true;
+    root.add(f);
+  }
+  for (const t of def.trails ?? [])
+    for (let i = 1; i < t.length; i++) {
+      const a = t[i - 1];
+      const b = t[i];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(2.6, len + 2.6), mat(0x5e4a33));
+      f.rotation.set(-Math.PI / 2, 0, Math.atan2(b.x - a.x, b.z - a.z));
+      f.position.set((a.x + b.x) / 2, 0.015 + i * 0.001, (a.z + b.z) / 2);
+      f.receiveShadow = true;
+      root.add(f);
+    }
+
+  // ---------------------------------------------------------------- jungle trees (solid trunks) and ferns
+  const trees = def.trees ?? [];
+  const ferns = def.ferns ?? [];
+  const treeGroup = new THREE.Group();
+  const fernGroup = new THREE.Group();
+  root.add(treeGroup, fernGroup);
+  for (const t of trees) addCollider(boxOf(t.x, t.z, 0.9 * t.s, 0.9 * t.s, 7));
+  if (trees.length) {
+    // built-in look until the tree models load: a trunk and two lumps of canopy
+    const trunk = new THREE.CylinderGeometry(0.3, 0.5, 8, 7);
+    trunk.translate(0, 4, 0);
+    const crown = new THREE.IcosahedronGeometry(3, 0);
+    crown.translate(0, 9, 0);
+    const crown2 = new THREE.IcosahedronGeometry(2.2, 0);
+    crown2.translate(1.2, 7.4, 0.6);
+    treeGroup.add(instanced(trunk, mat(0x4a3523), trees), instanced(crown, mat(0x2f5a2a), trees), instanced(crown2, mat(0x386630), trees));
+  }
+  if (ferns.length) {
+    const fern = new THREE.ConeGeometry(0.7, 0.8, 6);
+    fern.translate(0, 0.4, 0);
+    fernGroup.add(instanced(fern, mat(0x3f7a34), ferns, false));
+  }
+
   // ---------------------------------------------------------------- houses (kampung lanes between) + palace tiers
   const wallCols = [0x7a5535, 0x6d4a30, 0x84613c, 0x5f4029];
   const roofCols = [0xb89a5a, 0xa98a4e, 0xc2a566];
@@ -249,6 +319,15 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   for (let z = pal.minZ; z <= pal.maxZ; z += 0.55) {
     postAt(pal.minX, z, 4.2 + rnd() * 0.5);
     postAt(pal.maxX, z, 4.2 + rnd() * 0.5);
+  }
+  // inner palisades: posts and a solid wall, open at the gates (a low beam over each gate)
+  for (const f of def.fences ?? []) {
+    const inGate = (x: number) => f.gates.some((g) => Math.abs(x - g.x) < g.w / 2);
+    for (let x = f.minX; x <= f.maxX; x += 0.55) if (!inGate(x)) postAt(x, f.z, 4.2 + rnd() * 0.5);
+    const cuts = [...f.gates].sort((a, b) => a.x - b.x).flatMap((g) => [g.x - g.w / 2, g.x + g.w / 2]);
+    const edges = [f.minX, ...cuts, f.maxX];
+    for (let i = 0; i < edges.length; i += 2) if (edges[i + 1] - edges[i] > 0.05) addCollider(boxOf((edges[i] + edges[i + 1]) / 2, f.z, edges[i + 1] - edges[i], 0.6, 4.5));
+    for (const g of f.gates) root.add(mesh(new THREE.BoxGeometry(g.w + 0.8, 0.35, 0.4), mat(0x4e3622), g.x, 4.3, f.z));
   }
   const postGeo = new THREE.CylinderGeometry(0.22, 0.26, 1, 6);
   const postMesh = new THREE.InstancedMesh(postGeo, mat(0x4e3622), posts.length);
@@ -442,5 +521,6 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     lamps: def.lamps,
     lampLights,
     boats,
+    foliage: { trees, treeGroup, ferns, fernGroup },
   };
 }

@@ -308,31 +308,32 @@ export class Rig {
  * A static prop from props/<name>.(glb|gltf|fbx), scaled so its longest side is `length` metres, centred on x/z with
  * its lowest point at y = 0, and turned so the long side runs along z. Null when the file is missing.
  */
-export async function loadProp(name: string, length: number): Promise<THREE.Object3D | null> {
-  return (await loadCreature(name, length))?.object ?? null;
+export async function loadProp(name: string, length: number, by: "length" | "height" = "length"): Promise<THREE.Object3D | null> {
+  return (await loadCreature(name, length, by))?.object ?? null;
 }
 
 /** A prop with its animation clips (e.g. the horse), fitted like loadProp. Null when the file is missing. */
-export async function loadCreature(name: string, length: number): Promise<{ object: THREE.Object3D; clips: THREE.AnimationClip[] } | null> {
+export async function loadCreature(name: string, length: number, by: "length" | "height" = "length"): Promise<{ object: THREE.Object3D; clips: THREE.AnimationClip[] } | null> {
   const m = await fetchJson<Manifest>(`${MODELS_URL}/manifest.json`);
   const file = m?.folders.props?.find((f) => MODEL_EXT.test(f) && f.replace(MODEL_EXT, "").toLowerCase() === name);
   if (!file) return null;
   const loaded = await loadFile(`${MODELS_URL}/props/${file}`);
-  return { object: fitModel(loaded.scene, length), clips: loaded.animations };
+  return { object: fitModel(loaded.scene, length, by), clips: loaded.animations };
 }
 
-function fitModel(obj: THREE.Object3D, length: number): THREE.Object3D {
+/** Scale so the long side (along z) or the height is `length`; plants keep their own facing. */
+function fitModel(obj: THREE.Object3D, length: number, by: "length" | "height"): THREE.Object3D {
   const wrap = new THREE.Group();
   wrap.add(obj);
   let box = new THREE.Box3().setFromObject(obj);
   let size = box.getSize(new THREE.Vector3());
-  if (size.x > size.z) {
+  if (by === "length" && size.x > size.z) {
     obj.rotation.y = Math.PI / 2;
     obj.updateMatrixWorld(true);
     box = new THREE.Box3().setFromObject(obj);
     size = box.getSize(new THREE.Vector3());
   }
-  const s = length / Math.max(size.z, 1e-6);
+  const s = length / Math.max(by === "height" ? size.y : size.z, 1e-6);
   wrap.scale.setScalar(s);
   const c = box.getCenter(new THREE.Vector3());
   obj.position.set(-c.x, -box.min.y, -c.z).add(obj.position);

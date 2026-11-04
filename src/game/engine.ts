@@ -113,7 +113,7 @@ const ROCK = { h: 1, color: 0x8a877d };
  * Swimming in rivers and pools. y is the player's feet: at the surface only the head and shoulders show above the
  * water (the ground plane hides the rest); diving takes the player fully under, unseen, for as long as breath lasts.
  */
-const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5, seaReach: 24, seaY: -0.25 };
+const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5, seaReach: 72, seaY: -0.25 };
 // dusk fill levels; Mata Helang drops them for contrast
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;

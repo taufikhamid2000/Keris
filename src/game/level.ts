@@ -583,6 +583,8 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     g.position.set(ship.x, 0, ship.z);
     g.rotation.y = ship.rotY;
     root.add(g);
+    // the hull (9 x 30, turned) as squares along its keel, low like the prahus' so it stays off the guards' map
+    for (let u = -13; u <= 13; u += 2.6) addCollider(boxOf(ship.x + Math.sin(ship.rotY) * u, ship.z + Math.cos(ship.rotY) * u, 8, 8, 0.7, -3));
   }
 
   // ---------------------------------------------------------------- sampans (moving; the engine places them each frame)

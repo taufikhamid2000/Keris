@@ -56,7 +56,7 @@ for (const s of sizes) {
   await pg.getByRole("button", { name: "New game" }).tap();
   await pg.locator(".intro-skip").tap(); // skip the first-run intro
   await waitPhase(pg, "playing");
-  check((await pg.locator(".tbtn").count()) === 7, "touch controls rendered (6 action buttons + pause)");
+  check((await pg.locator(".tbtn").count()) === 9, "touch controls rendered (8 action buttons + pause)");
   check((await pg.locator(".joy-hint").count()) === 1, "joystick zone rendered");
   const fits = await pg.evaluate(() => [...document.querySelectorAll(".tbtn, .topleft, .compass")].every((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }));
   check(fits, "HUD and buttons fit inside the viewport");
@@ -118,7 +118,12 @@ for (const s of sizes) {
     const g = window.__keris;
     window.__presses = [];
     const orig = g.pressKey.bind(g);
-    g.pressKey = (c) => (window.__presses.push(c), orig(c));
+    g.pressKey = (c) => {
+      window.__presses.push(c);
+      orig(c);
+      if (c === "KeyX") window.__rolled = g.debug().rolling;
+      if (c === "KeyR") window.__parried = g.debug().parrying;
+    };
   });
   const b0 = await dbg();
   await tapCenter('[data-act="KeyV"]');
@@ -142,6 +147,12 @@ for (const s of sizes) {
   await tapCenter('[data-act="KeyF"]');
   const presses = await pg.evaluate(() => window.__presses);
   check(presses.includes("KeyE") && presses.includes("KeyF"), `takedown and carry buttons dispatch E and F (${presses.join(",")}); outcome needs a guard nearby so not asserted`);
+  await sleep(400); // let the knife cooldown and any landing settle
+  await tapCenter('[data-act="KeyX"]');
+  check(await pg.evaluate(() => window.__rolled === true), "roll button starts a roll");
+  await sleep(700);
+  await tapCenter('[data-act="KeyR"]');
+  check(await pg.evaluate(() => window.__parried === true), "parry button opens a parry");
 
   await pg.screenshot({ path: `${out}/mobile-gameplay-${s.name}.png` });
 

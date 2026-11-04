@@ -101,7 +101,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 Browser checks need a running build (`npm run build && npm start`):
 
 ```bash
-npm run check:browser                                  # all: intro, save, mobile, ai, shots
+npm run check:browser                                  # all: intro, save, combat, mobile, ai, shots
 npm run check:browser -- http://localhost:3123 save ai # pick a URL and checks
 ```
 

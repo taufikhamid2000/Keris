@@ -284,6 +284,7 @@ function makeConeGeo(range: number, half: number) {
 
 export class Game {
   phase: Phase = "title";
+  private loseReason: LoseReason = null;
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
@@ -841,7 +842,13 @@ export class Game {
       phase: this.phase,
       introT: this.intro?.t ?? null,
       player: { x: this.p.x, y: this.p.y, z: this.p.z },
-      guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget })),
+      lose: this.loseReason,
+      guards: this.guards.map((g) => ({ x: g.x, y: g.y, z: g.z, climbing: !!g.climb, state: g.brain.state, dead: g.dead, target: g.isTarget, hp: g.hp, atk: g.atk, stagger: g.stagger })),
+      hp: this.hp,
+      rolling: !!this.roll,
+      parrying: this.parryT > 0,
+      /** seconds from a guard starting his strike to it landing */
+      windup: GUARD_ATK.windup,
       leaping: !!this.leap,
       objective: this.objective,
       exit: { x: this.level.exit.x, z: this.level.exit.z },
@@ -931,6 +938,41 @@ export class Game {
       g.lastKnown = { x, z };
       g.lastKnownY = y;
     }
+  }
+  /**
+   * Test hook: a one-on-one fight. Puts the player 1.6 m from the first live, non-target guard standing on open ground
+   * with no other guard within 5 m, faces them at each other and freezes every other guard. With alert he is already
+   * fighting; without, he is calm and has to see the player first. Returns his index, or -1 if no guard fits.
+   */
+  debugDuel(alert = true): number {
+    const C = this.level.colliders;
+    for (let i = 0; i < this.guards.length; i++) {
+      const g = this.guards[i];
+      if (g.dead || g.isTarget || g.climb || g.y > 0.05) continue;
+      if (this.guards.some((o) => o !== g && !o.dead && dist2D(o, g) < 5)) continue;
+      for (let k = 0; k < 8; k++) {
+        const a = g.yaw + (k * Math.PI) / 4;
+        const q = { x: g.x + Math.sin(a) * 1.6, z: g.z + Math.cos(a) * 1.6 };
+        const q0 = { ...q };
+        pushOut(q, PLAYER_R, C, 0);
+        if (Math.hypot(q.x - q0.x, q.z - q0.z) > 0.01 || groundHeight(q.x, q.z, 0, C) > 0.05) continue;
+        for (const o of this.guards) if (o !== g && !o.dead) o.stun = 1e6;
+        const p = this.p;
+        Object.assign(p, { x: q.x, y: 0, z: q.z, vy: 0, grounded: true, moving: false });
+        p.yaw = yawTo(p, g);
+        g.yaw = yawTo(g, p);
+        Object.assign(g, { atk: null, atkCd: 0, hp: GUARD_HP, stagger: 0, flinch: 0, lastFlinch: -9, wait: 99 });
+        if (alert) {
+          g.brain = forceAlert();
+          g.meter = 1;
+          g.lastKnown = { x: p.x, z: p.z };
+          g.lastKnownY = 0;
+        }
+        Object.assign(this, { hp: MAX_HP, hurtT: 99, roll: null, rollCd: 0, swing: null, parryT: 0, parryCd: 0 });
+        return i;
+      }
+    }
+    return -1;
   }
   /** Test hook: run the simulation ahead by `seconds` in fixed 1/30 s steps without rendering. Stops early if the phase changes. */
   debugAdvance(seconds: number) {
@@ -1037,6 +1079,7 @@ export class Game {
   }
   private setPhase(p: Phase, reason: LoseReason = null) {
     this.phase = p;
+    this.loseReason = reason;
     if (p !== "playing" && document.pointerLockElement) document.exitPointerLock();
     this.cb.onPhase(p, reason);
   }

@@ -7,7 +7,7 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const all = { intro: "intro-check.mjs", save: "save-check.mjs", mobile: "mobile-check.mjs", ai: "smoke-ai.mjs", shots: "shots.mjs" };
+const all = { intro: "intro-check.mjs", save: "save-check.mjs", combat: "combat-check.mjs", mobile: "mobile-check.mjs", ai: "smoke-ai.mjs", shots: "shots.mjs" };
 const args = process.argv.slice(2);
 const url = args[0]?.startsWith("http") ? args.shift() : "http://localhost:3000";
 const names = args.length ? args : Object.keys(all);
@@ -24,7 +24,7 @@ const jobs = Number(process.env.CHECK_JOBS || 3);
 function run(name) {
   const script = all[name];
   const argv = [`scripts/${script}`, url];
-  if (name !== "save") argv.push(name === "ai" ? "90" : out);
+  if (name !== "save" && name !== "combat") argv.push(name === "ai" ? "90" : out);
   const t0 = Date.now();
   return new Promise((done) => {
     const p = spawn(process.execPath, argv, { stdio: ["ignore", "pipe", "pipe"] });

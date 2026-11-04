@@ -127,7 +127,7 @@ const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
 const BOAT = { speed: 3.2, fast: 5, accel: 2.5, drag: 1.5, turn: 1.4, board: 2.6, seatY: 0.15, modelLength: 4, modelY: -0.35 };
 
 /** horse handling: walk and gallop speeds (m/s), acceleration, braking, turn rate (rad/s), reach to mount, saddle height, body radius */
-const HORSE = { walk: 3.6, gallop: 9, accel: 5, drag: 6, turn: 2.6, mount: 2.4, saddleY: 1.0, r: 0.6, modelLength: 2.4 };
+const HORSE = { walk: 3.6, gallop: 9, accel: 5, drag: 6, turn: 2.6, mount: 2.4, saddleY: 0.7, r: 0.6, modelLength: 2.4 };
 
 interface Horse {
   group: THREE.Group;

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { buildLevel, instanced, type Level } from "./level";
-import { HARBOUR, type LevelDef, type Placed } from "./levels";
+import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
@@ -102,6 +102,11 @@ const VIS = { range: 16, halfAngle: 0.6 };
 const PLAYER_R = 0.4;
 const FOG_DUSK = 0xc98259;
 const FOG_EAGLE = 0x4a5878;
+/** the mountain mist on Gunung Ledang: pale, and closer the further north and higher you go */
+const FOG_MIST = new THREE.Color(0xb7b9b4);
+const MIST = { ramp: 22, near: 0.65, far: 0.6 };
+/** boulder models are fitted to this height (each spot scales it) and recoloured to the mountain's grey stone */
+const ROCK = { h: 1, color: 0x8a877d };
 // dusk fill levels; Mata Helang drops them for contrast
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
@@ -183,7 +188,7 @@ interface Guard {
   yaw: number;
   brain: Brain;
   meter: number;
-  waypoints: Vec2[];
+  waypoints: GuardDef["waypoints"];
   wp: number;
   wait: number;
   stun: number;
@@ -374,6 +379,7 @@ export class Game {
   private boat: Boat | null = null;
   private boatModel: THREE.Object3D | null = null;
   private plantModels: { trees: THREE.Object3D[]; fern: THREE.Object3D | null } | null = null;
+  private rockModels: THREE.Object3D[] = [];
   private horses: Horse[] = [];
   /** the horse the player rides, or null */
   private horse: Horse | null = null;
@@ -504,6 +510,26 @@ export class Game {
         this.dressFoliage();
       })
       .catch((e) => console.warn("[models] plants failed, keeping the built-in trees", e));
+    // Quaternius CC0 boulders (props/rock_a, rock_b) for Gunung Ledang, tinted to grey granite
+    Promise.all([loadProp("rock_a", ROCK.h, "height"), loadProp("rock_b", ROCK.h, "height")])
+      .then((ms) => {
+        if (this.disposed) return;
+        this.rockModels = ms.filter((m): m is THREE.Object3D => !!m);
+        for (const m of this.rockModels)
+          m.traverse((o) => {
+            const mesh = o as THREE.Mesh;
+            if (!mesh.isMesh) return;
+            const tint = (x: THREE.Material) => {
+              const c = x.clone() as THREE.MeshStandardMaterial;
+              if (c.color) c.color.setHex(ROCK.color);
+              c.map = null;
+              return c;
+            };
+            mesh.material = Array.isArray(mesh.material) ? mesh.material.map(tint) : tint(mesh.material);
+          });
+        this.dressFoliage();
+      })
+      .catch((e) => console.warn("[models] rocks failed, keeping the built-in boulders", e));
     // the Quaternius CC0 horse (props/horse.glb), animated; else a block horse
     loadCreature("horse", HORSE.modelLength)
       .then((m) => {
@@ -533,7 +559,7 @@ export class Game {
 
   // ------------------------------------------------------------------ setup
 
-  private makeGuard(waypoints: Vec2[], isTarget: boolean, id: number): Guard {
+  private makeGuard(waypoints: GuardDef["waypoints"], isTarget: boolean, id: number): Guard {
     const fig = makeGuardFigure(isTarget);
     const silhouette = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.45, 1.1, 4, 8),
@@ -600,7 +626,7 @@ export class Game {
       stun: 0,
       dead: false,
       fall: 0,
-      y: 0,
+      y: waypoints[0].y ?? 0,
       vy: 0,
       climb: null,
       lastKnownY: 0,
@@ -663,6 +689,7 @@ export class Game {
     for (const g of this.guards) {
       g.x = g.waypoints[0].x;
       g.z = g.waypoints[0].z;
+      g.y = g.waypoints[0].y ?? 0;
       g.wp = 1 % g.waypoints.length;
       g.yaw = yawTo(g, g.waypoints[g.wp]);
       g.brain = newBrain();
@@ -955,7 +982,7 @@ export class Game {
     const o = this.def.objective;
     const t = o.kind === "steal" ? o.at : this.guards.find((g) => g.isTarget);
     if (!t) return { toTarget: false, toExit: false };
-    const at = (p: Vec2) => ({ x: p.x, y: 0, z: p.z });
+    const at = (p: Vec2 & { y?: number }) => ({ x: p.x, y: p.y ?? 0, z: p.z });
     return {
       toTarget: !!this.nav.findPath(at(L.start), at(t))?.found,
       toExit: !!this.nav.findPath(at(t), at(L.exit))?.found,
@@ -1602,7 +1629,7 @@ export class Game {
         if (g.wait > 0) {
           g.wait -= dt;
           g.yaw += Math.sin(this.time * 1.3 + g.id) * dt * 0.8;
-        } else if (this.navMove(g, w, 0, 1.7, dt, 4) < 0.5) {
+        } else if (this.navMove(g, w, w.y ?? 0, 1.7, dt, 4) < 0.5) {
           g.wp = (g.wp + 1) % g.waypoints.length;
           g.wait = 1.2;
         }
@@ -1907,6 +1934,7 @@ export class Game {
   /** Put the level's horses out, each with a model (or a block horse while none is loaded). */
   /** Replace the built-in jungle trees and ferns with the loaded models, if any. */
   private dressFoliage() {
+    this.dressRocks();
     const m = this.plantModels;
     const fo = this.level.foliage;
     if (!m) return;
@@ -1918,6 +1946,14 @@ export class Game {
       fo.fernGroup.clear();
       fo.fernGroup.add(instanceModel(m.fern, fo.ferns, false));
     }
+  }
+
+  private dressRocks() {
+    const ms = this.rockModels;
+    const fo = this.level.foliage;
+    if (!ms.length || !fo.rocks.length) return;
+    fo.rockGroup.clear();
+    ms.forEach((model, k) => fo.rockGroup.add(instanceModel(model, fo.rocks.filter((r) => r.kind % ms.length === k), true)));
   }
 
   private takeHorses() {
@@ -2474,7 +2510,17 @@ export class Game {
     this.hemi.intensity = e ? LIGHT.eagleHemi : LIGHT.hemi;
     this.ambient.intensity = e ? LIGHT.eagleAmbient : LIGHT.ambient;
     this.sun.intensity = e ? LIGHT.eagleSun : LIGHT.sun;
-    (this.scene.fog as THREE.Fog).color.setHex(e ? FOG_EAGLE : FOG_DUSK);
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.setHex(e ? FOG_EAGLE : FOG_DUSK);
+    // mountain mist: thickens north of the level's mistZ, and more so up the ledges
+    const Q = QUALITY[this.quality];
+    const mz = this.def.mistZ;
+    const mist = mz === undefined ? 0 : clamp((this.p.z - mz) / MIST.ramp, 0, 1) * (0.7 + 0.3 * clamp(this.p.y / 12, 0, 1));
+    fog.near = Q.fogNear * (1 - MIST.near * mist);
+    fog.far = Q.fogFar * (1 - MIST.far * mist);
+    if (!e && mist > 0) fog.color.lerp(FOG_MIST, mist * 0.75);
+    // the falls flow
+    if (this.level.flow) this.level.flow.offset.y = (this.time * 0.9) % 1;
 
     // exit beam pulse
     const eb = this.level.exitBeam.material as THREE.MeshBasicMaterial;

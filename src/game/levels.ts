@@ -17,9 +17,10 @@ export interface HouseDef {
   stilts?: boolean;
 }
 
-/** A scattered plant: position, scale and turn. */
+/** A scattered plant or rock: position, scale and turn; y lifts it onto a ledge (default: the ground). */
 export interface Placed {
   x: number;
+  y?: number;
   z: number;
   s: number;
   r: number;
@@ -34,7 +35,8 @@ export interface Rect {
 }
 
 export interface GuardDef {
-  waypoints: Vec2[];
+  /** y: the ledge a waypoint stands on (default: the ground) */
+  waypoints: (Vec2 & { y?: number })[];
   isTarget?: boolean;
 }
 
@@ -85,6 +87,16 @@ export interface LevelDef {
   clearings?: { x: number; z: number; r: number }[];
   /** darker forest floor */
   forestFloor?: Rect[];
+  /** rock terraces, solid from the ground to h and climbable (keep each rise at most 3.7 m) */
+  cliffs?: (Rect & { h: number })[];
+  /** boulders, scenery only; kind picks the model */
+  rocks?: (Placed & { kind: number })[];
+  /** a waterfall: sheets down the cliff faces and streams across the ledges between them */
+  falls?: { sheets: { x: number; z: number; w: number; y0: number; y1: number }[]; streams: (Rect & { y: number })[] };
+  /** a hilltop shrine (pavilion and altar) standing on a ledge at y */
+  shrine?: { x: number; z: number; y: number };
+  /** mountain mist: the fog thickens north of this z */
+  mistZ?: number;
   /** market stalls */
   stalls: Rect[];
   wells: Vec2[];
@@ -296,6 +308,10 @@ const JUNGLE_TRAILS: Vec2[][] = [
   [{ x: 31, z: JUNGLE_Z0 - 1 }, { x: 26, z: 122 }, { x: 17, z: 132 }, { x: CAMP.x + 8, z: CAMP.z - 4 }],
   // the old trail west out of the camp
   [{ x: CAMP.x - 8, z: CAMP.z + 4 }, { x: -14, z: 152 }, { x: -25, z: 157 }, { x: -31, z: 162 }],
+  // on from the old trail to the foot of Gunung Ledang and its first stairs
+  [{ x: -25, z: 157 }, { x: -25, z: 167 }, { x: -16, z: 175 }, { x: -4, z: 176.5 }],
+  // north out of the camp to the pool below the falls
+  [{ x: CAMP.x + 4, z: CAMP.z + 9 }, { x: 6, z: 163 }, { x: 8, z: 173.5 }],
 ];
 function segDist(p: Vec2, a: Vec2, b: Vec2) {
   const dx = b.x - a.x;
@@ -339,17 +355,114 @@ const JUNGLE = {
   lamps: [{ x: -2, z: 141.5 }, { x: 6.5, z: 145 }, { x: 2, z: 151.5 }, { x: 0.5, z: 114 }, { x: 29.5, z: 114 }],
 };
 
+// ---------------------------------------------------------------------------------------------------------------
+// Gunung Ledang: a terraced mountain north of the hutan. Five rock tiers 2.4 m apart (each a climb), stone stairs
+// up each south face for walkers and horses, a waterfall down to a pool at the foot, and a shrine on the summit.
+const MOUNT_Z1 = 236;
+const TIER_H = 2.4;
+/** each tier: its main block plus lobes that touch it (never overlap: same-height tops would flicker) */
+const TIERS: Rect[][] = [
+  [{ x: 0, z: 207, w: 60, d: 50 }, { x: -19, z: 180.5, w: 14, d: 3 }],
+  [{ x: 0, z: 209, w: 48, d: 40 }, { x: 15, z: 187.5, w: 8, d: 3 }, { x: -12, z: 230.5, w: 12, d: 3 }],
+  [{ x: 0, z: 211, w: 36, d: 30 }, { x: -19.5, z: 208, w: 3, d: 12 }],
+  [{ x: 0, z: 213, w: 24, d: 20 }, { x: -9, z: 201.5, w: 6, d: 3 }],
+  [{ x: 0, z: 214, w: 12, d: 10 }],
+];
+const SUMMIT = { x: 0, z: 214, y: TIERS.length * TIER_H };
+/** stairs up the south face of each tier: x, and the z of the face they climb */
+const STAIRS = [
+  { x: -4, face: 182 },
+  { x: -14, face: 189 },
+  { x: 13, face: 196 },
+  { x: -2, face: 203 },
+  { x: 3, face: 209 },
+];
+const STAIR = { n: 5, depth: 0.9, w: 3 };
+/** the falls run down the south faces at this x, from a spring on the fourth tier to the pool */
+const FALLS_X = 8;
+const POOL = { x: FALLS_X, z: 178, w: 7, d: 7 };
+const inRect = (r: Rect, x: number, z: number, m = 0) => Math.abs(x - r.x) < r.w / 2 + m && Math.abs(z - r.z) < r.d / 2 + m;
+/** the tier (1-based) a point stands on, 0 for the ground */
+const tierAt = (x: number, z: number, m = 0) => {
+  for (let t = TIERS.length; t >= 1; t--) if (TIERS[t - 1].some((r) => inRect(r, x, z, m))) return t;
+  return 0;
+};
+const nearStairsOrFalls = (x: number, z: number, m: number) =>
+  Math.abs(x - FALLS_X) < 1.5 + m || STAIRS.some((s) => Math.abs(x - s.x) < STAIR.w / 2 + m && z > s.face - STAIR.n * STAIR.depth - m && z < s.face + m);
+const MOUNTAIN = (() => {
+  let s = 1511;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296), s / 4294967296);
+  const cliffs = TIERS.flatMap((rs, t) => rs.map((r) => ({ ...r, h: (t + 1) * TIER_H })));
+  const steps = STAIRS.flatMap((st, t) =>
+    Array.from({ length: STAIR.n }, (_, k) => ({
+      x: st.x,
+      z: st.face - (STAIR.n - 1 - k) * STAIR.depth - STAIR.depth / 2,
+      w: STAIR.w,
+      d: STAIR.depth,
+      h: t * TIER_H + ((k + 1) * TIER_H) / STAIR.n,
+    })),
+  );
+  // boulders along the foot of every cliff, half sunk into the face
+  const rocks: (Placed & { kind: number })[] = [];
+  TIERS.forEach((rs, t) =>
+    rs.forEach((r) => {
+      const per = 2 * (r.w + r.d);
+      for (let u = rnd() * 5; u < per; u += 4.5 + rnd() * 4) {
+        let x: number, z: number, nx: number, nz: number;
+        if (u < r.w) [x, z, nx, nz] = [r.x - r.w / 2 + u, r.z - r.d / 2, 0, -1];
+        else if (u < r.w + r.d) [x, z, nx, nz] = [r.x + r.w / 2, r.z - r.d / 2 + (u - r.w), 1, 0];
+        else if (u < 2 * r.w + r.d) [x, z, nx, nz] = [r.x + r.w / 2 - (u - r.w - r.d), r.z + r.d / 2, 0, 1];
+        else [x, z, nx, nz] = [r.x - r.w / 2, r.z + r.d / 2 - (u - 2 * r.w - r.d), -1, 0];
+        const sc = 1.1 + rnd() * 1.3;
+        const p = { x: x - nx * sc * 0.35, z: z - nz * sc * 0.35 };
+        const base = tierAt(x + nx * 0.6, z + nz * 0.6);
+        if (base > t || nearStairsOrFalls(p.x, p.z, 1) || Math.abs(p.x) > 33 || p.z > MOUNT_Z1 - 1.5) continue;
+        rocks.push({ ...p, y: base * TIER_H, s: sc, r: rnd() * Math.PI * 2, kind: rocks.length % 2 });
+      }
+    }),
+  );
+  // small montane trees on the lower ledges, clear of the cliff edges, stairs and falls
+  const trees: Placed[] = [];
+  for (let z = 168; z < MOUNT_Z1 - 2; z += 6.5)
+    for (let x = -32; x < 32.5; x += 6.5) {
+      const p = { x: x + (rnd() - 0.5) * 4, z: z + (rnd() - 0.5) * 4 };
+      const sc = 0.55 + rnd() * 0.3;
+      const r = rnd() * Math.PI * 2;
+      const t = tierAt(p.x, p.z);
+      if (t > 3 || Math.abs(p.x) > 32.5 || tierAt(p.x, p.z, 1.6) !== t || tierAt(p.x, p.z, -1.6) !== t) continue;
+      if (nearStairsOrFalls(p.x, p.z, 2.5) || inRect(POOL, p.x, p.z, 2.5) || (t === 0 && (p.z < 168.5 || trailDist(p) < 3))) continue;
+      trees.push({ ...p, y: t * TIER_H, s: sc, r });
+    }
+  // the falls: a sheet down each face from the fourth tier, a stream across each ledge below
+  const fronts = [203, 196, 189, 182];
+  const sheets = fronts.map((z, i) => ({ x: FALLS_X, z, w: 2.2, y0: (3 - i) * TIER_H, y1: (4 - i) * TIER_H }));
+  const streams = [
+    { x: FALLS_X, z: 205.5, w: 2.2, d: 5, y: 4 * TIER_H },
+    ...fronts.slice(1).map((z, i) => ({ x: FALLS_X, z: (z + fronts[i]) / 2, w: 2.2, d: fronts[i] - z, y: (3 - i) * TIER_H })),
+  ];
+  return { cliffs, steps, rocks, trees, falls: { sheets, streams } };
+})();
+
 /**
  * Malacca, 1511, as one map: the harbour on the sea, the river north of it, Kampung Hulu beyond. A guarded bridge
  * and a narrow plank on the west side cross the river; the upper kampung has its own jetty on the river bank.
  * Every mission plays on this map and only sets its own guards, start, exit and wording.
  */
-const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "horses" | "fences" | "trees" | "ferns" | "trails" | "clearings" | "forestFloor" | "bounds"> = {
+const WORLD: Area &
+  Pick<
+    LevelDef,
+    "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "horses" | "fences" | "trees" | "ferns" | "trails" | "clearings" | "forestFloor" | "bounds" | "cliffs" | "rocks" | "falls" | "shrine" | "mistZ"
+  > = {
   seed: 1511,
   shoreZ: -31,
   houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses, ...JUNGLE.houses],
+  cliffs: MOUNTAIN.cliffs,
+  rocks: MOUNTAIN.rocks,
+  falls: MOUNTAIN.falls,
+  shrine: SUMMIT,
+  mistZ: JUNGLE_Z1,
   finials: [...HARBOUR_AREA.finials, ...KAMPUNG_N.finials],
-  steps: [...HARBOUR_AREA.steps, ...KAMPUNG_N.steps],
+  steps: [...HARBOUR_AREA.steps, ...KAMPUNG_N.steps, ...MOUNTAIN.steps],
   towers: [...HARBOUR_AREA.towers, ...KAMPUNG_N.towers, ...JUNGLE.towers],
   stalls: [...HARBOUR_AREA.stalls, ...KAMPUNG_N.stalls, ...JUNGLE.stalls],
   wells: [...HARBOUR_AREA.wells, ...KAMPUNG_N.wells],
@@ -362,16 +475,16 @@ const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "w
   ships: [...HARBOUR_AREA.ships, ...KAMPUNG_N.ships],
   // bridge lanterns at both ends
   lamps: [...HARBOUR_AREA.lamps, ...KAMPUNG_N.lamps, { x: 14.2, z: 35 }, { x: 9.8, z: 48 }, ...JUNGLE.lamps],
-  palisade: { minX: -35, maxX: 35, minZ: -31, maxZ: JUNGLE_Z1 },
+  palisade: { minX: -35, maxX: 35, minZ: -31, maxZ: MOUNT_Z1 },
   // the kampung's old north wall, now between it and the jungle
   fences: [{ z: JUNGLE_Z0, minX: -35, maxX: 35, gates: JUNGLE_GATES }],
-  trees: JUNGLE.trees,
+  trees: [...JUNGLE.trees, ...MOUNTAIN.trees],
   ferns: JUNGLE.ferns,
   trails: JUNGLE_TRAILS,
   clearings: [CAMP],
-  forestFloor: [{ x: 0, z: (JUNGLE_Z0 + JUNGLE_Z1) / 2, w: 70, d: JUNGLE_Z1 - JUNGLE_Z0 }],
+  forestFloor: [{ x: 0, z: (JUNGLE_Z0 + MOUNT_Z1) / 2, w: 70, d: MOUNT_Z1 - JUNGLE_Z0 }],
   jetty: { x: 0, z: -34, w: 3, d: 8 },
-  water: [RIVER],
+  water: [RIVER, POOL],
   decks: [
     // the bridge, kept by a sentry
     { x: 12, z: RIVER.z, w: 3, d: RIVER.d + 3, rails: true },
@@ -379,6 +492,8 @@ const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "w
     { x: -30, z: RIVER.z, w: 1.6, d: RIVER.d + 3 },
     // the upper kampung's jetty, out from its south bank
     { x: 0, z: -34 + KAMPUNG_DZ, w: 3, d: 8 },
+    // a bamboo landing into the pool below the falls
+    { x: POOL.x, z: POOL.z - POOL.d / 2 + 1, w: 1.8, d: 3 },
   ],
   boats: [
     // by the harbour bank, a short walk from the Bridge Battery start
@@ -397,8 +512,10 @@ const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "w
     { x: 28.5, z: 28.5 + KAMPUNG_DZ, rotY: -Math.PI / 2 },
     // just outside that gate, on the jungle side
     { x: 26.5, z: 115.5, rotY: -Math.PI / 2 },
+    // at the foot of Gunung Ledang, where the old trail comes out of the trees
+    { x: -22.5, z: 169.5, rotY: Math.PI / 4 },
   ],
-  bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: JUNGLE_Z1 - 1.4, jettyZ: -31, jettyHalf: 1.1 },
+  bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: MOUNT_Z1 - 1.4, jettyZ: -31, jettyHalf: 1.1 },
 };
 
 /** Patrols of the harbour, on every mission. */
@@ -567,8 +684,48 @@ export const JUNGLE_CAMP: LevelDef = {
   },
 };
 
+/** The guards on Gunung Ledang: the foot of the mountain, its ledges, and the summit. */
+const LEDANG_GUARDS: GuardDef[] = [
+  { waypoints: [{ x: -10, z: 172 }, { x: 14, z: 172 }] },
+  { waypoints: [{ x: 13.5, z: 175 }, { x: 13.5, z: 180.5 }] },
+  { waypoints: [{ x: -27, y: 2.4, z: 186 }, { x: -18.5, y: 2.4, z: 186 }] },
+  { waypoints: [{ x: 27, y: 2.4, z: 185 }, { x: 27, y: 2.4, z: 202 }] },
+  { waypoints: [{ x: -20, y: 4.8, z: 192.5 }, { x: -4, y: 4.8, z: 192.5 }] },
+  { waypoints: [{ x: -15.5, y: 7.2, z: 199 }, { x: -15.5, y: 7.2, z: 214 }] },
+  { waypoints: [{ x: -9, y: 9.6, z: 206.5 }, { x: -9, y: 9.6, z: 220 }] },
+  { waypoints: [{ x: -4, y: 12, z: 210.6 }, { x: 4, y: 12, z: 210.6 }, { x: 4, y: 12, z: 217.6 }, { x: -4, y: 12, z: 217.6 }] },
+];
+
+/** Gunung Ledang: a Portuguese party has climbed to the summit shrine and taken its offerings. */
+export const LEDANG: LevelDef = {
+  ...WORLD,
+  id: "ledang",
+  name: "Gunung Ledang",
+  missionId: "gunung-ledang",
+  guards: LEDANG_GUARDS,
+  objective: { kind: "steal", at: { x: SUMMIT.x, y: SUMMIT.y + 0.9, z: SUMMIT.z } },
+  start: { x: -25, z: 167.5 },
+  exit: { x: POOL.x, z: POOL.z - POOL.d / 2 + 0.6 },
+  story:
+    "Portuguese soldiers have climbed Gunung Ledang, the mountain of the legend of its puteri, and set a watch on every ledge. " +
+    "At the shrine on the summit they hold the golden tepak sireh, the betel box left there as an offering. Climb the mountain " +
+    "by ledge or by stair, take it back from the altar, and get down to the landing in the pool below the falls. The mist " +
+    "hides you as you climb; it hides them too.",
+  checkpointLabel: "the tepak sireh is taken",
+  win: {
+    title: "The offering is returned",
+    body: "The golden tepak sireh is back in Malay hands, and the watch on Gunung Ledang never saw who took it.",
+  },
+  text: {
+    objective: "Climb to the summit shrine and take the tepak sireh",
+    escape: "Get down to the landing in the pool below the falls",
+    targetDown: "You have the tepak sireh. Down to the pool below the falls.",
+    take: "Take the golden tepak sireh",
+  },
+};
+
 /** Every mission, in play order. */
-export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP];
+export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG];
 
 /** The level named by ?level=<id> in a query string, else the first mission. */
 export function levelFromSearch(search: string): LevelDef {

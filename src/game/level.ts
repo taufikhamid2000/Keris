@@ -40,8 +40,10 @@ export interface Level {
   lampLights: THREE.PointLight[];
   /** sampans: their meshes (in root) and where they were moored */
   boats: { group: THREE.Group; x: number; z: number; yaw: number }[];
-  /** jungle plants: where they stand, and the groups holding their (instanced) meshes, so models can replace them */
-  foliage: { trees: Placed[]; treeGroup: THREE.Group; ferns: Placed[]; fernGroup: THREE.Group };
+  /** jungle plants and mountain boulders: where they stand, and the groups holding their (instanced) meshes, so models can replace them */
+  foliage: { trees: Placed[]; treeGroup: THREE.Group; ferns: Placed[]; fernGroup: THREE.Group; rocks: (Placed & { kind: number })[]; rockGroup: THREE.Group };
+  /** the waterfall's texture, scrolled each frame (null when the map has no falls) */
+  flow: THREE.Texture | null;
 }
 
 /** One InstancedMesh per geometry, placed at each spot (turned by r, scaled by s). */
@@ -50,7 +52,7 @@ export function instanced(geo: THREE.BufferGeometry, m: THREE.Material | THREE.M
   im.count = list.length;
   const o = new THREE.Object3D();
   list.forEach((t, i) => {
-    o.position.set(t.x, 0, t.z);
+    o.position.set(t.x, t.y ?? 0, t.z);
     o.rotation.set(0, t.r, 0);
     o.scale.setScalar(t.s);
     o.updateMatrix();
@@ -199,9 +201,10 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
   })();
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 200), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 }));
+  groundTex.repeat.set(40, 56);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 280), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0, def.shoreZ + 100);
+  ground.position.set(0, 0, def.shoreZ + 140);
   ground.receiveShadow = true;
   root.add(ground);
 
@@ -257,7 +260,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   const treeGroup = new THREE.Group();
   const fernGroup = new THREE.Group();
   root.add(treeGroup, fernGroup);
-  for (const t of trees) addCollider(boxOf(t.x, t.z, 0.9 * t.s, 0.9 * t.s, 7));
+  for (const t of trees) addCollider(boxOf(t.x, t.z, 0.9 * t.s, 0.9 * t.s, (t.y ?? 0) + 7, t.y ?? 0));
   if (trees.length) {
     // built-in look until the tree models load: a trunk and two lumps of canopy
     const trunk = new THREE.CylinderGeometry(0.3, 0.5, 8, 7);
@@ -272,6 +275,102 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     const fern = new THREE.ConeGeometry(0.7, 0.8, 6);
     fern.translate(0, 0.4, 0);
     fernGroup.add(instanced(fern, mat(0x3f7a34), ferns, false));
+  }
+
+  // ---------------------------------------------------------------- Gunung Ledang: rock tiers, boulders, the falls, the summit shrine
+  const rockMat = mat(0x7b786d);
+  const mossMat = mat(0x56653a);
+  const jit = (x: number, y: number, z: number, k: number) => {
+    const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + k * 4.1) * 43758.5453;
+    return v - Math.floor(v) - 0.5;
+  };
+  for (const c of def.cliffs ?? []) {
+    addCollider(boxOf(c.x, c.z, c.w, c.d, c.h));
+    // rough faces: every vertex below the lip is nudged (by its position, so shared corners stay closed); the top stays flat
+    const geo = new THREE.BoxGeometry(c.w, c.h, c.d, Math.max(1, Math.round(c.w / 2.5)), 3, Math.max(1, Math.round(c.d / 2.5)));
+    geo.translate(c.x, c.h / 2, c.z);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      if (y > c.h - 0.01) continue;
+      pos.setX(i, x + jit(x, y, z, 1) * 0.55);
+      pos.setZ(i, z + jit(x, y, z, 2) * 0.55);
+    }
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, [rockMat, rockMat, mossMat, rockMat, rockMat, rockMat]);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    root.add(m);
+  }
+  const rocks = def.rocks ?? [];
+  const rockGroup = new THREE.Group();
+  root.add(rockGroup);
+  if (rocks.length) {
+    // built-in boulders until the rock models load
+    const boulder = new THREE.DodecahedronGeometry(0.7, 0);
+    boulder.scale(1.2, 0.8, 1);
+    boulder.translate(0, 0.45, 0);
+    rockGroup.add(instanced(boulder, rockMat, rocks));
+  }
+  let flow: THREE.Texture | null = null;
+  if (def.falls) {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 128;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#8fc3d6";
+    g.fillRect(0, 0, 64, 128);
+    for (let i = 0; i < 90; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.25 + rnd() * 0.5})`;
+      g.fillRect(rnd() * 64, rnd() * 128, 1 + rnd() * 3, 8 + rnd() * 30);
+    }
+    flow = new THREE.CanvasTexture(c);
+    flow.wrapS = flow.wrapT = THREE.RepeatWrapping;
+    flow.colorSpace = THREE.SRGBColorSpace;
+    const fm = new THREE.MeshBasicMaterial({ map: flow, transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide });
+    /** a plane whose texture repeats once every 2 m, so every piece of the falls flows at the same speed */
+    const sheet = (w: number, h: number) => {
+      const geo = new THREE.PlaneGeometry(w, h);
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * w) / 2, (uv.getY(i) * h) / 2);
+      return geo;
+    };
+    for (const s of def.falls.sheets) {
+      // hung just off the face (clear of its rough rock), flowing down
+      const m = new THREE.Mesh(sheet(s.w, s.y1 - s.y0 + 0.2), fm);
+      m.position.set(s.x, (s.y0 + s.y1) / 2, s.z - 0.45);
+      root.add(m);
+      root.add(mesh(new THREE.CircleGeometry(s.w * 0.7, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xdcecf0, transparent: true, opacity: 0.55, depthWrite: false }), s.x, s.y0 + 0.08, s.z - 0.9, false));
+    }
+    for (const s of def.falls.streams) {
+      // flat on the ledge, flowing south to the next drop
+      const m = new THREE.Mesh(sheet(s.w, s.d), fm);
+      m.rotation.set(-Math.PI / 2, 0, Math.PI);
+      m.position.set(s.x, s.y + 0.04, s.z);
+      root.add(m);
+    }
+  }
+  if (def.shrine) {
+    // Puteri Gunung Ledang's shrine: a stone floor, an open pavilion on four posts, an altar for the offerings
+    const { x, z, y } = def.shrine;
+    root.add(mesh(new THREE.BoxGeometry(5.4, 0.12, 5.4), mat(0x9a917e), x, y + 0.06, z));
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        addCollider(boxOf(x + sx * 1.8, z + sz * 1.8, 0.3, 0.3, y + 2.5, y));
+        root.add(mesh(new THREE.CylinderGeometry(0.13, 0.16, 2.5, 6), mat(0x5a3a24), x + sx * 1.8, y + 1.25, z + sz * 1.8));
+        root.add(mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc069 }), x + sx * 1.8, y + 2.3, z + sz * 1.8 - sz * 0.2, false));
+      }
+    // the roof is solid (and climbable) above head height
+    addCollider(boxOf(x, z, 4.6, 4.6, y + 3.6, y + 2.5));
+    const r = atapRoof(4.8, 4.8, y + 3.6, 1.1, 0x8d6e3f);
+    r.position.x = x;
+    r.position.z = z;
+    root.add(r);
+    addCollider(boxOf(x, z, 1.2, 0.8, y + 0.85, y));
+    root.add(mesh(new THREE.BoxGeometry(1.2, 0.85, 0.8), mat(0x8a8577), x, y + 0.425, z));
+    root.add(mesh(new THREE.BoxGeometry(1.4, 0.08, 1.0), mat(0x6e6a5e), x, y + 0.87, z));
   }
 
   // ---------------------------------------------------------------- houses (kampung lanes between) + palace tiers
@@ -521,6 +620,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     lamps: def.lamps,
     lampLights,
     boats,
-    foliage: { trees, treeGroup, ferns, fernGroup },
+    foliage: { trees, treeGroup, ferns, fernGroup, rocks, rockGroup },
+    flow,
   };
 }

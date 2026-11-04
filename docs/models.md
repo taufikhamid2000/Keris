@@ -10,7 +10,7 @@ public/models/
   guard/      every guard
   target/     optional: the Kapitan / clerk (uses guard/ when empty)
   shared/     optional: an animation library used by every role that has none of its own
-  props/      optional: sampan.glb (the boat), horse.glb (animated: Idle, Walk, Gallop), tree_a/tree_b/fern.glb (jungle)
+  props/      optional: sampan.glb (the boat), horse.glb (animated: Idle, Walk, Gallop), tree_a/tree_b/fern.glb (jungle), rock_a/rock_b.glb (Gunung Ledang)
 ```
 
 ## Recommended: Quaternius (CC0, no account)
@@ -66,6 +66,10 @@ clips by speed; `HORSE.saddleY` sets how high the rider sits.
 `tree_a.glb`, `tree_b.glb` and `fern.glb` in `props/` are the jungle plants, all Quaternius CC0 from poly.pizza
 (https://poly.pizza/m/qZtx0AHhcy, https://poly.pizza/m/t9KbsfYdXz, https://poly.pizza/m/jqcanvH7D6). Each is drawn
 as one instanced mesh over the spots in `levels.ts`; trees are scaled to `JUNGLE_TREE_H` (11 m) times each tree's own scale.
+
+`rock_a.glb` and `rock_b.glb` are the boulders along the foot of Gunung Ledang's cliffs: Quaternius CC0 "Rock Large"
+(https://poly.pizza/m/54jZKTAt5p, https://poly.pizza/m/d2VWOdthtR). They are scaled to 1 m high times each spot's scale and
+recoloured grey (`ROCK` in `src/game/engine.ts`). They are scenery only: the tiers themselves are the solid rock.
 
 ## Mixamo (FBX, Adobe account)
 

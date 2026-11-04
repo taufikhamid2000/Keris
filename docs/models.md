@@ -38,6 +38,13 @@ Each folder takes:
 Characters are scaled to about 1.8 m automatically and faced along their walking direction, so the export
 size does not matter. Clips without In Place are fixed in code (the hips are pinned), but In Place looks better.
 
+## Hosting outside the repo
+
+The FBX files are gitignored, so a deploy built from git has none. Upload the same folder layout to a public
+storage bucket (with CORS allowing GET and HEAD from the game's domain) and set `NEXT_PUBLIC_MODELS_URL` to its
+base URL in the Vercel project, e.g. `https://models.taufikhamid.com`. It is read at build time, so redeploy after
+changing it. Without it the game looks in `public/models/`.
+
 ## Size and licence
 
 - A character with textures is often 5 to 30 MB; animations without skin are about 1 MB each. Pick low-poly

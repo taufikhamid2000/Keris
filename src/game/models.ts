@@ -32,7 +32,9 @@ export interface RigTemplate {
   clips: Partial<Record<Anim, THREE.AnimationClip>>;
 }
 
-const base = (role: Role) => `/models/${role}/`;
+/** where the files are served from: NEXT_PUBLIC_MODELS_URL (a storage bucket, set at build time), else public/models */
+const MODELS_URL = (process.env.NEXT_PUBLIC_MODELS_URL || "/models").replace(/\/+$/, "");
+const base = (role: Role) => `${MODELS_URL}/${role}/`;
 
 async function exists(url: string) {
   try {

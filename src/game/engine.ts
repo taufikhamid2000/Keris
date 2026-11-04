@@ -113,7 +113,7 @@ const ROCK = { h: 1, color: 0x8a877d };
  * Swimming in rivers and pools. y is the player's feet: at the surface only the head and shoulders show above the
  * water (the ground plane hides the rest); diving takes the player fully under, unseen, for as long as breath lasts.
  */
-const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5 };
+const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5, seaReach: 24, seaY: -0.25 };
 // dusk fill levels; Mata Helang drops them for contrast
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
@@ -1402,9 +1402,9 @@ export class Game {
       }
       pushOut(p, PLAYER_R, L.colliders, p.y);
       // walking (or dropping) into a river or pool starts a swim; carrying a body, the bank stops you as before
-      if (this.wet(p.x, p.z) && !this.carrying && !this.roll && p.y < SWIM.maxEntryY) {
-        this.applyBounds();
+      if (this.swimmable(p.x, p.z) && !this.carrying && !this.roll && p.y < SWIM.maxEntryY) {
         this.enterWater();
+        this.applyBounds();
       } else this.applyBounds(from);
 
       // vertical
@@ -1497,7 +1497,7 @@ export class Game {
       p.yaw += clamp(wrapAngle(Math.atan2(mx, mz) - p.yaw), -8 * dt, 8 * dt);
       const q = { x: p.x + mx * speed * dt, z: p.z + mz * speed * dt };
       pushOut(q, PLAYER_R, this.level.colliders, 0);
-      if (!this.wet(q.x, q.z)) {
+      if (!this.swimmable(q.x, q.z)) {
         // ashore (a bank, or up onto a jetty) unless something tall is in the way; surface first when diving
         const g = groundHeight(q.x, q.z, 0, this.level.colliders);
         if (!s.under && g <= STEP_H) {
@@ -1522,8 +1522,9 @@ export class Game {
     const b = this.level.bounds;
     const p = this.p;
     p.x = clamp(p.x, b.minX, b.maxX);
-    p.z = clamp(p.z, b.minZ, b.maxZ);
-    if (p.z < b.jettyZ) p.x = clamp(p.x, -b.jettyHalf, b.jettyHalf);
+    // swimmers may head out to sea, past the jetty
+    p.z = clamp(p.z, this.swim ? b.minZ - SWIM.seaReach : b.minZ, b.maxZ);
+    if (p.z < b.jettyZ && !this.swim) p.x = clamp(p.x, -b.jettyHalf, b.jettyHalf);
     if (!from || !this.wet(p.x, p.z)) return;
     // stepping into the river: keep whichever axis stays dry, so the player slides along the bank or the bridge rail
     if (!this.wet(from.x, p.z)) p.x = from.x;
@@ -1532,6 +1533,17 @@ export class Game {
       p.x = from.x;
       p.z = from.z;
     }
+  }
+
+  /** in the sea: past the shoreline and off the jetty */
+  private inSea(x: number, z: number) {
+    const j = this.def.jetty;
+    return z < this.level.bounds.jettyZ - 0.1 && !(Math.abs(x - j.x) < j.w / 2 - 0.1 && Math.abs(z - j.z) < j.d / 2);
+  }
+
+  /** water the player can swim in: rivers, pools and the sea */
+  private swimmable(x: number, z: number) {
+    return this.wet(x, z) || this.inSea(x, z);
   }
 
   /** over a river and off every bridge or jetty */
@@ -2564,7 +2576,7 @@ export class Game {
     if (this.ripple) {
       this.ripple.visible = !!this.swim && this.player.group.visible;
       if (this.swim) {
-        this.ripple.position.set(p.x, 0.09, p.z);
+        this.ripple.position.set(p.x, this.inSea(p.x, p.z) ? SWIM.seaY : 0.09, p.z);
         this.ripple.scale.setScalar(1 + 0.12 * Math.sin(this.time * 4));
         (this.ripple.material as THREE.MeshBasicMaterial).opacity = this.swim.under ? 0.15 : 0.45;
       }

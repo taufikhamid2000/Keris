@@ -23,7 +23,7 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | Q | Pisau lempar: throw a knife to stun a guard, or make noise to distract |
 | F | Carry the nearest body, or drop it. Drop it inside a haystack or bush to hide it |
 | E by a horse | Mount it. WASD rides (camera-relative), Shift gallops (loud), E gets down |
-| Walk into a river or pool | Swim (slower than walking; Shift is faster but splashes). Hold Ctrl or press C to dive: unseen and silent for 8 s of breath. Swim to a bank or jetty to climb out, or E by a sampan to climb in |
+| Walk into a river, pool or the sea | Swim (slower than walking; Shift is faster but splashes). Hold Ctrl or press C to dive: unseen and silent for 8 s of breath. Swim to a bank or jetty to climb out, or E by a sampan to climb in |
 | E by a sampan | Board it. In the boat, WASD steers (camera-relative), Shift paddles faster, E beside a bank or jetty goes ashore |
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause |

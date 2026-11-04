@@ -28,6 +28,9 @@ describe.each(LEVELS.map((l) => [l.id, l] as const))("level %s", (_id, l) => {
     expect(wet(l.start)).toBe(false);
     for (const g of l.guards) for (const w of g.waypoints) expect(wet(w)).toBe(false);
   });
+  it("moors every boat on the water, clear of the banks", () => {
+    for (const b of l.boats) expect(l.water.some((r) => Math.abs(b.x - r.x) < r.w / 2 - 1 && Math.abs(b.z - r.z) < r.d / 2 - 1)).toBe(true);
+  });
 });
 
 it("level ids are unique", () => {

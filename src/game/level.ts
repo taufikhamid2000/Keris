@@ -38,6 +38,8 @@ export interface Level {
   lamps: Vec2[];
   /** the few real point lights, moved to the lanterns nearest the camera (a big map has more lanterns than lights) */
   lampLights: THREE.PointLight[];
+  /** sampans: their meshes (in root) and where they were moored */
+  boats: { group: THREE.Group; x: number; z: number; yaw: number }[];
 }
 
 /** Height of the open space under a stilt house's floor. */
@@ -373,6 +375,28 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     root.add(g);
   }
 
+  // ---------------------------------------------------------------- sampans (moving; the engine places them each frame)
+  const boats: Level["boats"] = def.boats.map((b) => {
+    const g = new THREE.Group();
+    const hull = mesh(new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), mat(0x4e3420), 0, 0.42, 0);
+    hull.scale.set(0.62, 0.42, 2.2);
+    g.add(hull);
+    // gunwale rim and two thwarts
+    const rim = mesh(new THREE.TorusGeometry(1, 0.05, 4, 16), mat(0x3d2a1a), 0, 0.42, 0, false);
+    rim.rotation.x = Math.PI / 2;
+    rim.scale.set(0.62, 2.2, 1);
+    g.add(rim);
+    for (const z of [-0.8, 0.9]) g.add(mesh(new THREE.BoxGeometry(1.1, 0.06, 0.22), mat(0x6e5237), 0, 0.36, z, false));
+    // a paddle laid across
+    const paddle = mesh(new THREE.BoxGeometry(0.06, 0.04, 1.9), mat(0x6e5237), 0.3, 0.46, 0.2, false);
+    paddle.rotation.y = 0.5;
+    g.add(paddle);
+    g.position.set(b.x, 0, b.z);
+    g.rotation.y = b.rotY;
+    root.add(g);
+    return { group: g, x: b.x, z: b.z, yaw: b.rotY };
+  });
+
   // ---------------------------------------------------------------- lanterns
   const litLamps = spreadIndices(def.lamps.length, opts.lampLights ?? def.lamps.length);
   const lampLights: THREE.PointLight[] = [];
@@ -417,5 +441,6 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     text: def.text,
     lamps: def.lamps,
     lampLights,
+    boats,
   };
 }

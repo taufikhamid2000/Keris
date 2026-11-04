@@ -36,7 +36,7 @@ import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
-import { PathAgent, buildNav, climbDuration, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
+import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
@@ -123,6 +123,17 @@ const STAGGER = 1.8;
 const FLINCH = 0.35;
 const POISE = 1.5;
 const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
+/** sampan handling: cruise and Shift speeds (m/s), acceleration, drift-to-stop rate, turn rate (rad/s), reach to board */
+const BOAT = { speed: 3.2, fast: 5, accel: 2.5, drag: 1.5, turn: 1.4, board: 2.6, seatY: 0.15 };
+
+interface Boat {
+  group: THREE.Group;
+  x: number;
+  z: number;
+  yaw: number;
+  speed: number;
+  home: { x: number; z: number; yaw: number };
+}
 /**
  * Heavy strike: hold E / left click for hold seconds, then let go (a tap is the light strike). The hold is its wind-up,
  * so it lands about 0.6 s after the press, and a blow taken while holding cancels it. It deals damage and always
@@ -340,6 +351,11 @@ export class Game {
   private moveDir = { x: 0, z: 1 };
   private playerKick: Anim | null = null;
   private lampTimer = 0;
+  private boats: Boat[] = [];
+  /** the sampan the player sits in, or null on foot */
+  private boat: Boat | null = null;
+  /** jetties and other decks a boat cannot pass (bridges and planks span the river and it slips under them) */
+  private boatBlockers: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   /** main: the level's objective (kill or steal) is still to do */
   private objective: "main" | "escape" = "main";
   /** steal objectives: the item's mesh, and whether it has been taken */
@@ -436,6 +452,7 @@ export class Game {
 
     this.level = buildLevel(this.levelDef, { lampLights: Q.lampLights });
     this.loot = this.buildLoot();
+    this.takeBoats();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
@@ -586,6 +603,8 @@ export class Game {
     if (this.loot) this.loot.visible = true;
     this.hidden = false;
     this.carrying = null;
+    this.boat = null;
+    for (const b of this.boats) Object.assign(b, { ...b.home, speed: 0 });
     this.crouchToggle = false;
     this.lowCeiling = false;
     this.toastText = "";
@@ -862,6 +881,8 @@ export class Game {
       /** seconds from a guard starting his strike to it landing */
       windup: GUARD_ATK.windup,
       leaping: !!this.leap,
+      boat: !!this.boat,
+      boats: this.boats.map((b) => ({ x: b.x, z: b.z, yaw: b.yaw })),
       objective: this.objective,
       exit: { x: this.level.exit.x, z: this.level.exit.z },
       drawCalls: this.renderer.info.render.calls,
@@ -987,6 +1008,15 @@ export class Game {
     return -1;
   }
   /** Test hook: run the simulation ahead by `seconds` in fixed 1/30 s steps without rendering. Stops early if the phase changes. */
+  /** Test hook: stand the player at a spot (on the ground or whatever is under it). */
+  debugPlace(x: number, z: number) {
+    this.boat = null;
+    Object.assign(this.p, { x, z, y: groundHeight(x, z, 1.0, this.level.colliders), vy: 0, grounded: true });
+  }
+  /** Test hook: point the camera (and so "forward") along a yaw. */
+  debugCamYaw(yaw: number) {
+    this.camYaw = yaw;
+  }
   debugAdvance(seconds: number) {
     const step = 1 / 30;
     for (let t = 0; t < seconds && this.phase === "playing"; t += step) {
@@ -1009,6 +1039,7 @@ export class Game {
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
     this.lampTimer = 0;
     this.loot = this.buildLoot();
+    this.takeBoats();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     if (this.navDbg) {
@@ -1046,7 +1077,8 @@ export class Game {
       this.stabT = Math.max(0, this.stabT - dt);
       this.hurtAnimT = Math.max(0, this.hurtAnimT - dt);
       let a: Anim;
-      if (this.roll) a = "roll";
+      if (this.boat) a = "sit";
+      else if (this.roll) a = "roll";
       else if (this.hurtAnimT > 0 && pr.has("hit")) a = "hit";
       else if (this.stabT > 0 && pr.has("stab")) a = this.swing?.heavy ? "heavy" : "stab";
       else if (this.charge !== null) a = "block";
@@ -1153,7 +1185,7 @@ export class Game {
   }
 
   private get crouched() {
-    return this.lowCeiling || this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.crouchToggle;
+    return !!this.boat || this.lowCeiling || this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.crouchToggle;
   }
 
   private update(dt: number) {
@@ -1189,7 +1221,11 @@ export class Game {
     const crouched = this.crouched;
     p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && !this.swing && this.charge === null && len > 0;
 
-    if (this.leap) {
+    if (this.boat) {
+      const sprint = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run);
+      p.running = false;
+      this.paddle(dt, fwd, str, len, sprint);
+    } else if (this.leap) {
       const l = this.leap;
       l.t += dt;
       const k = clamp(l.t / l.dur, 0, 1);
@@ -1292,7 +1328,7 @@ export class Game {
     }
 
     // ---- escape
-    if (this.objective === "escape" && dist2D(p, L.exit) < 2.4) {
+    if (this.objective === "escape" && dist2D(p, L.exit) < (this.boat ? 3.5 : 2.4)) {
       this.setPhase("won");
       return;
     }
@@ -1326,7 +1362,7 @@ export class Game {
   }
 
   private tryJumpOrClimb() {
-    if (this.climb || this.leap) return;
+    if (this.climb || this.leap || this.boat) return;
     if (this.tryClimb()) return;
     if (this.p.grounded) {
       this.p.vy = 7.2;
@@ -1648,6 +1684,10 @@ export class Game {
   }
 
   private tryTakedown() {
+    if (this.boat) {
+      this.goAshore();
+      return;
+    }
     if (this.climb || this.leap || this.carrying) return;
     if (this.nearLoot()) {
       this.taken = true;
@@ -1657,7 +1697,9 @@ export class Game {
     }
     const { guard, air } = this.takedownTarget();
     if (!guard) {
-      this.startCharge();
+      const b = this.nearBoat();
+      if (b) this.board(b);
+      else this.startCharge();
       return;
     }
     if (air) {
@@ -1667,6 +1709,109 @@ export class Game {
       return;
     }
     this.killGuard(guard, guard.stagger > 0 ? "Counter kill." : "Silent kill.");
+  }
+
+  // ------------------------------------------------------------------ boats
+
+  /** Take the level's sampans, and work out which decks they cannot pass under. */
+  private takeBoats() {
+    this.boats = this.level.boats.map((b) => ({ ...b, speed: 0, home: { x: b.x, z: b.z, yaw: b.yaw } }));
+    this.boat = null;
+    const { water, decks } = this.level.bounds;
+    const spans = (d: (typeof decks)[number]) =>
+      water.some((w) => (d.minZ <= w.minZ && d.maxZ >= w.maxZ) || (d.minX <= w.minX && d.maxX >= w.maxX));
+    this.boatBlockers = decks.filter((d) => !spans(d));
+  }
+
+  /** Bow, middle and stern all on open water, clear of the banks, jetties and the map edge. */
+  private boatFits(x: number, z: number, yaw: number) {
+    const b = this.level.bounds;
+    for (const t of [-2, 0, 2]) {
+      const px = x + Math.sin(yaw) * t;
+      const pz = z + Math.cos(yaw) * t;
+      if (px < b.minX + 0.8 || px > b.maxX - 0.8) return false;
+      if (!b.water.some((w) => inArea(w, px, pz, -0.7))) return false;
+      if (this.boatBlockers.some((d) => inArea(d, px, pz, 0.8))) return false;
+    }
+    return true;
+  }
+
+  /** The stick or WASD points where to go (camera-relative, like walking); the sampan turns toward it and paddles on. */
+  private paddle(dt: number, fwd: number, str: number, len: number, sprint: boolean) {
+    const b = this.boat!;
+    const p = this.p;
+    if (len > 0) {
+      const mx = Math.sin(this.camYaw) * fwd - Math.cos(this.camYaw) * str;
+      const mz = Math.cos(this.camYaw) * fwd + Math.sin(this.camYaw) * str;
+      const diff = wrapAngle(Math.atan2(mx, mz) - b.yaw);
+      b.yaw += clamp(diff, -BOAT.turn * dt, BOAT.turn * dt);
+      // slow while turning hard, so a sharp turn pivots instead of sweeping wide
+      const want = (sprint ? BOAT.fast : BOAT.speed) * Math.max(0.15, Math.cos(diff));
+      b.speed += clamp(want - b.speed, -BOAT.accel * dt, BOAT.accel * dt);
+    } else b.speed += clamp(-b.speed, -BOAT.drag * dt, BOAT.drag * dt);
+    const nx = b.x + Math.sin(b.yaw) * b.speed * dt;
+    const nz = b.z + Math.cos(b.yaw) * b.speed * dt;
+    if (this.boatFits(nx, nz, b.yaw)) {
+      b.x = nx;
+      b.z = nz;
+    } else if (this.boatFits(nx, b.z, b.yaw)) b.x = nx;
+    else if (this.boatFits(b.x, nz, b.yaw)) b.z = nz;
+    else b.speed *= 0.3;
+    Object.assign(p, { x: b.x, y: BOAT.seatY, z: b.z, vy: 0, grounded: true, yaw: b.yaw, moving: Math.abs(b.speed) > 0.3 });
+  }
+
+  private nearBoat(): Boat | null {
+    const p = this.p;
+    if (this.carrying || !p.grounded || p.y > 1.2) return null;
+    let best: Boat | null = null;
+    for (const b of this.boats) if (dist2D(b, p) < BOAT.board && (!best || dist2D(b, p) < dist2D(best, p))) best = b;
+    return best;
+  }
+
+  private board(b: Boat) {
+    this.boat = b;
+    b.speed = 0;
+    this.crouchToggle = false;
+    this.swing = null;
+    this.charge = null;
+    this.toast("In the sampan. Paddle to a bank or jetty and press E to go ashore.");
+  }
+
+  /** A dry spot beside the boat to step out onto (bank or deck), or null when the boat is out in the stream. */
+  private shoreSpot(): { x: number; y: number; z: number } | null {
+    const b = this.boat;
+    if (!b) return null;
+    const C = this.level.colliders;
+    const B = this.level.bounds;
+    const fx = Math.sin(b.yaw);
+    const fz = Math.cos(b.yaw);
+    const cands: [number, number][] = [];
+    for (const d of [1.4, 2.0, 2.6]) for (const t of [0, -1, 1]) for (const s of [-1, 1]) cands.push([s * d, t]);
+    for (const t of [3, -3]) cands.push([0, t]);
+    for (const [side, along] of cands) {
+      const x = b.x + fz * side + fx * along;
+      const z = b.z - fx * side + fz * along;
+      if (x < B.minX || x > B.maxX || z < B.minZ || z > B.maxZ || this.wet(x, z)) continue;
+      const y = groundHeight(x, z, 1.0, C);
+      if (y > 0.45) continue;
+      const q = { x, z };
+      pushOut(q, PLAYER_R, C, y);
+      if (Math.hypot(q.x - x, q.z - z) > 0.01) continue;
+      return { x, y, z };
+    }
+    return null;
+  }
+
+  private goAshore() {
+    const s = this.shoreSpot();
+    if (!s) {
+      this.toast("Paddle closer to a bank or jetty.");
+      return;
+    }
+    const b = this.boat!;
+    b.speed = 0;
+    this.boat = null;
+    Object.assign(this.p, { ...s, vy: 0, grounded: true, moving: false });
   }
 
   // ------------------------------------------------------------------ fighting
@@ -1685,7 +1830,7 @@ export class Game {
   /** X: roll in the move direction (or forward). The first part of it cannot be hit. */
   private tryRoll() {
     const p = this.p;
-    if (this.roll || this.rollCd > 0 || this.climb || this.leap || this.carrying || !p.grounded) return;
+    if (this.roll || this.rollCd > 0 || this.climb || this.leap || this.carrying || this.boat || !p.grounded) return;
     const d = p.moving ? this.moveDir : { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
     const n = Math.hypot(d.x, d.z) || 1;
     this.roll = { t: 0, dx: d.x / n, dz: d.z / n };
@@ -1710,7 +1855,7 @@ export class Game {
 
   /** E / left click with no takedown on offer, an alert guard close: start readying a strike. Letting go swings it. */
   private startCharge() {
-    if (this.charge !== null || this.swing || this.roll || this.climb || this.leap || this.carrying || !this.p.grounded) return;
+    if (this.charge !== null || this.swing || this.roll || this.climb || this.leap || this.carrying || this.boat || !this.p.grounded) return;
     if (!this.hostileNear(SWING.reach + 0.6)) return;
     this.charge = 0;
   }
@@ -1882,7 +2027,7 @@ export class Game {
 
   /** F: pick up the nearest body, or drop the one being carried (hidden if dropped inside cover). */
   private tryCarry() {
-    if (this.climb || this.leap) return;
+    if (this.climb || this.leap || this.boat) return;
     const p = this.p;
     if (this.carrying) {
       const b = this.carrying;
@@ -1979,6 +2124,8 @@ export class Game {
     else if (foe && !this.carrying) prompt = "E  Strike (hold: heavy)  ·  R  Parry  ·  X  Roll";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
+    else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
+    else if (this.nearBoat()) prompt = "E  Board the sampan";
     else if (this.nearestBody()) prompt = "F  Carry body";
     else if (this.hidden) prompt = "Hidden";
 
@@ -2013,6 +2160,11 @@ export class Game {
     const p = this.p;
     this.player.group.position.set(p.x, p.y, p.z);
     this.player.group.rotation.y = p.yaw;
+    for (const b of this.boats) {
+      // a gentle rock on the current
+      b.group.position.set(b.x, Math.sin(this.time * 1.4 + b.home.x) * 0.03, b.z);
+      b.group.rotation.set(0, b.yaw, Math.sin(this.time * 1.1 + b.home.z) * 0.035);
+    }
     for (const g of this.guards) {
       const tip = g.dead && !g.rig?.has("death");
       g.group.position.set(g.x, g.y + (tip && !g.carried ? 0.25 * g.fall : 0), g.z);

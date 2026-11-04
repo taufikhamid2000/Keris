@@ -86,6 +86,7 @@ const CONTROLS: [string, string][] = [
   ["X", "Roll: dodge a strike or break away"],
   ["Q", "Pisau lempar: stun / distract"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
+  ["E by a sampan", "Board it; WASD paddles, Shift faster, E by a bank goes ashore"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
   ["Controller", "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT knife, Y carry, R3 crouch, RB vision, LB run, Start pause"],
@@ -101,6 +102,7 @@ const TOUCH_CONTROLS: [string, string][] = [
   ["X", "Roll: dodge a strike or break away"],
   ["Q", "Pisau lempar: stun / distract"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
+  ["E by a sampan", "Board it; the stick paddles, E by a bank goes ashore"],
   ["V", "Mata Helang vision"],
   ["II", "Pause"],
 ];

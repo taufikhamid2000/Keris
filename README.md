@@ -22,6 +22,7 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | X | Roll: dodge a strike or break away from a crowd |
 | Q | Pisau lempar: throw a knife to stun a guard, or make noise to distract |
 | F | Carry the nearest body, or drop it. Drop it inside a haystack or bush to hide it |
+| E by a sampan | Board it. In the boat, WASD steers (camera-relative), Shift paddles faster, E beside a bank or jetty goes ashore |
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause |
 
@@ -52,6 +53,7 @@ Progress is saved in your browser's localStorage under the single key `keris:sav
 
 - Saved: the last checkpoint and the mission it belongs to (mission start, or the target is down), best time and stealth rating per mission, and settings (quality, look sensitivity, invert Y). Continue resumes that mission even if another is picked on the title. Guard and alert state is never saved, so Continue rebuilds the world with guards on patrol.
 - One map of Malacca: the harbour on the sea, a river, and Kampung Hulu on the far bank, crossed by a guarded bridge or a narrow unguarded plank on the west side. Rivers are water nobody walks through except on a deck (bridge or jetty), for the player and the guard nav grid alike. The sun's shadow follows the player and the lantern lights move to the lanterns nearest the camera, so the bigger map costs no more to draw.
+- Sampans are moored on the river (by the harbour bank, at the kampung jetty, and at the east end). In one you sit low and paddle quietly, out of reach of guards except from the bank; boats slip under the bridge and the plank but not through the jetty. On the kampung missions, pulling up at the river jetty in a boat counts as the escape.
 - Three missions on it, picked on the title screen: The Bridge Battery (the harbour), Kampung Hulu and The Battery Plans. Each is a data definition in `src/game/levels.ts` that sets its own guards, start, exit and wording on the shared world. Objectives are reusable pieces: `kill` (the guard marked as target) or `steal` (take an item with E), plus an optional `undetected` rule that fails the mission on any alarm. Harbour missions end at the sea jetty, kampung ones at the river jetty.
 - Start screen: "Press any button" ("Tap to start" on touch), then a main menu over a slow harbour camera drift: Continue (only when a save exists), New game, Settings, Controls and Credits. Settings has Reset progress (with a confirm step) and an export/import save code (base64 of the JSON, validated on import).
 - `?quality=low|high` in the URL beats the saved quality for that session without changing it.
@@ -102,7 +104,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 Browser checks need a running build (`npm run build && npm start`):
 
 ```bash
-npm run check:browser                                  # all: intro, save, combat, mobile, ai, shots
+npm run check:browser                                  # all: intro, save, combat, boat, mobile, ai, shots
 npm run check:browser -- http://localhost:3123 save ai # pick a URL and checks
 ```
 

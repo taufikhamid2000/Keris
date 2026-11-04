@@ -63,6 +63,8 @@ export interface LevelDef {
   water: Rect[];
   /** walkable timber over water: bridges (with side rails) and jetties */
   decks: (Rect & { rails?: boolean })[];
+  /** sampans moored on the water, free to take (E) */
+  boats: { x: number; z: number; rotY: number }[];
   /** market stalls */
   stalls: Rect[];
   wells: Vec2[];
@@ -261,7 +263,7 @@ const RIVER = { x: 0, z: 41.5, w: 80, d: 9 };
  * and a narrow plank on the west side cross the river; the upper kampung has its own jetty on the river bank.
  * Every mission plays on this map and only sets its own guards, start, exit and wording.
  */
-const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "bounds"> = {
+const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "water" | "decks" | "boats" | "bounds"> = {
   seed: 1511,
   shoreZ: -31,
   houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses],
@@ -289,6 +291,14 @@ const WORLD: Area & Pick<LevelDef, "seed" | "shoreZ" | "palisade" | "jetty" | "w
     { x: -30, z: RIVER.z, w: 1.6, d: RIVER.d + 3 },
     // the upper kampung's jetty, out from its south bank
     { x: 0, z: -34 + KAMPUNG_DZ, w: 3, d: 8 },
+  ],
+  boats: [
+    // by the harbour bank, a short walk from the Bridge Battery start
+    { x: -21, z: 38.6, rotY: Math.PI / 2 },
+    // alongside the kampung's river jetty
+    { x: 3.4, z: 43, rotY: 0 },
+    // the east end, under the kampung's south-east houses
+    { x: 26, z: 44.4, rotY: Math.PI / 2 },
   ],
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6 + KAMPUNG_DZ, jettyZ: -31, jettyHalf: 1.1 },
 };

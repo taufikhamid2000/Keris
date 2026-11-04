@@ -48,6 +48,7 @@ On itch.io choose "Download Now", then "No thanks, just take me to the downloads
 | hit | flinching from a blow, and a parried guard reeling | `hit` |
 | block | the player's parry stance, and readying a heavy strike (falls back to idle) | `block` |
 | heavy | the player's heavy strike (falls back to stab) | `heavy` |
+| sit | the player sitting in a sampan (falls back to crouch idle) | `sit` |
 
 A one-clip file (e.g. `run.fbx`) wins over the library's pick for that slot.
 

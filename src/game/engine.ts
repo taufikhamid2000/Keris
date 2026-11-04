@@ -494,7 +494,7 @@ export class Game {
     this.loot = this.buildLoot();
     this.takeBoats();
     this.takeHorses();
-    this.nav = buildNav(this.level.colliders, this.level.bounds);
+    this.nav = buildNav(this.level.colliders, this.navBounds());
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
     loadRigs()
@@ -1134,7 +1134,7 @@ export class Game {
     this.takeBoats();
     this.takeHorses();
     this.dressFoliage();
-    this.nav = buildNav(this.level.colliders, this.level.bounds);
+    this.nav = buildNav(this.level.colliders, this.navBounds());
     this.scene.add(this.level.root);
     if (this.navDbg) {
       this.scene.remove(this.navDbg.group);
@@ -1538,6 +1538,16 @@ export class Game {
     }
   }
 
+  /**
+   * The guards' map reaches out to sea so the ship's crew can patrol its deck; the open sea itself (past the jetty's
+   * end) is water, so no one walks on it.
+   */
+  private navBounds() {
+    const b = this.level.bounds;
+    const minZ = b.minZ - SWIM.seaReach;
+    return { ...b, minZ, water: [...b.water, { minX: b.minX - 1, maxX: b.maxX + 1, minZ: minZ - 1, maxZ: b.minZ }] };
+  }
+
   /** in the sea: past the shoreline */
   private inSea(_x: number, z: number) {
     return z < this.level.bounds.jettyZ - 0.1;
@@ -1861,9 +1871,16 @@ export class Game {
     const d = dist2D(g, pt);
     if (Math.abs(wrapAngle(want - g.yaw)) < 0.9) {
       const step = Math.min(speed * dt, d);
+      const ox = g.x;
+      const oz = g.z;
       g.x += Math.sin(g.yaw) * step;
       g.z += Math.cos(g.yaw) * step;
       pushOut(g, 0.45, this.level.colliders, g.y);
+      // guards never wade or swim: a step off a deck, a jetty or a bank into the water is refused
+      if (this.waterAt(g.x, g.z) && groundHeight(g.x, g.z, g.y, this.level.colliders) < 0.05) {
+        g.x = ox;
+        g.z = oz;
+      }
     }
     return d;
   }

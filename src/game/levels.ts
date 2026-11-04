@@ -518,13 +518,26 @@ const WORLD: Area &
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: MOUNT_Z1 - 1.4, jettyZ: -31, jettyHalf: 1.1 },
 };
 
-/** Patrols of the harbour, on every mission. */
+/** A spot on the anchored ship: u along its keel (stern -15 to bow 15), v across it (port to starboard, within 2.5), on deck or the aft castle. */
+const onShip = (u: number, v: number, y = 4) => {
+  const s = HARBOUR_AREA.ships[0];
+  return { x: s.x + Math.sin(s.rotY) * u + Math.cos(s.rotY) * v, y, z: s.z + Math.cos(s.rotY) * u - Math.sin(s.rotY) * v };
+};
+/** The ship's crew: two pacing the deck either side of the masts, and a lookout on the aft castle. */
+const SHIP_GUARDS: GuardDef[] = [
+  { waypoints: [onShip(-5, -2), onShip(12, -2)] },
+  { waypoints: [onShip(11, 2), onShip(-5, 2)] },
+  { waypoints: [onShip(-11.7, -1.8, 6.4), onShip(-11.7, 1.8, 6.4)] },
+];
+
+/** Patrols of the harbour (and the ship in the roads), on every mission. */
 const HARBOUR_GUARDS: GuardDef[] = [
   { waypoints: [{ x: -7.8, z: -24 }, { x: -7.8, z: 24 }] },
   { waypoints: [{ x: 8, z: -24 }, { x: 8, z: 24 }] },
   { waypoints: [{ x: -24, z: -8.5 }, { x: 24, z: -8.5 }] },
   { waypoints: [{ x: 24, z: 8.5 }, { x: -24, z: 8.5 }] },
   { waypoints: [{ x: -4.5, z: -4.5 }, { x: 4.5, z: -4.5 }, { x: 4.5, z: 4.5 }, { x: -4.5, z: 4.5 }] },
+  ...SHIP_GUARDS,
 ];
 /** The bridge sentry, pacing the north end, and a watch along the harbour's river bank. */
 const RIVER_GUARDS: GuardDef[] = [

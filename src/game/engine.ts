@@ -99,6 +99,8 @@ const STEP_H = 0.6;
 const CATCH_SECONDS = 2;
 const START_KNIVES = 6;
 const HEAD_H = 1.75;
+/** standing needs this much headroom; under a stilt house the player is held in a crouch */
+const STAND_H = 2.1;
 
 interface Guard {
   id: number;
@@ -259,6 +261,8 @@ export class Game {
   // player state
   private p = { x: 0, y: 0, z: 0, vy: 0, grounded: true, yaw: 0, moving: false, running: false };
   private crouchToggle = false;
+  /** a floor overhead is too low to stand under (stilt houses) */
+  private lowCeiling = false;
   private camYaw = (3 * Math.PI) / 4;
   private camPitch = 0.35;
   private camPos = new THREE.Vector3();
@@ -476,6 +480,7 @@ export class Game {
     this.hidden = false;
     this.carrying = null;
     this.crouchToggle = false;
+    this.lowCeiling = false;
     this.toastText = "";
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0;
     for (const g of this.guards) {
@@ -878,7 +883,7 @@ export class Game {
   }
 
   private get crouched() {
-    return this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.crouchToggle;
+    return this.lowCeiling || this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.crouchToggle;
   }
 
   private update(dt: number) {
@@ -975,6 +980,8 @@ export class Game {
       // holding Space against a wall climbs it
       if (this.keys.has("Space") && p.moving) this.tryClimb();
     }
+
+    this.lowCeiling = this.phase === "playing" && L.colliders.some((b) => b.minY > p.y + STEP_H && b.minY < p.y + STAND_H && p.x > b.minX - 0.15 && p.x < b.maxX + 0.15 && p.z > b.minZ - 0.15 && p.z < b.maxZ + 0.15);
 
     // ---- hiding
     this.hidden = L.hides.some((h) => p.y < 1 && dist2D(p, h) < h.r);

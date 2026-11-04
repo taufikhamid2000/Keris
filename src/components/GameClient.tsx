@@ -323,6 +323,11 @@ export default function GameClient() {
       Settings
     </button>
   );
+  const menuBtn = (
+    <button className="btn ghost" onClick={() => g()?.showTitle()}>
+      Main menu
+    </button>
+  );
   const resume = () => {
     if (touch) enterFullscreenLandscape();
     g()?.resume();
@@ -491,6 +496,7 @@ export default function GameClient() {
               Restart
             </button>
             {settingsBtn}
+            {menuBtn}
           </div>
         </div>
       )}
@@ -510,6 +516,7 @@ export default function GameClient() {
             <button className="btn" onClick={() => begin("start")}>
               Play again
             </button>
+            {menuBtn}
           </div>
         </div>
       )}
@@ -527,6 +534,7 @@ export default function GameClient() {
             <button className={`btn${checkpointHere === "target" ? " ghost" : ""}`} onClick={() => begin("start")}>
               {checkpointHere === "target" ? "Restart mission" : "Restart"}
             </button>
+            {menuBtn}
             <Best m={mission} />
           </div>
         </div>

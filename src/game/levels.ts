@@ -30,6 +30,13 @@ export interface GuardDef {
   isTarget?: boolean;
 }
 
+/**
+ * What the mission asks for before the escape to the jetty. Any level can use any kind:
+ * - kill: take down the guard marked isTarget
+ * - steal: walk up to an item and take it (E)
+ */
+export type ObjectiveDef = { kind: "kill" } | { kind: "steal"; at: { x: number; y: number; z: number } };
+
 export interface LevelDef {
   id: string;
   /** shown on the mission list */
@@ -65,22 +72,30 @@ export interface LevelDef {
   ships: { x: number; z: number; rotY: number }[];
   lamps: Vec2[];
   guards: GuardDef[];
+  objective: ObjectiveDef;
+  /** the mission fails the moment any guard raises the alarm */
+  undetected?: boolean;
   start: Vec2;
   exit: Vec2;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number; jettyZ: number; jettyHalf: number };
   /** mission wording on the title screen and the win screen */
   story: string;
-  /** shown on the title when the target-down checkpoint is saved, e.g. "the Kapitan is down" */
+  /** shown on the title when the objective-done checkpoint is saved, e.g. "the Kapitan is down" */
   checkpointLabel: string;
   win: { title: string; body: string };
   /** mission wording shown in the HUD */
   text: {
     objective: string;
     escape: string;
+    /** toast when the objective is done */
     targetDown: string;
-    targetSpotted: string;
-    strike: string;
-    leap: string;
+    /** kill: the target raised the alarm */
+    targetSpotted?: string;
+    /** kill: takedown prompts on the target */
+    strike?: string;
+    leap?: string;
+    /** steal: prompt next to the item */
+    take?: string;
   };
 }
 
@@ -163,6 +178,7 @@ export const HARBOUR: LevelDef = {
     { waypoints: [{ x: -4.5, z: -4.5 }, { x: 4.5, z: -4.5 }, { x: 4.5, z: 4.5 }, { x: -4.5, z: 4.5 }] },
     { waypoints: [{ x: -2.4, z: 5.8 }, { x: 2.4, z: 5.8 }], isTarget: true },
   ],
+  objective: { kind: "kill" },
   start: { x: -31.5, z: 31.5 },
   exit: { x: 0, z: -36 },
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6, jettyZ: -31, jettyHalf: 1.1 },
@@ -267,6 +283,7 @@ export const KAMPUNG: LevelDef = {
     // the clerk, pacing in front of the raised hall (its roof edge is 1.5 m away)
     { waypoints: [{ x: -22, z: -7.5 }, { x: -14, z: -7.5 }], isTarget: true },
   ],
+  objective: { kind: "kill" },
   start: { x: 31.5, z: 31.5 },
   exit: { x: 0, z: -36 },
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6, jettyZ: -31, jettyHalf: 1.1 },
@@ -289,8 +306,36 @@ export const KAMPUNG: LevelDef = {
   },
 };
 
+/** The same kampung after the clerk's death: the plans he hid are still under the penghulu's hall. */
+export const PLANS: LevelDef = {
+  ...KAMPUNG,
+  id: "plans",
+  name: "The Battery Plans",
+  missionId: "kampung-plans",
+  // the clerk's post is kept by an ordinary guard now
+  guards: KAMPUNG.guards.map((g) => ({ waypoints: g.waypoints })),
+  // a chest in the crawl space under the hall's back corner, clear of the solid upper tier
+  objective: { kind: "steal", at: { x: -23, y: 0, z: -18 } },
+  undetected: true,
+  story:
+    "The clerk is dead, but the battery plans he sold were never found. Word is he hid them in a chest under the penghulu's hall " +
+    "before the end. Crawl in beneath the floor, take them back, and leave by the jetty. No one may know you were here: " +
+    "if a single guard raises the alarm, the mission fails.",
+  checkpointLabel: "the plans are taken",
+  win: {
+    title: "The plans are recovered",
+    body: "The chest under the hall is empty and no one saw who emptied it. The battery's secrets are safe again.",
+  },
+  text: {
+    objective: "Find the chest hidden under the penghulu's hall",
+    escape: "Carry the plans to the jetty unseen",
+    targetDown: "You have the plans. Reach the jetty unseen.",
+    take: "Take the battery plans",
+  },
+};
+
 /** Every mission, in play order. */
-export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG];
+export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS];
 
 /** The level named by ?level=<id> in a query string, else the first mission. */
 export function levelFromSearch(search: string): LevelDef {

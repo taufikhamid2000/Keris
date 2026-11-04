@@ -5,8 +5,9 @@ import { LEVELS, initialLevel } from "./levels";
 describe.each(LEVELS.map((l) => [l.id, l] as const))("level %s", (_id, l) => {
   const inBounds = (p: { x: number; z: number }) => p.x >= l.bounds.minX && p.x <= l.bounds.maxX && p.z >= l.bounds.minZ && p.z <= l.bounds.maxZ;
 
-  it("has exactly one target guard and every guard patrols at least two waypoints", () => {
-    expect(l.guards.filter((g) => g.isTarget)).toHaveLength(1);
+  it("marks one target guard for a kill objective (none otherwise) and every guard patrols at least two waypoints", () => {
+    expect(l.guards.filter((g) => g.isTarget)).toHaveLength(l.objective.kind === "kill" ? 1 : 0);
+    if (l.objective.kind === "steal") expect(inBounds(l.objective.at)).toBe(true);
     for (const g of l.guards) expect(g.waypoints.length).toBeGreaterThanOrEqual(2);
   });
   it("keeps the start, exit and guard routes inside the playable bounds", () => {

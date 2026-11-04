@@ -37,7 +37,8 @@ import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD
 import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
-export type LoseReason = "caught" | null;
+/** caught: grabbed by an alert guard; detected: any alarm, on a mission that must stay unseen */
+export type LoseReason = "caught" | "detected" | null;
 
 export interface HudState {
   meter: number;
@@ -273,7 +274,13 @@ export class Game {
   private knives = START_KNIVES;
   private knifeCd = 0;
   private caught = 0;
-  private objective: "kill" | "escape" = "kill";
+  /** main: the level's objective (kill or steal) is still to do */
+  private objective: "main" | "escape" = "main";
+  /** steal objectives: the item's mesh, and whether it has been taken */
+  private loot: THREE.Group | null = null;
+  private taken = false;
+  /** set when an alarm is raised on an undetected mission; the mission ends after this frame's guards */
+  private detected = false;
   private hidden = false;
   private carrying: Guard | null = null;
   private hemi!: THREE.HemisphereLight;
@@ -361,6 +368,7 @@ export class Game {
     this.scene.add(sunDisc);
 
     this.level = buildLevel(this.levelDef, { lampLights: Q.lampLights });
+    this.loot = this.buildLoot();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
@@ -476,7 +484,10 @@ export class Game {
     this.knives = START_KNIVES;
     this.knifeCd = 0;
     this.caught = 0;
-    this.objective = "kill";
+    this.objective = "main";
+    this.taken = false;
+    this.detected = false;
+    if (this.loot) this.loot.visible = true;
     this.hidden = false;
     this.carrying = null;
     this.crouchToggle = false;
@@ -627,14 +638,47 @@ export class Game {
     this.lock();
   }
   private applyTargetCheckpoint() {
-    const t = this.guards.find((g) => g.isTarget);
-    if (!t) return;
-    t.dead = true;
-    this.p.x = t.x;
-    this.p.z = t.z;
+    const o = this.def.objective;
+    if (o.kind === "steal") {
+      this.taken = true;
+      if (this.loot) this.loot.visible = false;
+      this.p.x = o.at.x;
+      this.p.z = o.at.z;
+      this.p.y = o.at.y;
+    } else {
+      const t = this.guards.find((g) => g.isTarget);
+      if (!t) return;
+      t.dead = true;
+      this.p.x = t.x;
+      this.p.z = t.z;
+    }
     this.objective = "escape";
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
     this.syncMeshes();
+  }
+  /** The level's objective is done: open the escape, save the checkpoint. */
+  private completeObjective() {
+    this.objective = "escape";
+    (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
+    this.toast(this.level.text.targetDown);
+    this.cb.onCheckpoint?.("target");
+  }
+  /** A small chest with a gold band and a faint glow, for steal objectives; part of the level root so it is disposed with it. */
+  private buildLoot(): THREE.Group | null {
+    const o = this.def.objective;
+    if (o.kind !== "steal") return null;
+    const g = new THREE.Group();
+    add(g, shadowMesh(new THREE.BoxGeometry(0.8, 0.45, 0.5), std(0x5a3a1e)), 0, 0.23);
+    add(g, shadowMesh(new THREE.BoxGeometry(0.82, 0.08, 0.52), std(0xd9a93a, { metalness: 0.6, roughness: 0.4 })), 0, 0.32);
+    add(g, new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.18, depthWrite: false })), 0, 0.3);
+    g.position.set(o.at.x, o.at.y, o.at.z);
+    this.level.root.add(g);
+    return g;
+  }
+  /** steal objectives: the player is close enough to take the item */
+  private nearLoot() {
+    const o = this.def.objective;
+    return o.kind === "steal" && !this.taken && dist2D(this.p, o.at) < 1.4 && Math.abs(this.p.y - o.at.y) < 1.2;
   }
   /** Play stats for the current attempt (read when it ends). */
   stats(): RunStats {
@@ -716,7 +760,8 @@ export class Game {
   /** Test hook: can the mission be walked on the ground, start to target and target to exit? */
   debugRoute(): { toTarget: boolean; toExit: boolean } {
     const L = this.level;
-    const t = this.guards.find((g) => g.isTarget);
+    const o = this.def.objective;
+    const t = o.kind === "steal" ? o.at : this.guards.find((g) => g.isTarget);
     if (!t) return { toTarget: false, toExit: false };
     const at = (p: Vec2) => ({ x: p.x, y: 0, z: p.z });
     return {
@@ -806,6 +851,7 @@ export class Game {
     this.guards = [];
     this.def = def;
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
+    this.loot = this.buildLoot();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     if (this.navDbg) {
@@ -1002,6 +1048,11 @@ export class Game {
       return;
     }
 
+    if (this.detected) {
+      this.setPhase("lost", "detected");
+      return;
+    }
+
     // ---- escape
     if (this.objective === "escape" && dist2D(p, L.exit) < 2.4) {
       this.setPhase("won");
@@ -1137,12 +1188,13 @@ export class Game {
     if (now !== prev) {
       if (now === "alert") {
         this.run.alerts++;
+        if (this.def.undetected) this.detected = true;
         g.meter = 1;
         if (!g.lastKnown) {
           g.lastKnown = { x: p.x, z: p.z };
           g.lastKnownY = p.y;
         }
-        this.toast(found ? "A body was found!" : g.isTarget ? this.level.text.targetSpotted : "Spotted!");
+        this.toast(found ? "A body was found!" : g.isTarget ? (this.level.text.targetSpotted ?? "Spotted!") : "Spotted!");
         for (const o of this.guards) {
           if (o !== g && !o.dead && o.stun <= 0 && o.brain.state !== "alert" && dist2D(o, g) < 14) {
             o.brain = forceAlert();
@@ -1337,6 +1389,12 @@ export class Game {
 
   private tryTakedown() {
     if (this.climb || this.leap || this.carrying) return;
+    if (this.nearLoot()) {
+      this.taken = true;
+      if (this.loot) this.loot.visible = false;
+      this.completeObjective();
+      return;
+    }
     const { guard, air } = this.takedownTarget();
     if (!guard) return;
     if (air) {
@@ -1361,12 +1419,8 @@ export class Game {
     }
     this.p.yaw = yawTo(this.p, guard);
     for (const o of this.guards) if (!o.dead && o !== guard && dist2D(o, guard) < 5) this.hear(o, guard);
-    if (guard.isTarget) {
-      this.objective = "escape";
-      (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
-      this.toast(this.level.text.targetDown);
-      this.cb.onCheckpoint?.("target");
-    } else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
+    if (guard.isTarget && this.def.objective.kind === "kill") this.completeObjective();
+    else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
   }
 
   /** F: pick up the nearest body, or drop the one being carried (hidden if dropped inside cover). */
@@ -1457,20 +1511,23 @@ export class Game {
     const tg = this.takedownTarget();
     let prompt = "";
     if (this.climb || this.leap) prompt = "";
-    else if (tg.guard && tg.air) prompt = tg.guard.isTarget ? `E  ${this.level.text.leap}` : "E  Air assassination";
-    else if (tg.guard) prompt = tg.guard.isTarget ? `E  ${this.level.text.strike}` : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
+    else if (this.nearLoot() && !this.carrying) prompt = `E  ${this.level.text.take ?? "Take it"}`;
+    else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : "E  Air assassination";
+    else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
     else if (this.nearestBody()) prompt = "F  Carry body";
     else if (this.hidden) prompt = "Hidden";
 
-    const tgt = this.objective === "kill" ? this.guards.find((g) => g.isTarget && !g.dead) : null;
+    const o = this.def.objective;
+    const tgt: Vec2 | null | undefined =
+      this.objective !== "main" ? null : o.kind === "steal" ? o.at : this.guards.find((g) => g.isTarget && !g.dead);
     const obj: Vec2 = tgt ?? this.level.exit;
     const rel = wrapAngle(yawTo(p, obj) - this.camYaw);
     return {
       meter,
       alert,
-      objective: this.objective === "kill" ? this.level.text.objective : this.level.text.escape,
+      objective: this.objective === "main" ? this.level.text.objective : this.level.text.escape,
       northDeg: (this.camYaw * 180) / Math.PI,
       objDeg: (-rel * 180) / Math.PI,
       eagle: this.eagle,

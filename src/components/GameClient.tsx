@@ -524,8 +524,8 @@ export default function GameClient() {
       {phase === "lost" && (
         <div className="overlay lost">
           <div className="panel">
-            <h2>{reason === "caught" ? "You were caught" : "Mission failed"}</h2>
-            <p>The alarm spread through the lanes. Try another route.</p>
+            <h2>{reason === "caught" ? "You were caught" : reason === "detected" ? "You were seen" : "Mission failed"}</h2>
+            <p>{reason === "detected" ? "This had to be done unseen, and the alarm is up. Try another route." : "The alarm spread through the lanes. Try another route."}</p>
             {checkpointHere === "target" && (
               <button className="btn" onClick={() => begin("target")}>
                 Retry from checkpoint

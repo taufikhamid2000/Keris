@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { buildLevel, type Level } from "./level";
 import { HARBOUR, type LevelDef } from "./levels";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
   BODY,
   bodyReaction,
@@ -109,6 +111,12 @@ interface Guard {
   group: THREE.Group;
   body: THREE.Mesh;
   silhouette: THREE.Mesh;
+  /** the procedural figure's parts, hidden when a Mixamo model replaces them */
+  figure: THREE.Object3D[];
+  rig: Rig | null;
+  /** position at the last render, to pick walk or run from the speed */
+  px: number;
+  pz: number;
   marker: THREE.Mesh;
   cone: THREE.Mesh;
   coneMat: THREE.MeshBasicMaterial;
@@ -206,7 +214,7 @@ function makePendekar() {
   const tanjak = add(g, shadowMesh(new THREE.ConeGeometry(0.24, 0.32, 6), std(0x7a1f1a)), 0, 1.92);
   tanjak.rotation.z = 0.15;
   add(g, shadowMesh(new THREE.CylinderGeometry(0.035, 0.05, 0.42, 5), std(0xd9a93a)), 0.34, 0.9).rotation.z = 0.5;
-  return { group: g, body };
+  return { group: g, body, figure: [...g.children] };
 }
 
 function makeGuardFigure(isTarget: boolean) {
@@ -224,7 +232,7 @@ function makeGuardFigure(isTarget: boolean) {
   const gun = add(g, shadowMesh(new THREE.CylinderGeometry(0.035, 0.035, 1.5, 5), std(0x2a2118)), 0.38, 1.1);
   gun.rotation.x = Math.PI / 2;
   gun.rotation.z = 0.1;
-  return { group: g, body };
+  return { group: g, body, figure: [...g.children] };
 }
 
 function makeConeGeo(range: number, half: number) {
@@ -252,6 +260,12 @@ export class Game {
   private navDbg: NavDebug | null = null;
   private sky: THREE.Mesh;
   private player = makePendekar();
+  /** Mixamo models, once loaded (empty when public/models has none) */
+  private rigs: Partial<Record<Role, RigTemplate>> = {};
+  private playerRig: Rig | null = null;
+  /** seconds left of the stab animation after a takedown */
+  private stabT = 0;
+  private disposed = false;
   private guards: Guard[] = [];
   private keys = new Set<string>();
   private raf = 0;
@@ -372,6 +386,13 @@ export class Game {
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
+    loadRigs()
+      .then((r) => {
+        if (this.disposed) return;
+        this.rigs = r;
+        this.attachRigs();
+      })
+      .catch((e) => console.warn("[models] loading failed, keeping the built-in figures", e));
 
     this.knifeMesh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 5), new THREE.MeshBasicMaterial({ color: 0xe6e6e6 }));
     this.knifeMesh.visible = false;
@@ -436,11 +457,15 @@ export class Game {
     }
 
     this.scene.add(fig.group);
-    return {
+    const guard: Guard = {
       id,
       isTarget,
       group: fig.group,
       body: fig.body,
+      figure: fig.figure,
+      rig: null,
+      px: waypoints[0].x,
+      pz: waypoints[0].z,
       silhouette,
       marker,
       cone,
@@ -471,6 +496,8 @@ export class Game {
       noiseFlag: false,
       seesPlayer: false,
     };
+    this.attachGuardRig(guard);
+    return guard;
   }
 
   private resetWorld() {
@@ -847,7 +874,10 @@ export class Game {
     this.scene.remove(this.level.root);
     // geometries are per level; materials come from a shared cache, so they are kept
     this.level.root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
-    for (const g of this.guards) this.scene.remove(g.group);
+    for (const g of this.guards) {
+      g.rig?.dispose();
+      this.scene.remove(g.group);
+    }
     this.guards = [];
     this.def = def;
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
@@ -862,7 +892,53 @@ export class Game {
     this.level.guards.forEach((gd, i) => this.guards.push(this.makeGuard(gd.waypoints, !!gd.isTarget, i)));
     this.resetWorld();
   }
+  /** Swap the procedural figures for the loaded models (player and every guard that has none yet). */
+  private attachRigs() {
+    const pt = this.rigs.pendekar;
+    if (pt && !this.playerRig) {
+      this.playerRig = new Rig(pt, cloneSkinned);
+      this.player.figure.forEach((o) => (o.visible = false));
+      this.player.group.add(this.playerRig.object);
+      this.playerRig.play("idle", 0);
+    }
+    for (const g of this.guards) this.attachGuardRig(g);
+  }
+  private attachGuardRig(g: Guard) {
+    const t = g.isTarget ? this.rigs.target : this.rigs.guard;
+    if (!t || g.rig) return;
+    g.rig = new Rig(t, cloneSkinned);
+    g.figure.forEach((o) => (o.visible = false));
+    g.group.add(g.rig.object);
+    g.rig.play("idle", 0);
+  }
+  /** Pick each character's animation from what it is doing, and advance the mixers. */
+  private animateRigs(dt: number) {
+    const p = this.p;
+    const pr = this.playerRig;
+    if (pr) {
+      this.stabT = Math.max(0, this.stabT - dt);
+      let a: Anim;
+      if (this.stabT > 0 && pr.has("stab")) a = "stab";
+      else if (this.leap || this.climb || (!p.grounded && pr.has("jump"))) a = "jump";
+      else if (this.carrying) a = "carry";
+      else if (this.phase !== "title" && this.crouched) a = p.moving ? "crouchWalk" : "crouchIdle";
+      else a = p.moving ? (p.running ? "run" : "walk") : "idle";
+      pr.play(a);
+      pr.update(dt);
+    }
+    for (const g of this.guards) {
+      const speed = dt > 0 ? Math.hypot(g.x - g.px, g.z - g.pz) / dt : 0;
+      g.px = g.x;
+      g.pz = g.z;
+      if (!g.rig) continue;
+      g.rig.play(g.dead ? "death" : g.stun > 0 ? "idle" : speed > 4 ? "run" : speed > 0.3 ? "walk" : "idle");
+      g.rig.update(dt);
+    }
+  }
   dispose() {
+    this.disposed = true;
+    this.playerRig?.dispose();
+    for (const g of this.guards) g.rig?.dispose();
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
     this.renderer.dispose();
@@ -1407,6 +1483,7 @@ export class Game {
   }
 
   private killGuard(guard: Guard, msg: string) {
+    this.stabT = 0.7;
     guard.dead = true;
     guard.meter = 0;
     guard.climb = null;
@@ -1548,9 +1625,10 @@ export class Game {
     this.player.group.position.set(p.x, p.y, p.z);
     this.player.group.rotation.y = p.yaw;
     for (const g of this.guards) {
-      g.group.position.set(g.x, g.y + (g.dead && !g.carried ? 0.25 * g.fall : 0), g.z);
+      const tip = g.dead && !g.rig?.has("death");
+      g.group.position.set(g.x, g.y + (tip && !g.carried ? 0.25 * g.fall : 0), g.z);
       g.group.rotation.y = g.yaw;
-      g.group.rotation.x = g.dead ? -g.fall * (Math.PI / 2) : 0;
+      g.group.rotation.x = tip ? -g.fall * (Math.PI / 2) : 0;
     }
   }
 
@@ -1561,9 +1639,12 @@ export class Game {
 
     const crouch = this.phase !== "title" && this.crouched;
     const bob = p.moving && p.grounded ? Math.sin(this.time * (p.running ? 13 : 8)) * 0.04 : 0;
-    this.player.group.scale.y = crouch ? 0.72 : 1;
+    this.animateRigs(dt);
+    // the built-in figure squashes and bobs; a model has crouch and walk clips instead
+    const rigged = !!this.playerRig;
+    this.player.group.scale.y = crouch && !rigged ? 0.72 : 1;
     this.player.body.rotation.z = p.running ? 0.12 : 0;
-    this.player.group.position.y = p.y + bob;
+    this.player.group.position.y = p.y + (rigged ? 0 : bob);
     this.player.group.visible = this.phase !== "title" && this.phase !== "intro";
 
     for (const g of this.guards) {

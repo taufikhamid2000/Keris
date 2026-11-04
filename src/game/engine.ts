@@ -113,7 +113,7 @@ const ROCK = { h: 1, color: 0x8a877d };
  * Swimming in rivers and pools. y is the player's feet: at the surface only the head and shoulders show above the
  * water (the ground plane hides the rest); diving takes the player fully under, unseen, for as long as breath lasts.
  */
-const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5, seaReach: 72, seaY: -0.25 };
+const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5, seaReach: 72, seaY: -0.25, climbRise: 5.2 };
 // dusk fill levels; Mata Helang drops them for contrast
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
@@ -1402,7 +1402,7 @@ export class Game {
       }
       pushOut(p, PLAYER_R, L.colliders, p.y);
       // walking (or dropping) into a river or pool starts a swim; carrying a body, the bank stops you as before
-      if (this.swimmable(p.x, p.z) && !this.carrying && !this.roll && p.y < SWIM.maxEntryY) {
+      if (this.intoWater(p.x, p.z) && !this.carrying && !this.roll && p.y < SWIM.maxEntryY) {
         this.enterWater();
         this.applyBounds();
       } else this.applyBounds(from);
@@ -1476,7 +1476,9 @@ export class Game {
     const p = this.p;
     s.gasp = Math.max(0, s.gasp - dt);
     const wantDive = this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.crouchToggle;
-    s.under = wantDive && s.gasp === 0 && s.breath > 0;
+    // under a jetty, bridge or hull a diver stays down until clear (or out of breath)
+    const roofed = s.under && this.level.colliders.some((b) => b.minY > p.y && b.minY < SWIM.surfaceY + HEAD_H && p.x > b.minX - PLAYER_R && p.x < b.maxX + PLAYER_R && p.z > b.minZ - PLAYER_R && p.z < b.maxZ + PLAYER_R);
+    s.under = (wantDive || roofed) && s.gasp === 0 && s.breath > 0;
     if (s.under) {
       s.breath = Math.max(0, s.breath - dt);
       if (s.breath === 0) {
@@ -1496,8 +1498,9 @@ export class Game {
       this.moveDir = { x: mx, z: mz };
       p.yaw += clamp(wrapAngle(Math.atan2(mx, mz) - p.yaw), -8 * dt, 8 * dt);
       const q = { x: p.x + mx * speed * dt, z: p.z + mz * speed * dt };
-      pushOut(q, PLAYER_R, this.level.colliders, 0);
-      if (!this.swimmable(q.x, q.z)) {
+      // jetties, decks and hulls stop a swimmer at the surface (Space climbs aboard); a diver passes under decks
+      pushOut(q, PLAYER_R, this.level.colliders, p.y);
+      if (!this.waterAt(q.x, q.z)) {
         // ashore (a bank, or up onto a jetty) unless something tall is in the way; surface first when diving
         const g = groundHeight(q.x, q.z, 0, this.level.colliders);
         if (!s.under && g <= STEP_H) {
@@ -1522,28 +1525,32 @@ export class Game {
     const b = this.level.bounds;
     const p = this.p;
     p.x = clamp(p.x, b.minX, b.maxX);
-    // swimmers may head out to sea, past the jetty
-    p.z = clamp(p.z, this.swim ? b.minZ - SWIM.seaReach : b.minZ, b.maxZ);
-    if (p.z < b.jettyZ && !this.swim) p.x = clamp(p.x, -b.jettyHalf, b.jettyHalf);
-    if (!from || !this.wet(p.x, p.z)) return;
-    // stepping into the river: keep whichever axis stays dry, so the player slides along the bank or the bridge rail
-    if (!this.wet(from.x, p.z)) p.x = from.x;
-    else if (!this.wet(p.x, from.z)) p.z = from.z;
+    // the sea is open past the jetty, out to the anchored ship (swimming, or walking a deck out there)
+    p.z = clamp(p.z, b.minZ - SWIM.seaReach, b.maxZ);
+    if (!from || !this.intoWater(p.x, p.z)) return;
+    // stepping into water without swimming (carrying a body): keep whichever axis stays dry, so the player slides
+    // along the bank, the bridge rail or the jetty's edge
+    if (!this.intoWater(from.x, p.z)) p.x = from.x;
+    else if (!this.intoWater(p.x, from.z)) p.z = from.z;
     else {
       p.x = from.x;
       p.z = from.z;
     }
   }
 
-  /** in the sea: past the shoreline and off the jetty */
-  private inSea(x: number, z: number) {
-    const j = this.def.jetty;
-    return z < this.level.bounds.jettyZ - 0.1 && !(Math.abs(x - j.x) < j.w / 2 - 0.1 && Math.abs(z - j.z) < j.d / 2);
+  /** in the sea: past the shoreline */
+  private inSea(_x: number, z: number) {
+    return z < this.level.bounds.jettyZ - 0.1;
   }
 
-  /** water the player can swim in: rivers, pools and the sea */
-  private swimmable(x: number, z: number) {
-    return this.wet(x, z) || this.inSea(x, z);
+  /** water under this spot (rivers, pools, the sea), decks and boats or not */
+  private waterAt(x: number, z: number) {
+    return this.level.bounds.water.some((a) => inArea(a, x, z, 0.1)) || this.inSea(x, z);
+  }
+
+  /** a step here lands in the water: water below, and no jetty, deck or hull underfoot */
+  private intoWater(x: number, z: number) {
+    return this.waterAt(x, z) && groundHeight(x, z, this.p.y, this.level.colliders) < 0.05;
   }
 
   /** over a river and off every bridge or jetty */
@@ -1552,6 +1559,11 @@ export class Game {
   }
 
   private tryJumpOrClimb() {
+    if (this.swim) {
+      // from the water: up onto a jetty, deck, prahu or the ship's side
+      if (!this.climb && !this.swim.under && this.tryClimb(SWIM.climbRise)) this.swim = null;
+      return;
+    }
     if (this.climb || this.leap || this.mounted) return;
     if (this.tryClimb()) return;
     if (this.p.grounded) {
@@ -1561,8 +1573,24 @@ export class Game {
   }
 
   /** Vault / climb onto a ledge in front of the player (up to ~3.7 m). */
-  private tryClimb(): boolean {
-    if (this.climb) return false;
+  private tryClimb(maxRise = 3.7): boolean {
+    const t = this.findClimb(maxRise);
+    if (!t) return false;
+    const p = this.p;
+    const h = t.y - p.y;
+    this.climb = {
+      t: 0,
+      dur: 0.35 + h * 0.13,
+      from: new THREE.Vector3(p.x, p.y, p.z),
+      to: new THREE.Vector3(t.x, t.y, t.z),
+    };
+    p.vy = 0;
+    return true;
+  }
+
+  /** The ledge the player faces and could climb (rise above the feet at most maxRise): where they would land. */
+  private findClimb(maxRise: number): { x: number; y: number; z: number } | null {
+    if (this.climb) return null;
     const p = this.p;
     const dx = Math.sin(p.yaw);
     const dz = Math.cos(p.yaw);
@@ -1571,7 +1599,7 @@ export class Game {
       const px = p.x + dx * (PLAYER_R + reach);
       const pz = p.z + dz * (PLAYER_R + reach);
       for (const b of this.level.colliders) {
-        if (b.maxY <= p.y + STEP_H || b.maxY > p.y + 3.7) continue;
+        if (b.maxY <= p.y + STEP_H || b.maxY > p.y + maxRise) continue;
         // standing under a raised floor: do not climb up through it
         if (b.minY > p.y && p.x >= b.minX && p.x <= b.maxX && p.z >= b.minZ && p.z <= b.maxZ) continue;
         if (px < b.minX - 0.05 || px > b.maxX + 0.05 || pz < b.minZ - 0.05 || pz > b.maxZ + 0.05) continue;
@@ -1579,18 +1607,10 @@ export class Game {
       }
       if (best) break;
     }
-    if (!best) return false;
+    if (!best) return null;
     const tx = clamp(p.x + dx * (PLAYER_R + 0.95), best.minX + 0.5, best.maxX - 0.5);
     const tz = clamp(p.z + dz * (PLAYER_R + 0.95), best.minZ + 0.5, best.maxZ - 0.5);
-    const h = best.maxY - p.y;
-    this.climb = {
-      t: 0,
-      dur: 0.35 + h * 0.13,
-      from: new THREE.Vector3(p.x, p.y, p.z),
-      to: new THREE.Vector3(tx, best.maxY, tz),
-    };
-    p.vy = 0;
-    return true;
+    return { x: tx, y: best.maxY, z: tz };
   }
 
   // ------------------------------------------------------------------ guards
@@ -2468,7 +2488,12 @@ export class Game {
     const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
     const foe = this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
-    else if (this.swim) prompt = this.nearBoat() ? "E  Climb into the sampan" : this.swim.under ? "Diving: unseen" : this.swim.gasp > 0 ? "Catching your breath" : "Ctrl / C  Dive";
+    else if (this.swim)
+      prompt = this.nearBoat()
+        ? "E  Climb into the sampan"
+        : !this.swim.under && this.findClimb(SWIM.climbRise)
+          ? "Space  Climb up"
+          : this.swim.under ? "Diving: unseen" : this.swim.gasp > 0 ? "Catching your breath" : "Ctrl / C  Dive";
     else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
     else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
     else if (this.horse) prompt = this.horseSpot() ? "E  Dismount" : "";

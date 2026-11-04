@@ -561,13 +561,14 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     g.rotation.y = rotY;
     g.scale.setScalar(scale);
     root.add(g);
-    // the hull as a row of small squares along its keel (colliders are axis-aligned, the hull is turned). 0.7 high:
-    // enough to stop a swimmer, too low to be a ledge for the guards' map
+    // the hull as a row of small squares along its keel (colliders are axis-aligned, the hull is turned), topped at
+    // the gunwale: it stops a swimmer, a swimmer can climb aboard (Space), and a walker can stand in it
     const half = 3.2 * scale;
+    const deck = -0.1 + 0.35 * scale;
     for (let u = -half + 0.5 * scale; u <= half - 0.5 * scale + 1e-6; u += 0.6 * scale) {
       const hw = 0.9 * scale * Math.sqrt(Math.max(0, 1 - (u / half) ** 2)) * 0.9;
       if (hw < 0.2) continue;
-      addCollider(boxOf(x + Math.sin(rotY) * u, z + Math.cos(rotY) * u, 2 * hw, 2 * hw, 0.7, -3));
+      addCollider(boxOf(x + Math.sin(rotY) * u, z + Math.cos(rotY) * u, 2 * hw, 2 * hw, deck, -3));
     }
   }
   for (const b of def.prahus) prahu(b.x, b.z, b.rotY, b.scale);
@@ -583,8 +584,22 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     g.position.set(ship.x, 0, ship.z);
     g.rotation.y = ship.rotY;
     root.add(g);
-    // the hull (9 x 30, turned) as squares along its keel, low like the prahus' so it stays off the guards' map
-    for (let u = -13; u <= 13; u += 2.6) addCollider(boxOf(ship.x + Math.sin(ship.rotY) * u, ship.z + Math.cos(ship.rotY) * u, 8, 8, 0.7, -3));
+    // the hull (9 x 30, turned) as squares along its keel, sized to stay inside the turned hull: the deck at 4 m, the
+    // aft castle 2.4 m above it (climbable from the deck), and the three masts
+    const along = (u: number) => ({ x: ship.x + Math.sin(ship.rotY) * u, z: ship.z + Math.cos(ship.rotY) * u });
+    const side = (2 * 4.5) / (Math.abs(Math.cos(ship.rotY)) + Math.abs(Math.sin(ship.rotY)));
+    for (let u = -15 + side / 2; u <= 15 - side / 2 + 1e-6; u += side / 2) {
+      const c = along(u);
+      addCollider(boxOf(c.x, c.z, side, side, 4, -3));
+    }
+    for (let u = -15 + side / 2; u <= -7 - side / 2 + 1e-6; u += side / 2) {
+      const c = along(u);
+      addCollider(boxOf(c.x, c.z, side, side, 6.4, 4));
+    }
+    for (const u of [-8, 1, 9]) {
+      const c = along(u);
+      addCollider(boxOf(c.x, c.z, 0.5, 0.5, 25, 4));
+    }
   }
 
   // ---------------------------------------------------------------- sampans (moving; the engine places them each frame)

@@ -142,9 +142,33 @@ try {
     return { dead: d.guards[i].dead, presses, hps, hp: d.hp, phase: d.phase };
   });
   check(r.dead && r.presses <= 4 && r.phase === "playing", "open strikes cut a guard down in three hits (one may be lost to his counter)", r);
+
+  // 7. a held strike is heavy: double damage and a stagger; the next strike kills
+  r = await pg.evaluate(() => {
+    const k = window.__keris;
+    const c = window.__c;
+    k.start("start");
+    const i = k.debugDuel();
+    // take his first blow so his cooldown leaves room to wind up
+    c.untilStrike(i, 0);
+    k.debugAdvance(0.2);
+    k.pressKey("KeyE");
+    k.debugAdvance(0.5);
+    const charging = k.debug().charging;
+    k.releaseKey("KeyE");
+    k.debugAdvance(0.3);
+    let g = k.debug().guards[i];
+    const after = { hp: g.hp, stagger: g.stagger };
+    c.press("KeyE");
+    k.debugAdvance(0.3);
+    g = k.debug().guards[i];
+    return { charging, ...after, dead: g.dead };
+  });
+  check(r.charging >= 0.45 && r.hp === 1 && r.stagger > 0, "a held strike is heavy: two damage and a stagger", r);
+  check(r.dead, "a strike on the guard a heavy blow staggered kills him", r);
   await pg.close();
 
-  // 7. on The Battery Plans, being seen still ends it
+  // 8. on The Battery Plans, being seen still ends it
   const pp = await open("plans");
   r = await pp.evaluate(() => {
     const k = window.__keris;

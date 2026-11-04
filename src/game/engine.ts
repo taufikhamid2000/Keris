@@ -123,6 +123,12 @@ const STAGGER = 1.8;
 const FLINCH = 0.35;
 const POISE = 1.5;
 const SWING = { dur: 0.45, hitAt: 0.15, reach: 2.3 };
+/**
+ * Heavy strike: hold E / left click for hold seconds, then let go (a tap is the light strike). The hold is its wind-up,
+ * so it lands about 0.6 s after the press, and a blow taken while holding cancels it. It deals damage and always
+ * staggers for stagger seconds, poise or not; a staggered guard dies to the next strike.
+ */
+const HEAVY = { hold: 0.45, dur: 0.6, hitAt: 0.15, damage: 2, stagger: 1.2 };
 const START_KNIVES = 6;
 const HEAD_H = 1.75;
 /** standing needs this much headroom; under a stilt house the player is held in a crouch */
@@ -327,7 +333,9 @@ export class Game {
   private rollCd = 0;
   private parryT = 0;
   private parryCd = 0;
-  private swing: { t: number; hit: boolean } | null = null;
+  private swing: { t: number; hit: boolean; heavy: boolean } | null = null;
+  /** seconds E / left click has been held toward a strike, or null when not readying one */
+  private charge: number | null = null;
   private lastGuardSwing = -9;
   private moveDir = { x: 0, z: 1 };
   private playerKick: Anim | null = null;
@@ -568,6 +576,7 @@ export class Game {
     this.parryT = 0;
     this.parryCd = 0;
     this.swing = null;
+    this.charge = null;
     this.stabT = 0;
     this.objective = "main";
     this.taken = false;
@@ -847,6 +856,7 @@ export class Game {
       hp: this.hp,
       rolling: !!this.roll,
       parrying: this.parryT > 0,
+      charging: this.charge,
       /** seconds from a guard starting his strike to it landing */
       windup: GUARD_ATK.windup,
       leaping: !!this.leap,
@@ -1035,7 +1045,8 @@ export class Game {
       let a: Anim;
       if (this.roll) a = "roll";
       else if (this.hurtAnimT > 0 && pr.has("hit")) a = "hit";
-      else if (this.stabT > 0 && pr.has("stab")) a = "stab";
+      else if (this.stabT > 0 && pr.has("stab")) a = this.swing?.heavy ? "heavy" : "stab";
+      else if (this.charge !== null) a = "block";
       else if (this.parryT > 0) a = "block";
       else if (this.leap || this.climb || (!p.grounded && pr.has("jump"))) a = "jump";
       else if (this.carrying) a = "carry";
@@ -1173,7 +1184,7 @@ export class Game {
       str /= len;
     }
     const crouched = this.crouched;
-    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && !this.swing && len > 0;
+    p.running = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (touchActive && tm.run)) && !crouched && !this.carrying && !this.swing && this.charge === null && len > 0;
 
     if (this.leap) {
       const l = this.leap;
@@ -1213,7 +1224,7 @@ export class Game {
       }
       p.moving = false;
     } else {
-      const speed = this.swing ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
+      const speed = this.swing || this.charge !== null ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       const rx = -Math.cos(this.camYaw);
@@ -1629,7 +1640,7 @@ export class Game {
     }
     const { guard, air } = this.takedownTarget();
     if (!guard) {
-      this.trySwing();
+      this.startCharge();
       return;
     }
     if (air) {
@@ -1662,6 +1673,7 @@ export class Game {
     const n = Math.hypot(d.x, d.z) || 1;
     this.roll = { t: 0, dx: d.x / n, dz: d.z / n };
     this.swing = null;
+    this.charge = null;
     this.parryT = 0;
     this.crouchToggle = false;
     this.playerKick = "roll";
@@ -1673,21 +1685,43 @@ export class Game {
     this.parryT = PARRY.win;
     this.parryCd = PARRY.win + PARRY.cd;
     this.swing = null;
+    this.charge = null;
     this.playerKick = "block";
     const g = this.hostileNear(4);
     if (g) this.p.yaw = yawTo(this.p, g);
   }
 
-  /** E / left click with no takedown on offer: an open keris strike at an alert guard in front. */
-  private trySwing() {
+  /** E / left click with no takedown on offer, an alert guard close: start readying a strike. Letting go swings it. */
+  private startCharge() {
+    if (this.charge !== null || this.swing || this.roll || this.climb || this.leap || this.carrying || !this.p.grounded) return;
+    if (!this.hostileNear(SWING.reach + 0.6)) return;
+    this.charge = 0;
+  }
+
+  /** While readying: count the hold, and on release swing light (a tap) or heavy (held long enough). */
+  private stepCharge(dt: number) {
+    if (this.charge === null) return;
+    if (this.keys.has("KeyE") || this.keys.has("Mouse0")) {
+      this.charge += dt;
+      const g = this.hostileNear(SWING.reach + 0.6);
+      if (g) this.p.yaw = yawTo(this.p, g);
+      return;
+    }
+    const heavy = this.charge >= HEAVY.hold;
+    this.charge = null;
+    this.trySwing(heavy);
+  }
+
+  /** An open keris strike at an alert guard in front: light, or heavy after a held press. */
+  private trySwing(heavy: boolean) {
     const p = this.p;
     if (this.swing || this.roll || this.climb || this.leap || this.carrying || !p.grounded) return;
     const g = this.hostileNear(SWING.reach + 0.6);
     if (!g) return;
     p.yaw = yawTo(p, g);
-    this.swing = { t: 0, hit: false };
-    this.stabT = SWING.dur;
-    this.playerKick = "stab";
+    this.swing = { t: 0, hit: false, heavy };
+    this.stabT = heavy ? HEAVY.dur : SWING.dur;
+    this.playerKick = heavy ? "heavy" : "stab";
   }
 
   private stepCombat(dt: number) {
@@ -1696,10 +1730,11 @@ export class Game {
     this.parryCd = Math.max(0, this.parryCd - dt);
     this.hurtT += dt;
     if (this.hurtT > REGEN_DELAY) this.hp = Math.min(MAX_HP, this.hp + dt / REGEN_STEP);
+    this.stepCharge(dt);
     const s = this.swing;
     if (!s) return;
     s.t += dt;
-    if (!s.hit && s.t >= SWING.hitAt) {
+    if (!s.hit && s.t >= (s.heavy ? HEAVY.hitAt : SWING.hitAt)) {
       s.hit = true;
       let g: Guard | null = null;
       for (const o of this.guards) {
@@ -1708,17 +1743,17 @@ export class Game {
         if (d > SWING.reach || Math.abs(wrapAngle(yawTo(p, o) - p.yaw)) > 1.0) continue;
         if (!g || d < dist2D(g, p)) g = o;
       }
-      if (g) this.strikeGuard(g);
+      if (g) this.strikeGuard(g, s.heavy);
     }
-    if (s.t >= SWING.dur) this.swing = null;
+    if (s.t >= (s.heavy ? HEAVY.dur : SWING.dur)) this.swing = null;
   }
 
-  private strikeGuard(g: Guard) {
+  private strikeGuard(g: Guard, heavy = false) {
     if (g.stagger > 0 || g.stun > 0) {
       this.killGuard(g, "Counter kill.");
       return;
     }
-    g.hp--;
+    g.hp -= heavy ? HEAVY.damage : 1;
     if (g.hp <= 0) {
       this.killGuard(g, "Cut down.");
       return;
@@ -1732,7 +1767,14 @@ export class Game {
     }
     g.lastKnown = { x: this.p.x, z: this.p.z };
     g.lastKnownY = this.p.y;
-    if (this.time - g.lastFlinch > POISE) {
+    if (heavy) {
+      // a heavy blow breaks his guard whatever his poise
+      g.stagger = HEAVY.stagger;
+      g.atk = null;
+      g.atkCd = Math.max(g.atkCd, HEAVY.stagger + 0.4);
+      g.animKick = "hit";
+      this.toast("Guard broken! Strike now.");
+    } else if (this.time - g.lastFlinch > POISE) {
       g.flinch = FLINCH;
       g.lastFlinch = this.time;
       g.atk = null;
@@ -1790,6 +1832,7 @@ export class Game {
     this.hurtAnimT = 0.4;
     this.playerKick = "hit";
     this.swing = null;
+    this.charge = null;
     // knocked back a step
     const d = dist2D(g, p) || 1;
     p.x += ((p.x - g.x) / d) * 0.5;
@@ -1908,10 +1951,11 @@ export class Game {
     const foe = this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
     else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
+    else if (this.charge !== null) prompt = this.charge >= HEAVY.hold ? "Let go: heavy strike" : "Hold for a heavy strike";
     else if (this.nearLoot() && !this.carrying) prompt = `E  ${this.level.text.take ?? "Take it"}`;
     else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : "E  Air assassination";
     else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stagger > 0 ? "E  Finish him" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
-    else if (foe && !this.carrying) prompt = "E  Strike  ·  R  Parry  ·  X  Roll";
+    else if (foe && !this.carrying) prompt = "E  Strike (hold: heavy)  ·  R  Parry  ·  X  Roll";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
     else if (this.nearestBody()) prompt = "F  Carry body";

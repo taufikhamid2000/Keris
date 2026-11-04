@@ -81,14 +81,14 @@ const CONTROLS: [string, string][] = [
   ["C / Ctrl", "Crouch (quieter)"],
   ["Space", "Jump / climb ledge"],
   ["Mouse", "Look"],
-  ["E / Left click", "Tikam: keris takedown from behind; in a fight, strike"],
+  ["E / Left click", "Tikam: keris takedown from behind. In a fight, tap to strike, hold and let go for a heavy strike that breaks his guard"],
   ["R / Right click", "Parry: just before a guard strikes (his marker flashes white), then strike to finish him"],
   ["X", "Roll: dodge a strike or break away"],
   ["Q", "Pisau lempar: stun / distract"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
-  ["Controller", "Sticks move / look, A jump, X tikam / strike, LT parry, B roll, RT knife, Y carry, R3 crouch, RB vision, LB run, Start pause"],
+  ["Controller", "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT knife, Y carry, R3 crouch, RB vision, LB run, Start pause"],
 ];
 
 const TOUCH_CONTROLS: [string, string][] = [
@@ -96,7 +96,7 @@ const TOUCH_CONTROLS: [string, string][] = [
   ["Drag right side", "Look"],
   ["Jump", "Jump / climb a ledge (hold at a wall)"],
   ["C", "Crouch toggle (quieter)"],
-  ["E", "Tikam: takedown from behind; in a fight, strike"],
+  ["E", "Tikam: takedown from behind. In a fight, tap to strike, hold for a heavy strike"],
   ["R", "Parry: just before a guard strikes (his marker flashes white)"],
   ["X", "Roll: dodge a strike or break away"],
   ["Q", "Pisau lempar: stun / distract"],

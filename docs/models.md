@@ -46,7 +46,8 @@ On itch.io choose "Download Now", then "No thanks, just take me to the downloads
 | death | guards when killed (else they tip over) | `death` |
 | roll | the player's dodge roll (falls back to jump) | `roll` |
 | hit | flinching from a blow, and a parried guard reeling | `hit` |
-| block | the player's parry stance (falls back to idle) | `block` |
+| block | the player's parry stance, and readying a heavy strike (falls back to idle) | `block` |
+| heavy | the player's heavy strike (falls back to stab) | `heavy` |
 
 A one-clip file (e.g. `run.fbx`) wins over the library's pick for that slot.
 

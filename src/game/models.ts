@@ -5,8 +5,8 @@ import * as THREE from "three";
 
 export type Role = "pendekar" | "guard" | "target";
 /** Animation slots the engine asks for. Missing ones fall back (see FALLBACK). */
-export type Anim = "idle" | "walk" | "run" | "crouchIdle" | "crouchWalk" | "stab" | "death" | "jump" | "carry" | "roll" | "hit" | "block";
-export const ANIMS: Anim[] = ["idle", "walk", "run", "crouchIdle", "crouchWalk", "stab", "death", "jump", "carry", "roll", "hit", "block"];
+export type Anim = "idle" | "walk" | "run" | "crouchIdle" | "crouchWalk" | "stab" | "death" | "jump" | "carry" | "roll" | "hit" | "block" | "heavy";
+export const ANIMS: Anim[] = ["idle", "walk", "run", "crouchIdle", "crouchWalk", "stab", "death", "jump", "carry", "roll", "hit", "block", "heavy"];
 
 /** one file per slot (any model extension), which wins over a clip picked from an animation library */
 export const ANIM_FILES: Record<Anim, string> = {
@@ -22,11 +22,12 @@ export const ANIM_FILES: Record<Anim, string> = {
   roll: "roll",
   hit: "hit",
   block: "block",
+  heavy: "heavy",
 };
 const MODEL_EXT = /\.(glb|gltf|fbx)$/i;
 /** played once and held on the last frame, instead of looping */
-const ONE_SHOT: Anim[] = ["stab", "death", "jump", "roll", "hit"];
-const FALLBACK: Partial<Record<Anim, Anim>> = { run: "walk", crouchIdle: "idle", crouchWalk: "walk", carry: "walk", roll: "jump", block: "idle" };
+const ONE_SHOT: Anim[] = ["stab", "death", "jump", "roll", "hit", "heavy"];
+const FALLBACK: Partial<Record<Anim, Anim>> = { run: "walk", crouchIdle: "idle", crouchWalk: "walk", carry: "walk", roll: "jump", block: "idle", heavy: "stab" };
 /** the target uses the guard files when it has none of its own */
 const ROLE_FALLBACK: Partial<Record<Role, Role>> = { target: "guard" };
 /** characters are scaled to this height (metres), whatever size the file was exported at */
@@ -74,6 +75,7 @@ const RULES: Record<Anim, ((n: string) => boolean)[]> = {
   hit: [(n) => /^hit(_chest)?$/.test(n), (n) => /hit|hurt|impact/.test(n) && !/head/.test(n), (n) => /hit|hurt/.test(n)],
   // no parry clip in the Quaternius pack: a held sword stance stands in
   block: [(n) => /block|parry/.test(n), (n) => /(sword|fight|combat).*idle/.test(n)],
+  heavy: [(n) => /heavy|power|slam|smash/.test(n) && /attack|strike|swing|slash/.test(n), (n) => /punch_cross|cross/.test(n), (n) => /heavy|power|slam/.test(n)],
 };
 export function matchClips(names: string[], overrides: Partial<Record<Anim, string>> = {}): Partial<Record<Anim, string>> {
   const out: Partial<Record<Anim, string>> = {};

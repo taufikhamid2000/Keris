@@ -17,7 +17,7 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | C or Ctrl | Crouch (quieter). Ctrl+W closes the tab in most browsers, so C is the safe choice |
 | Space | Jump, or climb a ledge in front of you |
 | Mouse | Look (pointer lock) |
-| E or left click | Tikam: keris takedown from behind, or on a stunned or parried guard. In a fight, an open strike |
+| E or left click | Tikam: keris takedown from behind, or on a stunned or parried guard. In a fight, tap for a strike, or hold and let go for a heavy strike |
 | R or right click | Parry: press just before a guard's strike lands (his marker flashes white) to stagger him |
 | X | Roll: dodge a strike or break away from a crowd |
 | Q | Pisau lempar: throw a knife to stun a guard, or make noise to distract |
@@ -27,7 +27,7 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 
 A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam / strike, LT parry, B roll, RT throw knife, Y carry, R3 crouch, RB Mata Helang, LB or L3 run, Start pause. On menus the d-pad moves between buttons and A or Start picks one; any button gets past the start screen, and A or Start skips the intro.
 
-Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. Being seen is a fight, not an instant loss. An alert guard in reach winds up a strike (his marker grows and flashes white): parry it to stagger him and finish him with E, or roll clear. Open strikes take three hits per guard, at most two guards swing at once, and you can take three cuts; health comes back slowly once you break away. On a mission that must stay unseen, the alarm still ends it.
+Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. Being seen is a fight, not an instant loss. An alert guard in reach winds up a strike (his marker grows and flashes white): parry it to stagger him and finish him with E, or roll clear. Open strikes take three hits per guard; a heavy strike (hold E, then let go) is slower and can be cut short by a blow, but deals double and always staggers him, so the next strike kills. Otherwise at most two guards swing at once, and you can take three cuts; health comes back slowly once you break away. On a mission that must stay unseen, the alarm still ends it.
 
 ## Playing on phone
 

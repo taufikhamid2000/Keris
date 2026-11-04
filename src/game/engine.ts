@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { buildLevel, type Level } from "./level";
+import { HARBOUR } from "./levels";
 import {
   BODY,
   bodyReaction,
@@ -349,7 +350,7 @@ export class Game {
     sunDisc.position.set(-180, 26, 140);
     this.scene.add(sunDisc);
 
-    this.level = buildLevel({ lampLights: Q.lampLights });
+    this.level = buildLevel(HARBOUR, { lampLights: Q.lampLights });
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
     this.scene.add(this.player.group);
@@ -1096,7 +1097,7 @@ export class Game {
           g.lastKnown = { x: p.x, z: p.z };
           g.lastKnownY = p.y;
         }
-        this.toast(found ? "A body was found!" : g.isTarget ? "The Kapitan has seen you!" : "Spotted!");
+        this.toast(found ? "A body was found!" : g.isTarget ? this.level.text.targetSpotted : "Spotted!");
         for (const o of this.guards) {
           if (o !== g && !o.dead && o.stun <= 0 && o.brain.state !== "alert" && dist2D(o, g) < 14) {
             o.brain = forceAlert();
@@ -1318,7 +1319,7 @@ export class Game {
     if (guard.isTarget) {
       this.objective = "escape";
       (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
-      this.toast("The Kapitan is down. Reach the jetty.");
+      this.toast(this.level.text.targetDown);
       this.cb.onCheckpoint?.("kapitan");
     } else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
   }
@@ -1411,8 +1412,8 @@ export class Game {
     const tg = this.takedownTarget();
     let prompt = "";
     if (this.climb || this.leap) prompt = "";
-    else if (tg.guard && tg.air) prompt = tg.guard.isTarget ? "E  Leap down on the Kapitan" : "E  Air assassination";
-    else if (tg.guard) prompt = tg.guard.isTarget ? "E  Strike the Kapitan with the keris" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
+    else if (tg.guard && tg.air) prompt = tg.guard.isTarget ? `E  ${this.level.text.leap}` : "E  Air assassination";
+    else if (tg.guard) prompt = tg.guard.isTarget ? `E  ${this.level.text.strike}` : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
     else if (this.nearestBody()) prompt = "F  Carry body";
@@ -1424,7 +1425,7 @@ export class Game {
     return {
       meter,
       alert,
-      objective: this.objective === "kill" ? "Find and silence the Kapitan of the bridge battery" : "Slip away to the jetty",
+      objective: this.objective === "kill" ? this.level.text.objective : this.level.text.escape,
       northDeg: (this.camYaw * 180) / Math.PI,
       objDeg: (-rel * 180) / Math.PI,
       eagle: this.eagle,

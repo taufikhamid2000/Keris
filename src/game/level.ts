@@ -1,18 +1,18 @@
 import * as THREE from "three";
 import type { Box, Vec2 } from "./logic";
+import { HARBOUR, type GuardDef, type LevelDef } from "./levels";
 import { spreadIndices } from "./touch";
 
-// Original, fully procedural Malacca-1511 kampung: timber stilt houses with atap
-// roofs, pasar stalls, a three-tier istana, a harbour with a jetty and prahu boats.
+// Fully procedural kit for a Malacca-1511 kampung: timber stilt houses with atap roofs,
+// pasar stalls, tiered istana, watch towers, a harbour with a jetty and prahu boats.
+// What goes where comes from a LevelDef (levels.ts).
+
+export type { GuardDef };
 
 export interface HideSpot {
   x: number;
   z: number;
   r: number;
-}
-export interface GuardDef {
-  waypoints: Vec2[];
-  isTarget?: boolean;
 }
 export interface Level {
   root: THREE.Group;
@@ -23,7 +23,8 @@ export interface Level {
   start: Vec2;
   exit: Vec2;
   exitBeam: THREE.Mesh;
-  bounds: { minX: number; maxX: number; minZ: number; maxZ: number; jettyZ: number; jettyHalf: number };
+  bounds: LevelDef["bounds"];
+  text: LevelDef["text"];
 }
 
 /** Height of the open space under a stilt house's floor. */
@@ -74,12 +75,12 @@ function atapRoof(w: number, d: number, topY: number, rise: number, color: numbe
   return m;
 }
 
-export function buildLevel(opts: { lampLights?: number } = {}): Level {
+export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number } = {}): Level {
   const root = new THREE.Group();
   const colliders: Box[] = [];
   const occluders: Box[] = [];
   const hides: HideSpot[] = [];
-  const rnd = seeded(1511);
+  const rnd = seeded(def.seed);
   const winLit: THREE.Matrix4[] = [];
   const winDark: THREE.Matrix4[] = [];
   const dummy = new THREE.Object3D();
@@ -165,7 +166,7 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
   })();
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 200), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0, -31 + 100);
+  ground.position.set(0, 0, def.shoreZ + 100);
   ground.receiveShadow = true;
   root.add(ground);
 
@@ -174,50 +175,25 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
     new THREE.MeshStandardMaterial({ color: 0x1c5560, roughness: 0.25, metalness: 0.35 }),
   );
   water.rotation.x = -Math.PI / 2;
-  water.position.set(0, -0.3, -31 - 150 + 1);
+  water.position.set(0, -0.3, def.shoreZ - 150 + 1);
   root.add(water);
   // wet shore line
-  root.add(mesh(new THREE.BoxGeometry(70, 0.12, 1.2), mat(0x5b4a35), 0, 0.02, -31.2, false));
+  root.add(mesh(new THREE.BoxGeometry(70, 0.12, 1.2), mat(0x5b4a35), 0, 0.02, def.shoreZ - 0.2, false));
 
-  // ---------------------------------------------------------------- blocks of houses (kampung lanes between)
+  // ---------------------------------------------------------------- houses (kampung lanes between) + palace tiers
   const wallCols = [0x7a5535, 0x6d4a30, 0x84613c, 0x5f4029];
   const roofCols = [0xb89a5a, 0xa98a4e, 0xc2a566];
   const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
-  const hs = (cx: number, cz: number, w: number, d: number, h: number) =>
-    house(cx, cz, w, d, h, pick(wallCols), pick(roofCols));
+  for (const h of def.houses) house(h.x, h.z, h.w, h.d, h.h, h.wall ?? pick(wallCols), h.roof ?? pick(roofCols), { windows: h.windows, stilts: h.stilts });
+  for (const f of def.finials) root.add(mesh(new THREE.ConeGeometry(0.35, 1.6, 8), mat(0xd9a93a, { emissive: 0x4a3200 }), f.x, f.y, f.z));
+  // low steps, climbable
+  for (const st of def.steps) {
+    addCollider(boxOf(st.x, st.z, st.w, st.d, st.h));
+    root.add(mesh(new THREE.BoxGeometry(st.w, st.h, st.d), mat(0x6b5a48), st.x, st.h / 2, st.z));
+  }
 
-  // SW (start side)
-  hs(-22, -22, 12, 5.6, 3.4);
-  hs(-22, -17.6, 12, 5.6, 3.4);
-  hs(-22, -26.2, 12, 3.2, 6.6);
-  // S middle
-  hs(0, -22, 12, 12, 3.4);
-  // SE
-  hs(22, -22, 12, 12, 3.4);
-  // W middle: low + tall
-  hs(-22, -3, 12, 6, 3.4);
-  hs(-22, 3, 12, 6, 6.6);
-  // E middle
-  hs(22, -3, 12, 6, 3.4);
-  hs(22, 3, 12, 6, 6.6);
-  // NW
-  hs(-22, 22, 12, 12, 3.4);
-  // NE: house plus watch tower
-  hs(22, 22, 12, 12, 3.4);
-
-  // Istana (sultanate palace), three tiers, north middle
-  house(0, 22, 13, 12, 3.4, 0x8a6a3a, 0x9a3b2a, { windows: true });
-  house(0, 22, 9, 8, 6.6, 0x93703f, 0x9a3b2a, { windows: true, stilts: false });
-  house(0, 22, 5, 4.4, 9.6, 0x9d7a45, 0x9a3b2a, { windows: false, stilts: false });
-  root.add(mesh(new THREE.ConeGeometry(0.35, 1.6, 8), mat(0xd9a93a, { emissive: 0x4a3200 }), 0, 10.4, 22));
-  // palace steps (low, climbable)
-  addCollider(boxOf(0, 15.2, 5, 1.4, 0.9));
-  root.add(mesh(new THREE.BoxGeometry(5, 0.9, 1.4), mat(0x6b5a48), 0, 0.45, 15.2));
-
-  // Watch tower (kubu), NE corner of the block
-  {
-    const tx = 17.3,
-      tz = 17.3;
+  // Watch towers (kubu)
+  for (const { x: tx, z: tz } of def.towers) {
     addCollider(boxOf(tx, tz, 3.6, 3.6, 15, 11.5));
     for (const sx of [-1, 1])
       for (const sz of [-1, 1]) addCollider(boxOf(tx + sx * 1, tz + sz * 1, 0.5, 0.5, 11.5));
@@ -244,10 +220,11 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
     posts.push(dummy.matrix.clone());
     dummy.scale.set(1, 1, 1);
   };
-  for (let x = -35; x <= 35; x += 0.55) postAt(x, 35, 4.2 + rnd() * 0.5);
-  for (let z = -31; z <= 35; z += 0.55) {
-    postAt(-35, z, 4.2 + rnd() * 0.5);
-    postAt(35, z, 4.2 + rnd() * 0.5);
+  const pal = def.palisade;
+  for (let x = pal.minX; x <= pal.maxX; x += 0.55) postAt(x, pal.maxZ, 4.2 + rnd() * 0.5);
+  for (let z = pal.minZ; z <= pal.maxZ; z += 0.55) {
+    postAt(pal.minX, z, 4.2 + rnd() * 0.5);
+    postAt(pal.maxX, z, 4.2 + rnd() * 0.5);
   }
   const postGeo = new THREE.CylinderGeometry(0.22, 0.26, 1, 6);
   const postMesh = new THREE.InstancedMesh(postGeo, mat(0x4e3622), posts.length);
@@ -257,26 +234,15 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
   root.add(postMesh);
 
   // ---------------------------------------------------------------- jetty
-  addCollider(boxOf(0, -34, 3, 8, 0.4));
-  root.add(mesh(new THREE.BoxGeometry(3, 0.22, 8), mat(0x6e5237), 0, 0.28, -34));
-  for (let z = -37.5; z <= -30.5; z += 1.75)
-    for (const sx of [-1, 1]) root.add(mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.6, 6), mat(0x3d2a1a), sx * 1.5, -0.1, z));
+  const j = def.jetty;
+  addCollider(boxOf(j.x, j.z, j.w, j.d, 0.4));
+  root.add(mesh(new THREE.BoxGeometry(j.w, 0.22, j.d), mat(0x6e5237), j.x, 0.28, j.z));
+  for (let z = j.z - j.d / 2 + 0.5; z <= j.z + j.d / 2 - 0.5; z += 1.75)
+    for (const sx of [-1, 1]) root.add(mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.6, 6), mat(0x3d2a1a), j.x + sx * (j.w / 2), -0.1, z));
 
   // ---------------------------------------------------------------- stalls (gerai)
-  const stalls: [number, number, number, number][] = [
-    [-11, -19, 2.6, 1.6],
-    [11, -8, 1.6, 2.6],
-    [-11, 10, 2.6, 1.6],
-    [11, 18, 1.6, 2.6],
-    [-3, -11, 2.6, 1.6],
-    [4, 11, 2.6, 1.6],
-    [-20, -11, 2.6, 1.6],
-    [20, 11, 2.6, 1.6],
-    [-20, 11, 2.6, 1.6],
-    [11, -24, 1.6, 2.6],
-  ];
   const goods = [0xd24a2b, 0xe0a82e, 0x4d9a3a, 0xf0e0b0];
-  for (const [x, z, w, d] of stalls) {
+  for (const { x, z, w, d } of def.stalls) {
     addCollider(boxOf(x, z, w, d, 1.3));
     root.add(mesh(new THREE.BoxGeometry(w, 1.3, d), mat(0x6a4a2c), x, 0.65, z));
     for (const sx of [-1, 1])
@@ -290,25 +256,27 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
       root.add(mesh(new THREE.SphereGeometry(0.17, 6, 5), mat(pick(goods)), x + (rnd() - 0.5) * (w - 0.5), 1.4, z + (rnd() - 0.5) * (d - 0.5), false));
   }
 
-  // ---------------------------------------------------------------- plaza: well + cannon
-  addCollider(boxOf(0, 0, 2.6, 2.6, 0.8));
-  root.add(mesh(new THREE.CylinderGeometry(1.4, 1.5, 0.8, 10), mat(0x7d7466), 0, 0.4, 0));
-  root.add(mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.1, 10), mat(0x1f4a55, { roughness: 0.2 }), 0, 0.82, 0, false));
-  addCollider(boxOf(-3.2, 2.6, 2.2, 0.9, 0.9));
-  const cannon = mesh(new THREE.CylinderGeometry(0.3, 0.38, 2.2, 8), mat(0x2f3338, { metalness: 0.5, roughness: 0.5 }), -3.2, 0.95, 2.6);
-  cannon.rotation.z = Math.PI / 2.1;
-  root.add(cannon);
-  root.add(mesh(new THREE.BoxGeometry(1.4, 0.45, 0.9), mat(0x4e3622), -3.2, 0.35, 2.6));
+  // ---------------------------------------------------------------- plaza: wells + cannons
+  for (const { x, z } of def.wells) {
+    addCollider(boxOf(x, z, 2.6, 2.6, 0.8));
+    root.add(mesh(new THREE.CylinderGeometry(1.4, 1.5, 0.8, 10), mat(0x7d7466), x, 0.4, z));
+    root.add(mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.1, 10), mat(0x1f4a55, { roughness: 0.2 }), x, 0.82, z, false));
+  }
+  for (const { x, z } of def.cannons) {
+    addCollider(boxOf(x, z, 2.2, 0.9, 0.9));
+    const cannon = mesh(new THREE.CylinderGeometry(0.3, 0.38, 2.2, 8), mat(0x2f3338, { metalness: 0.5, roughness: 0.5 }), x, 0.95, z);
+    cannon.rotation.z = Math.PI / 2.1;
+    root.add(cannon);
+    root.add(mesh(new THREE.BoxGeometry(1.4, 0.45, 0.9), mat(0x4e3622), x, 0.35, z));
+  }
 
   // ---------------------------------------------------------------- hiding spots (jerami + semak)
-  const hay: [number, number][] = [[-11, -3], [11, 5], [3, -13], [-14, 18], [13, -18], [-8, 12]];
-  for (const [x, z] of hay) {
+  for (const { x, z } of def.hay) {
     hides.push({ x, z, r: 1.5 });
     root.add(mesh(new THREE.ConeGeometry(1.25, 1.9, 9), mat(0xc9a64a), x, 0.95, z));
     root.add(mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.5, 9), mat(0xb8953e), x, 0.25, z));
   }
-  const bush: [number, number][] = [[-31, -5], [31, 8], [0, -29.2], [-5, 31], [31, -14], [-31, 14]];
-  for (const [x, z] of bush) {
+  for (const { x, z } of def.bushes) {
     hides.push({ x, z, r: 1.6 });
     for (let i = 0; i < 4; i++)
       root.add(mesh(new THREE.IcosahedronGeometry(0.9 + rnd() * 0.3, 0), mat(0x3f6b34), x + (rnd() - 0.5) * 1.2, 0.7 + rnd() * 0.3, z + (rnd() - 0.5) * 1.2));
@@ -317,8 +285,7 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
   // ---------------------------------------------------------------- palms
   const leafGeo = new THREE.PlaneGeometry(0.7, 3.4, 1, 3);
   leafGeo.translate(0, 1.7, 0);
-  const palmPos: [number, number][] = [[-31, -12], [-31, 6], [-31, 24], [31, -22], [31, 2], [31, 22], [-26, -29.5], [13, -29.5], [-13, -29.8], [28.5, -29.5], [-5, 31.5], [27, 31], [-27, 31]];
-  for (const [x, z] of palmPos) {
+  for (const { x, z } of def.palms) {
     const g = new THREE.Group();
     const trunk = mesh(new THREE.CylinderGeometry(0.2, 0.32, 7.5, 7), mat(0x6e5538), 0, 3.75, 0);
     g.add(trunk);
@@ -355,11 +322,8 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
     g.scale.setScalar(scale);
     root.add(g);
   }
-  prahu(-11, -36, 0.3);
-  prahu(10, -39, -0.2, 1.1);
-  prahu(-22, -44, 1.2, 0.9);
-  prahu(22, -34, 1.5);
-  {
+  for (const b of def.prahus) prahu(b.x, b.z, b.rotY, b.scale);
+  for (const ship of def.ships) {
     // foreign carrack at anchor, hazy in the fog
     const g = new THREE.Group();
     g.add(mesh(new THREE.BoxGeometry(9, 5, 30), mat(0x2f2620), 0, 1.5, 0));
@@ -368,18 +332,14 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
       g.add(mesh(new THREE.CylinderGeometry(0.2, 0.25, 22, 6), mat(0x3d2a1a), 0, 14, z));
       g.add(mesh(new THREE.BoxGeometry(11, 7, 0.15), mat(0xe8dcc0), 0, 14, z + 0.3));
     }
-    g.position.set(-26, 0, -85);
-    g.rotation.y = 0.5;
+    g.position.set(ship.x, 0, ship.z);
+    g.rotation.y = ship.rotY;
     root.add(g);
   }
 
   // ---------------------------------------------------------------- lanterns
-  const lampPos: [number, number][] = [
-    [-5, 5], [5, -5], [-11, -12], [11, 12], [0, -29],
-    [-28, 28], [-8, 16], [8, 16], [-8, -15], [8, -15], [-15, -8.5], [15, 8.5], [-14, 0], [14, 0], [-10, 30], [10, 30], [4, -31],
-  ];
-  const litLamps = spreadIndices(lampPos.length, opts.lampLights ?? lampPos.length);
-  for (const [i, [x, z]] of lampPos.entries()) {
+  const litLamps = spreadIndices(def.lamps.length, opts.lampLights ?? def.lamps.length);
+  for (const [i, { x, z }] of def.lamps.entries()) {
     root.add(mesh(new THREE.CylinderGeometry(0.07, 0.09, 3, 5), mat(0x3d2a1a), x, 1.5, z));
     root.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb14a }), x, 3.1, z, false));
     if (!litLamps.has(i)) continue;
@@ -403,27 +363,19 @@ export function buildLevel(opts: { lampLights?: number } = {}): Level {
     new THREE.CylinderGeometry(0.9, 0.9, 30, 16, 1, true),
     new THREE.MeshBasicMaterial({ color: 0x5affc8, transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide }),
   );
-  exitBeam.position.set(0, 15, -36);
+  exitBeam.position.set(def.exit.x, 15, def.exit.z);
   root.add(exitBeam);
-
-  const guards: GuardDef[] = [
-    { waypoints: [{ x: -7.8, z: -24 }, { x: -7.8, z: 24 }] },
-    { waypoints: [{ x: 8, z: -24 }, { x: 8, z: 24 }] },
-    { waypoints: [{ x: -24, z: -8.5 }, { x: 24, z: -8.5 }] },
-    { waypoints: [{ x: 24, z: 8.5 }, { x: -24, z: 8.5 }] },
-    { waypoints: [{ x: -4.5, z: -4.5 }, { x: 4.5, z: -4.5 }, { x: 4.5, z: 4.5 }, { x: -4.5, z: 4.5 }] },
-    { waypoints: [{ x: -2.4, z: 5.8 }, { x: 2.4, z: 5.8 }], isTarget: true },
-  ];
 
   return {
     root,
     colliders,
     occluders,
     hides,
-    guards,
-    start: { x: -31.5, z: 31.5 },
-    exit: { x: 0, z: -36 },
+    guards: def.guards,
+    start: def.start,
+    exit: def.exit,
     exitBeam,
-    bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 33.6, jettyZ: -31, jettyHalf: 1.1 },
+    bounds: def.bounds,
+    text: def.text,
   };
 }

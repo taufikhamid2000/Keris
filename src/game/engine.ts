@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { buildLevel, instanced, type Level } from "./level";
+import { buildLevel, cullFoliage, instanced, type Level } from "./level";
 import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
@@ -2519,6 +2519,12 @@ export class Game {
     fog.near = Q.fogNear * (1 - MIST.near * mist);
     fog.far = Q.fogFar * (1 - MIST.far * mist);
     if (!e && mist > 0) fog.color.lerp(FOG_MIST, mist * 0.75);
+    // trees and rocks stop at the fog; ferns (small, and many) much sooner
+    const fo = this.level.foliage;
+    const cam = this.camera.position;
+    cullFoliage(fo.treeGroup, cam, fog.far + 8);
+    cullFoliage(fo.rockGroup, cam, fog.far);
+    cullFoliage(fo.fernGroup, cam, Math.min(fog.far, 45));
     // the falls flow
     if (this.level.flow) this.level.flow.offset.y = (this.time * 0.9) % 1;
 
@@ -2575,7 +2581,17 @@ function instanceModel(model: THREE.Object3D, list: Placed[], shadow: boolean): 
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
-    g.add(instanced(geo, m.material, list, shadow));
+    // alpha-blended leaves are drawn back to front with no depth test benefit: hundreds of overlapping leaf cards
+    // cost far more than cut-out ones, which write depth and hide what is behind them
+    const cutout = (x: THREE.Material) => {
+      if (!x.transparent) return x;
+      const c = x.clone();
+      c.transparent = false;
+      c.alphaTest = 0.5;
+      c.depthWrite = true;
+      return c;
+    };
+    g.add(instanced(geo, Array.isArray(m.material) ? m.material.map(cutout) : cutout(m.material), list, shadow));
   });
   return g;
 }

@@ -47,21 +47,45 @@ export interface Level {
 }
 
 /** One InstancedMesh per geometry, placed at each spot (turned by r, scaled by s). */
-export function instanced(geo: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], list: Placed[], shadow = true) {
-  const im = new THREE.InstancedMesh(geo, m, Math.max(list.length, 1));
-  im.count = list.length;
+const CHUNK = 24;
+/**
+ * The spots as InstancedMeshes, one per CHUNK-metre square of the map, so squares off screen (or beyond the fog,
+ * see cullFoliage) are not drawn. One mesh for the whole map would draw every instance every frame.
+ */
+export function instanced(geo: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], list: Placed[], shadow = true): THREE.Group {
+  const g = new THREE.Group();
+  const cells = new Map<string, Placed[]>();
+  for (const t of list) {
+    const k = `${Math.floor(t.x / CHUNK)},${Math.floor(t.z / CHUNK)}`;
+    const c = cells.get(k);
+    if (c) c.push(t);
+    else cells.set(k, [t]);
+  }
   const o = new THREE.Object3D();
-  list.forEach((t, i) => {
-    o.position.set(t.x, t.y ?? 0, t.z);
-    o.rotation.set(0, t.r, 0);
-    o.scale.setScalar(t.s);
-    o.updateMatrix();
-    im.setMatrixAt(i, o.matrix);
+  for (const part of cells.values()) {
+    const im = new THREE.InstancedMesh(geo, m, part.length);
+    part.forEach((t, i) => {
+      o.position.set(t.x, t.y ?? 0, t.z);
+      o.rotation.set(0, t.r, 0);
+      o.scale.setScalar(t.s);
+      o.updateMatrix();
+      im.setMatrixAt(i, o.matrix);
+    });
+    im.castShadow = shadow;
+    im.receiveShadow = true;
+    im.computeBoundingSphere();
+    g.add(im);
+  }
+  return g;
+}
+
+/** Hide foliage squares whose nearest edge is further than `far` from the camera. */
+export function cullFoliage(group: THREE.Object3D, cam: THREE.Vector3, far: number) {
+  group.traverse((o) => {
+    const im = o as THREE.InstancedMesh;
+    if (!im.isInstancedMesh || !im.boundingSphere) return;
+    im.visible = im.boundingSphere.center.distanceTo(cam) - im.boundingSphere.radius < far;
   });
-  im.castShadow = shadow;
-  im.receiveShadow = true;
-  im.computeBoundingSphere();
-  return im;
 }
 
 /** Height of the open space under a stilt house's floor. */

@@ -561,6 +561,14 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     g.rotation.y = rotY;
     g.scale.setScalar(scale);
     root.add(g);
+    // the hull as a row of small squares along its keel (colliders are axis-aligned, the hull is turned). 0.7 high:
+    // enough to stop a swimmer, too low to be a ledge for the guards' map
+    const half = 3.2 * scale;
+    for (let u = -half + 0.5 * scale; u <= half - 0.5 * scale + 1e-6; u += 0.6 * scale) {
+      const hw = 0.9 * scale * Math.sqrt(Math.max(0, 1 - (u / half) ** 2)) * 0.9;
+      if (hw < 0.2) continue;
+      addCollider(boxOf(x + Math.sin(rotY) * u, z + Math.cos(rotY) * u, 2 * hw, 2 * hw, 0.7, -3));
+    }
   }
   for (const b of def.prahus) prahu(b.x, b.z, b.rotY, b.scale);
   for (const ship of def.ships) {

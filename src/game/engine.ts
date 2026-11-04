@@ -44,6 +44,8 @@ export type LoseReason = "slain" | "detected" | null;
 
 export interface HudState {
   meter: number;
+  /** swimming: breath left, 0..1 (null on land) */
+  breath: number | null;
   alert: GuardState | "calm";
   objective: string;
   northDeg: number;
@@ -107,6 +109,11 @@ const FOG_MIST = new THREE.Color(0xb7b9b4);
 const MIST = { ramp: 22, near: 0.65, far: 0.6 };
 /** boulder models are fitted to this height (each spot scales it) and recoloured to the mountain's grey stone */
 const ROCK = { h: 1, color: 0x8a877d };
+/**
+ * Swimming in rivers and pools. y is the player's feet: at the surface only the head and shoulders show above the
+ * water (the ground plane hides the rest); diving takes the player fully under, unseen, for as long as breath lasts.
+ */
+const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5 };
 // dusk fill levels; Mata Helang drops them for contrast
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
@@ -349,6 +356,9 @@ export class Game {
   // player state
   private p = { x: 0, y: 0, z: 0, vy: 0, grounded: true, yaw: 0, moving: false, running: false };
   private crouchToggle = false;
+  /** in the water: diving or at the surface, breath left, and a short gasp after running out (no diving) */
+  private swim: { under: boolean; breath: number; gasp: number } | null = null;
+  private ripple: THREE.Mesh | null = null;
   /** a floor overhead is too low to stand under (stilt houses) */
   private lowCeiling = false;
   private camYaw = (3 * Math.PI) / 4;
@@ -681,6 +691,7 @@ export class Game {
     this.boat = null;
     for (const b of this.boats) Object.assign(b, { ...b.home, speed: 0 });
     this.horse = null;
+    this.swim = null;
     for (const h of this.horses) Object.assign(h, { ...h.home, y: 0, speed: 0 });
     this.crouchToggle = false;
     this.lowCeiling = false;
@@ -1174,6 +1185,7 @@ export class Game {
       this.hurtAnimT = Math.max(0, this.hurtAnimT - dt);
       let a: Anim;
       if (this.boat || this.horse) a = "sit";
+      else if (this.swim) a = p.moving || this.swim.under ? "swim" : "swimIdle";
       else if (this.roll) a = "roll";
       else if (this.hurtAnimT > 0 && pr.has("hit")) a = "hit";
       else if (this.stabT > 0 && pr.has("stab")) a = this.swing?.heavy ? "heavy" : "stab";
@@ -1326,6 +1338,8 @@ export class Game {
       this.ride(dt, fwd, str, len, sprint);
       // a gallop is as loud as a sprint
       p.running = this.horse.speed > HORSE.walk + 1;
+    } else if (this.swim) {
+      this.swimMove(dt, fwd, str, len);
     } else if (this.leap) {
       const l = this.leap;
       l.t += dt;
@@ -1387,7 +1401,11 @@ export class Game {
         p.z += mz * speed * dt;
       }
       pushOut(p, PLAYER_R, L.colliders, p.y);
-      this.applyBounds(from);
+      // walking (or dropping) into a river or pool starts a swim; carrying a body, the bank stops you as before
+      if (this.wet(p.x, p.z) && !this.carrying && !this.roll && p.y < SWIM.maxEntryY) {
+        this.applyBounds();
+        this.enterWater();
+      } else this.applyBounds(from);
 
       // vertical
       p.vy -= 20 * dt;
@@ -1403,10 +1421,10 @@ export class Game {
       if (this.keys.has("Space") && p.moving) this.tryClimb();
     }
 
-    this.lowCeiling = this.phase === "playing" && !this.horse && L.colliders.some((b) => b.minY > p.y + STEP_H && b.minY < p.y + STAND_H && p.x > b.minX - 0.15 && p.x < b.maxX + 0.15 && p.z > b.minZ - 0.15 && p.z < b.maxZ + 0.15);
+    this.lowCeiling = this.phase === "playing" && !this.horse && !this.swim && L.colliders.some((b) => b.minY > p.y + STEP_H && b.minY < p.y + STAND_H && p.x > b.minX - 0.15 && p.x < b.maxX + 0.15 && p.z > b.minZ - 0.15 && p.z < b.maxZ + 0.15);
 
     // ---- hiding
-    this.hidden = L.hides.some((h) => p.y < 1 && dist2D(p, h) < h.r);
+    this.hidden = !!this.swim?.under || L.hides.some((h) => p.y < 1 && dist2D(p, h) < h.r);
 
     // ---- noise
     const stance = { crouched, running: p.running };
@@ -1439,6 +1457,65 @@ export class Game {
       this.hudTimer = 0.08;
       this.cb.onHud(this.buildHud());
     }
+  }
+
+  private enterWater() {
+    const p = this.p;
+    this.swim = { under: false, breath: SWIM.breath, gasp: 0 };
+    this.crouchToggle = false;
+    this.swing = null;
+    this.charge = null;
+    p.vy = 0;
+    p.grounded = true;
+    this.toast("Swimming. Hold Ctrl (or press C) to dive out of sight; swim to a bank to climb out.");
+  }
+
+  /** Swim: camera-relative like walking, slower; crouch dives while breath lasts. Reaching dry land climbs out. */
+  private swimMove(dt: number, fwd: number, str: number, len: number) {
+    const s = this.swim!;
+    const p = this.p;
+    s.gasp = Math.max(0, s.gasp - dt);
+    const wantDive = this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.crouchToggle;
+    s.under = wantDive && s.gasp === 0 && s.breath > 0;
+    if (s.under) {
+      s.breath = Math.max(0, s.breath - dt);
+      if (s.breath === 0) {
+        s.under = false;
+        s.gasp = SWIM.gasp;
+        this.crouchToggle = false;
+        this.toast("Out of breath!");
+      }
+    } else s.breath = Math.min(SWIM.breath, s.breath + dt * SWIM.refill);
+    // diving is silent; a fast crawl at the surface splashes like running
+    p.running = !s.under && p.running;
+    const speed = s.under ? SWIM.dive : p.running ? SWIM.fast : SWIM.speed;
+    const mx = Math.sin(this.camYaw) * fwd - Math.cos(this.camYaw) * str;
+    const mz = Math.cos(this.camYaw) * fwd + Math.sin(this.camYaw) * str;
+    p.moving = len > 0;
+    if (p.moving) {
+      this.moveDir = { x: mx, z: mz };
+      p.yaw += clamp(wrapAngle(Math.atan2(mx, mz) - p.yaw), -8 * dt, 8 * dt);
+      const q = { x: p.x + mx * speed * dt, z: p.z + mz * speed * dt };
+      pushOut(q, PLAYER_R, this.level.colliders, 0);
+      if (!this.wet(q.x, q.z)) {
+        // ashore (a bank, or up onto a jetty) unless something tall is in the way; surface first when diving
+        const g = groundHeight(q.x, q.z, 0, this.level.colliders);
+        if (!s.under && g <= STEP_H) {
+          Object.assign(p, { x: q.x, z: q.z, y: g, vy: 0, grounded: true });
+          this.swim = null;
+          this.applyBounds();
+          return;
+        }
+      } else {
+        p.x = q.x;
+        p.z = q.z;
+      }
+    }
+    this.applyBounds();
+    const ty = s.under ? SWIM.diveY : SWIM.surfaceY;
+    p.y += clamp(ty - p.y, -SWIM.sink * dt, SWIM.sink * dt);
+    p.vy = 0;
+    p.grounded = true;
   }
 
   private applyBounds(from?: { x: number; z: number }) {
@@ -1793,6 +1870,12 @@ export class Game {
       this.dismount();
       return;
     }
+    if (this.swim) {
+      // from the water the only thing to do is climb into a sampan
+      const b = this.nearBoat();
+      if (b) this.board(b);
+      return;
+    }
     if (this.climb || this.leap || this.carrying) return;
     if (this.nearLoot()) {
       this.taken = true;
@@ -1877,6 +1960,7 @@ export class Game {
   }
 
   private board(b: Boat) {
+    this.swim = null;
     this.boat = b;
     b.speed = 0;
     this.crouchToggle = false;
@@ -1927,8 +2011,9 @@ export class Game {
 
   // ------------------------------------------------------------------ horses
 
+  /** on a boat or a horse, or swimming: no jumping, rolling, striking or carrying */
   private get mounted() {
-    return !!this.boat || !!this.horse;
+    return !!this.boat || !!this.horse || !!this.swim;
   }
 
   /** Put the level's horses out, each with a model (or a block horse while none is loaded). */
@@ -2098,7 +2183,7 @@ export class Game {
 
   /** R / right click: a short parry window. A strike that lands inside it staggers the guard. */
   private tryParry() {
-    if (this.parryCd > 0 || this.roll || this.climb || this.leap || this.carrying) return;
+    if (this.parryCd > 0 || this.roll || this.climb || this.leap || this.carrying || this.swim) return;
     this.parryT = PARRY.win;
     this.parryCd = PARRY.win + PARRY.cd;
     this.swing = null;
@@ -2312,7 +2397,7 @@ export class Game {
   }
 
   private tryThrow() {
-    if (this.knives <= 0 || this.knifeCd > 0 || this.climb || this.leap) return;
+    if (this.knives <= 0 || this.knifeCd > 0 || this.climb || this.leap || this.swim) return;
     this.knives--;
     this.knifeCd = 0.8;
     const dir = new THREE.Vector3();
@@ -2371,6 +2456,7 @@ export class Game {
     const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
     const foe = this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
+    else if (this.swim) prompt = this.nearBoat() ? "E  Climb into the sampan" : this.swim.under ? "Diving: unseen" : this.swim.gasp > 0 ? "Catching your breath" : "Ctrl / C  Dive";
     else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
     else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
     else if (this.horse) prompt = this.horseSpot() ? "E  Dismount" : "";
@@ -2393,6 +2479,7 @@ export class Game {
     const rel = wrapAngle(yawTo(p, obj) - this.camYaw);
     return {
       meter,
+      breath: this.swim ? this.swim.breath / SWIM.breath : null,
       alert,
       objective: this.objective === "main" ? this.level.text.objective : this.level.text.escape,
       northDeg: (this.camYaw * 180) / Math.PI,
@@ -2466,6 +2553,22 @@ export class Game {
     this.player.body.rotation.z = p.running ? 0.12 : 0;
     this.player.group.position.y = p.y + (rigged ? 0 : bob);
     this.player.group.visible = this.phase !== "title" && this.phase !== "intro";
+    // a ring on the water marks the swimmer (faint while diving, so you can still see where you are)
+    if (this.swim && !this.ripple) {
+      this.ripple = new THREE.Mesh(
+        new THREE.RingGeometry(0.45, 0.7, 24).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xe8f4f8, transparent: true, opacity: 0.45, depthWrite: false }),
+      );
+      this.scene.add(this.ripple);
+    }
+    if (this.ripple) {
+      this.ripple.visible = !!this.swim && this.player.group.visible;
+      if (this.swim) {
+        this.ripple.position.set(p.x, 0.09, p.z);
+        this.ripple.scale.setScalar(1 + 0.12 * Math.sin(this.time * 4));
+        (this.ripple.material as THREE.MeshBasicMaterial).opacity = this.swim.under ? 0.15 : 0.45;
+      }
+    }
 
     for (const g of this.guards) {
       const showState = g.brain.state !== "patrol" && !g.dead;
@@ -2486,6 +2589,8 @@ export class Game {
     // camera
     if (this.phase === "playing" || this.phase === "paused" || this.phase === "won" || this.phase === "lost") {
       const look = new THREE.Vector3(p.x, p.y + (crouch ? 1.1 : 1.55), p.z);
+      // swimming (and diving), keep the view on the water surface
+      if (this.swim) look.y = Math.max(look.y, 0.5);
       const rx = -Math.cos(this.camYaw) * 0.45;
       const rz = Math.sin(this.camYaw) * 0.45;
       look.x += rx;

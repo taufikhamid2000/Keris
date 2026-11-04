@@ -38,6 +38,7 @@ const EMPTY: HudState = {
   carrying: false,
   hp: 3,
   maxHp: 3,
+  breath: null,
   combat: false,
   incoming: false,
 };
@@ -88,6 +89,7 @@ const CONTROLS: [string, string][] = [
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["E by a horse", "Mount it; WASD rides, Shift gallops (loud), E gets down"],
   ["E by a sampan", "Board it; WASD paddles, Shift faster, E by a bank goes ashore"],
+  ["Walk into water", "Swim; Shift faster, Ctrl / C dives out of sight while breath lasts"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
   ["Controller", "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT knife, Y carry, R3 crouch, RB vision, LB run, Start pause"],
@@ -105,6 +107,7 @@ const TOUCH_CONTROLS: [string, string][] = [
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["E by a horse", "Mount it; the stick rides, E gets down"],
   ["E by a sampan", "Board it; the stick paddles, E by a bank goes ashore"],
+  ["Walk into water", "Swim; crouch dives out of sight while breath lasts"],
   ["V", "Mata Helang vision"],
   ["II", "Pause"],
 ];
@@ -383,6 +386,11 @@ export default function GameClient() {
                   <div style={{ width: `${Math.round(Math.min(1, Math.max(0, hud.hp - i)) * 100)}%` }} />
                 </div>
               ))}
+            </div>
+          )}
+          {hud.breath !== null && hud.breath < 0.999 && (
+            <div className="breath" aria-label={`Breath ${Math.round(hud.breath * 100)}%`}>
+              <div style={{ width: `${Math.round(hud.breath * 100)}%` }} />
             </div>
           )}
           {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : hud.prompt}</div>}

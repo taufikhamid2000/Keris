@@ -50,6 +50,8 @@ On itch.io choose "Download Now", then "No thanks, just take me to the downloads
 | block | the player's parry stance, and readying a heavy strike (falls back to idle) | `block` |
 | heavy | the player's heavy strike (falls back to stab) | `heavy` |
 | sit | the player sitting in a sampan (falls back to crouch idle) | `sit` |
+| swim | swimming and diving (falls back to walk) | `swim` |
+| swimIdle | treading water (falls back to idle) | `swim-idle` |
 
 A one-clip file (e.g. `run.fbx`) wins over the library's pick for that slot.
 

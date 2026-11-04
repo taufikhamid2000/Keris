@@ -50,6 +50,8 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .hp { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); display: flex; gap: 6px; }
 .hp > div { width: 46px; height: 8px; background: rgba(20,10,24,.6); border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; }
 .hp > div > div { height: 100%; background: #ff3b30; }
+.breath { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); width: 150px; height: 7px; background: rgba(20,10,24,.6); border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; }
+.breath > div { height: 100%; background: #6cc8e8; }
 .hp.incoming > div { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,.7); }
 
 /* ------------------------------------------------------------------ touch + small screens */

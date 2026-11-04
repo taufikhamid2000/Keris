@@ -15,9 +15,18 @@ describe.each(LEVELS.map((l) => [l.id, l] as const))("level %s", (_id, l) => {
     expect(inBounds(l.exit)).toBe(true);
     for (const g of l.guards) for (const w of g.waypoints) expect(inBounds(w)).toBe(true);
   });
-  it("puts the exit out on the jetty, past the shoreline", () => {
-    expect(l.exit.z).toBeLessThan(l.shoreZ);
-    expect(Math.abs(l.exit.x - l.jetty.x)).toBeLessThanOrEqual(l.jetty.w / 2);
+  it("puts the exit out on a jetty: the sea jetty past the shoreline, or a deck over the river", () => {
+    const onRect = (r: { x: number; z: number; w: number; d: number }) => Math.abs(l.exit.x - r.x) <= r.w / 2 && Math.abs(l.exit.z - r.z) <= r.d / 2;
+    const seaJetty = l.exit.z < l.shoreZ && onRect(l.jetty);
+    const riverDeck = l.decks.some(onRect) && l.water.some(onRect);
+    expect(seaJetty || riverDeck).toBe(true);
+  });
+  it("keeps every guard post and the start out of the river", () => {
+    const wet = (p: { x: number; z: number }) =>
+      l.water.some((r) => Math.abs(p.x - r.x) < r.w / 2 && Math.abs(p.z - r.z) < r.d / 2) &&
+      !l.decks.some((r) => Math.abs(p.x - r.x) < r.w / 2 && Math.abs(p.z - r.z) < r.d / 2);
+    expect(wet(l.start)).toBe(false);
+    for (const g of l.guards) for (const w of g.waypoints) expect(wet(w)).toBe(false);
   });
 });
 

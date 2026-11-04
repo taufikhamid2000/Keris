@@ -26,7 +26,18 @@ export interface NavBounds {
   maxZ: number;
   jettyZ?: number;
   jettyHalf?: number;
+  /** no walking here (rivers) ... */
+  water?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
+  /** ... except on these (bridges, jetties) */
+  decks?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
 }
+
+type AreaLike = { minX: number; maxX: number; minZ: number; maxZ: number };
+/** inside the area grown by m (shrunk when m < 0) */
+export const inArea = (a: AreaLike, x: number, z: number, m = 0) => x > a.minX - m && x < a.maxX + m && z > a.minZ - m && z < a.maxZ + m;
+/** over water and off every deck, with the margins guards keep */
+export const isWet = (b: NavBounds, x: number, z: number, waterMargin = 0.3, deckInset = 0.4) =>
+  !!b.water?.some((a) => inArea(a, x, z, waterMargin)) && !b.decks?.some((a) => inArea(a, x, z, -deckInset));
 
 /** An explicit climb edge between two layers. `keys` is the animation path from `from` to `to`. */
 export interface ClimbLink {
@@ -207,6 +218,7 @@ export class NavGrid {
         const x = this.cx(ix);
         const z = this.cz(iz);
         if (jz !== undefined && z < jz && Math.abs(x) > jh - 0.4) continue;
+        if (isWet(this.bounds, x, z)) continue;
         groundOk[iz * w + ix] = 1;
       }
     this.rasterBlockers(groundOk, 0, inflate);

@@ -36,7 +36,7 @@ import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
-import { PathAgent, buildNav, climbDuration, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
+import { PathAgent, buildNav, climbDuration, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
@@ -339,6 +339,7 @@ export class Game {
   private lastGuardSwing = -9;
   private moveDir = { x: 0, z: 1 };
   private playerKick: Anim | null = null;
+  private lampTimer = 0;
   /** main: the level's objective (kill or steal) is still to do */
   private objective: "main" | "escape" = "main";
   /** steal objectives: the item's mesh, and whether it has been taken */
@@ -417,6 +418,7 @@ export class Game {
     const sun = new THREE.DirectionalLight(0xffa860, LIGHT.sun);
     this.sun = sun;
     sun.position.set(-40, 24, 30);
+    this.scene.add(sun.target);
     sun.castShadow = true;
     sun.shadow.mapSize.set(Q.shadowMapSize, Q.shadowMapSize);
     const sc = sun.shadow.camera;
@@ -1005,6 +1007,7 @@ export class Game {
     this.guards = [];
     this.def = def;
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
+    this.lampTimer = 0;
     this.loot = this.buildLoot();
     this.nav = buildNav(this.level.colliders, this.level.bounds);
     this.scene.add(this.level.root);
@@ -1224,6 +1227,7 @@ export class Game {
       }
       p.moving = false;
     } else {
+      const from = { x: p.x, z: p.z };
       const speed = this.swing || this.charge !== null ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
@@ -1246,7 +1250,7 @@ export class Game {
         p.z += mz * speed * dt;
       }
       pushOut(p, PLAYER_R, L.colliders, p.y);
-      this.applyBounds();
+      this.applyBounds(from);
 
       // vertical
       p.vy -= 20 * dt;
@@ -1300,12 +1304,25 @@ export class Game {
     }
   }
 
-  private applyBounds() {
+  private applyBounds(from?: { x: number; z: number }) {
     const b = this.level.bounds;
     const p = this.p;
     p.x = clamp(p.x, b.minX, b.maxX);
     p.z = clamp(p.z, b.minZ, b.maxZ);
     if (p.z < b.jettyZ) p.x = clamp(p.x, -b.jettyHalf, b.jettyHalf);
+    if (!from || !this.wet(p.x, p.z)) return;
+    // stepping into the river: keep whichever axis stays dry, so the player slides along the bank or the bridge rail
+    if (!this.wet(from.x, p.z)) p.x = from.x;
+    else if (!this.wet(p.x, from.z)) p.z = from.z;
+    else {
+      p.x = from.x;
+      p.z = from.z;
+    }
+  }
+
+  /** over a river and off every bridge or jetty */
+  private wet(x: number, z: number) {
+    return isWet(this.level.bounds, x, z, 0.1, 0.1);
   }
 
   private tryJumpOrClimb() {
@@ -1835,9 +1852,13 @@ export class Game {
     this.charge = null;
     // knocked back a step
     const d = dist2D(g, p) || 1;
-    p.x += ((p.x - g.x) / d) * 0.5;
-    p.z += ((p.z - g.z) / d) * 0.5;
-    pushOut(p, PLAYER_R, this.level.colliders, p.y);
+    const kx = p.x + ((p.x - g.x) / d) * 0.5;
+    const kz = p.z + ((p.z - g.z) / d) * 0.5;
+    if (!this.wet(kx, kz)) {
+      p.x = kx;
+      p.z = kz;
+      pushOut(p, PLAYER_R, this.level.colliders, p.y);
+    }
     if (this.hp > 0) this.toast(this.hp < 1.5 ? "Badly hurt. Break away!" : "Cut!");
   }
 
@@ -2000,8 +2021,26 @@ export class Game {
     }
   }
 
+  /** Centre the sun's shadow box on what the camera sees, and move the lamp lights to the lanterns nearest it. */
+  private followLights(dt: number) {
+    const inPlay = this.phase !== "title" && this.phase !== "intro";
+    const c = inPlay ? this.p : this.camera.position;
+    // snapped to whole metres so the shadow map does not shimmer as the player walks
+    const fx = Math.round(c.x);
+    const fz = Math.round(c.z);
+    this.sun.position.set(fx - 40, 24, fz + 30);
+    this.sun.target.position.set(fx, 0, fz);
+    this.lampTimer -= dt;
+    if (this.lampTimer > 0) return;
+    this.lampTimer = 0.5;
+    const lights = this.level.lampLights;
+    const near = [...this.level.lamps].sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
+    lights.forEach((l, i) => near[i] && l.position.set(near[i].x, 3.0, near[i].z));
+  }
+
   private render(dt: number) {
     const p = this.p;
+    this.followLights(dt);
     this.syncMeshes();
     this.navDbg?.updatePaths(this.guards);
 

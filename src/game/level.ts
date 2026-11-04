@@ -14,6 +14,15 @@ export interface HideSpot {
   z: number;
   r: number;
 }
+/** Axis-aligned area on the ground plane. */
+export interface Area {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+const areaOf = (r: { x: number; z: number; w: number; d: number }): Area => ({ minX: r.x - r.w / 2, maxX: r.x + r.w / 2, minZ: r.z - r.d / 2, maxZ: r.z + r.d / 2 });
+
 export interface Level {
   root: THREE.Group;
   colliders: Box[]; // everything solid
@@ -23,8 +32,12 @@ export interface Level {
   start: Vec2;
   exit: Vec2;
   exitBeam: THREE.Mesh;
-  bounds: LevelDef["bounds"];
+  bounds: LevelDef["bounds"] & { water: Area[]; decks: Area[] };
   text: LevelDef["text"];
+  /** every lantern on the map */
+  lamps: Vec2[];
+  /** the few real point lights, moved to the lanterns nearest the camera (a big map has more lanterns than lights) */
+  lampLights: THREE.PointLight[];
 }
 
 /** Height of the open space under a stilt house's floor. */
@@ -179,6 +192,15 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   root.add(water);
   // wet shore line
   root.add(mesh(new THREE.BoxGeometry(70, 0.12, 1.2), mat(0x5b4a35), 0, 0.02, def.shoreZ - 0.2, false));
+  // rivers: a water sheet just above the ground, with muddy banks
+  for (const r of def.water) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), new THREE.MeshStandardMaterial({ color: 0x1c5560, roughness: 0.25, metalness: 0.35 }));
+    w.rotation.x = -Math.PI / 2;
+    w.position.set(r.x, 0.06, r.z);
+    w.receiveShadow = true;
+    root.add(w);
+    for (const s of [-1, 1]) root.add(mesh(new THREE.BoxGeometry(r.w, 0.1, 1.0), mat(0x5b4a35), r.x, 0.03, r.z + s * (r.d / 2 + 0.3), false));
+  }
 
   // ---------------------------------------------------------------- houses (kampung lanes between) + palace tiers
   const wallCols = [0x7a5535, 0x6d4a30, 0x84613c, 0x5f4029];
@@ -239,6 +261,20 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   root.add(mesh(new THREE.BoxGeometry(j.w, 0.22, j.d), mat(0x6e5237), j.x, 0.28, j.z));
   for (let z = j.z - j.d / 2 + 0.5; z <= j.z + j.d / 2 - 0.5; z += 1.75)
     for (const sx of [-1, 1]) root.add(mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.6, 6), mat(0x3d2a1a), j.x + sx * (j.w / 2), -0.1, z));
+
+  // ---------------------------------------------------------------- bridges and river jetties
+  for (const dk of def.decks) {
+    addCollider(boxOf(dk.x, dk.z, dk.w, dk.d, 0.4));
+    root.add(mesh(new THREE.BoxGeometry(dk.w, 0.22, dk.d), mat(0x6e5237), dk.x, 0.28, dk.z));
+    for (let z = dk.z - dk.d / 2 + 0.5; z <= dk.z + dk.d / 2 - 0.5; z += 1.75)
+      for (const sx of [-1, 1]) {
+        const px = dk.x + sx * (dk.w / 2);
+        root.add(mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.6, 6), mat(0x3d2a1a), px, -0.1, z));
+        // rail posts (no collider: the water stops anyone stepping off)
+        if (dk.rails) root.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 5), mat(0x4a3220), px, 0.9, z));
+      }
+    if (dk.rails) for (const sx of [-1, 1]) root.add(mesh(new THREE.BoxGeometry(0.1, 0.1, dk.d), mat(0x4a3220), dk.x + sx * (dk.w / 2), 1.35, dk.z));
+  }
 
   // ---------------------------------------------------------------- stalls (gerai)
   const goods = [0xd24a2b, 0xe0a82e, 0x4d9a3a, 0xf0e0b0];
@@ -339,6 +375,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
 
   // ---------------------------------------------------------------- lanterns
   const litLamps = spreadIndices(def.lamps.length, opts.lampLights ?? def.lamps.length);
+  const lampLights: THREE.PointLight[] = [];
   for (const [i, { x, z }] of def.lamps.entries()) {
     root.add(mesh(new THREE.CylinderGeometry(0.07, 0.09, 3, 5), mat(0x3d2a1a), x, 1.5, z));
     root.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb14a }), x, 3.1, z, false));
@@ -346,6 +383,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     const l = new THREE.PointLight(0xffa04a, 11, 17, 1.5);
     l.position.set(x, 3.0, z);
     root.add(l);
+    lampLights.push(l);
   }
 
   // ---------------------------------------------------------------- instanced windows
@@ -375,7 +413,9 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     start: def.start,
     exit: def.exit,
     exitBeam,
-    bounds: def.bounds,
+    bounds: { ...def.bounds, water: def.water.map(areaOf), decks: def.decks.map(areaOf) },
     text: def.text,
+    lamps: def.lamps,
+    lampLights,
   };
 }

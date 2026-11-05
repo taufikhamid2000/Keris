@@ -212,9 +212,10 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .m-exit.on { opacity: 1; stroke-width: 1.4; }
 .m-obj { fill: #ffd24a; stroke: #1a1220; stroke-width: .4; }
 .m-you { fill: #fff; stroke: #c0392b; stroke-width: .5; }
+.m-fog { fill: #120d0a; opacity: .88; }
 .legend { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .legend i { display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 2px; }
-.k-you { background: #fff; } .k-obj { background: #ffd24a; transform: rotate(45deg); } .k-exit { border: 2px solid #6cc8e8; border-radius: 50% !important; } .k-hide { background: #6f8a3a; border-radius: 50% !important; }
+.k-you { background: #fff; } .k-obj { background: #ffd24a; transform: rotate(45deg); } .k-exit { border: 2px solid #6cc8e8; border-radius: 50% !important; } .k-hide { background: #6f8a3a; border-radius: 50% !important; } .k-fog { background: #120d0a; border: 1px solid #5d4f37; }
 .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
 .slot { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid rgba(255,207,138,.35); border-radius: 6px; background: rgba(255,207,138,.05); }
 .slot b { color: #ffcf8a; font-size: 1.05rem; }

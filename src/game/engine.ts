@@ -123,7 +123,12 @@ export interface MapState {
   pepper: number;
   hp: number;
   maxHp: number;
+  /** explored ground: a grid of FOG.cell-metre squares over the level bounds, 1 = seen this attempt */
+  fog: { minX: number; minZ: number; cell: number; cols: number; rows: number; seen: Uint8Array };
 }
+
+/** Map reveal: ground within FOG.r metres of the player is marked explored, in FOG.cell-metre squares. */
+const FOG = { cell: 4, r: 18 };
 
 export interface IntroView {
   text: string;
@@ -444,6 +449,8 @@ export class Game {
   private taken = false;
   /** this mission's hidden tangkal: its mesh and spot, and whether the player already has it (setAmuletFound) */
   private charm: { group: THREE.Group; x: number; z: number; id: string; name: string } | null = null;
+  /** explored squares for the pause map; cleared on a fresh attempt, kept across a checkpoint retry */
+  private fog = { cols: 0, rows: 0, seen: new Uint8Array(0), at: -1 };
   private charmFound = false;
   /** set when an alarm is raised on an undetected mission; the mission ends after this frame's guards */
   private detected = false;
@@ -901,6 +908,7 @@ export class Game {
   start(from: Checkpoint = "start") {
     this.resetWorld();
     this.run = { time: 0, alerts: 0, fromStart: from === "start" };
+    if (from === "start" || this.fog.seen.length === 0) this.clearFog();
     if (from === "target") this.applyTargetCheckpoint();
     this.cb.onCheckpoint?.(from);
     this.setPhase("playing");
@@ -973,6 +981,30 @@ export class Game {
     const o = this.def.objective;
     return o.kind === "steal" && !this.taken && dist2D(this.p, o.at) < 1.4 && Math.abs(this.p.y - o.at.y) < 1.2;
   }
+  private clearFog() {
+    const b = this.def.bounds;
+    const cols = Math.ceil((b.maxX - b.minX) / FOG.cell);
+    const rows = Math.ceil((b.maxZ - b.minZ) / FOG.cell);
+    this.fog = { cols, rows, seen: new Uint8Array(cols * rows), at: -1 };
+  }
+  /** Mark the squares around the player as explored (only when they step into a new square). */
+  private reveal() {
+    const b = this.def.bounds;
+    const { cols, rows, seen } = this.fog;
+    if (!cols) return;
+    const cx = Math.floor((this.p.x - b.minX) / FOG.cell);
+    const cz = Math.floor((this.p.z - b.minZ) / FOG.cell);
+    const at = cz * cols + cx;
+    if (at === this.fog.at) return;
+    this.fog.at = at;
+    const n = Math.ceil(FOG.r / FOG.cell);
+    for (let z = Math.max(0, cz - n); z <= Math.min(rows - 1, cz + n); z++)
+      for (let x = Math.max(0, cx - n); x <= Math.min(cols - 1, cx + n); x++) {
+        const dx = (x + 0.5) * FOG.cell + b.minX - this.p.x;
+        const dz = (z + 0.5) * FOG.cell + b.minZ - this.p.z;
+        if (dx * dx + dz * dz <= FOG.r * FOG.r) seen[z * cols + x] = 1;
+      }
+  }
   /** Player, objective and run numbers for the pause menu. */
   mapState(): MapState {
     const o = this.def.objective;
@@ -992,6 +1024,7 @@ export class Game {
       pepper: this.pepper,
       hp: this.hp,
       maxHp: this.maxHp,
+      fog: { minX: this.def.bounds.minX, minZ: this.def.bounds.minZ, cell: FOG.cell, cols: this.fog.cols, rows: this.fog.rows, seen: this.fog.seen.slice() },
     };
   }
   private get maxHp() {
@@ -1327,6 +1360,7 @@ export class Game {
     }
     this.guards = [];
     this.def = def;
+    this.fog = { cols: 0, rows: 0, seen: new Uint8Array(0), at: -1 };
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
     this.lampTimer = 0;
     this.loot = this.buildLoot();
@@ -1511,6 +1545,7 @@ export class Game {
     } else this.rollCd = Math.max(0, this.rollCd - dt);
     const L = this.level;
     const p = this.p;
+    this.reveal();
 
     // ---- player movement
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);

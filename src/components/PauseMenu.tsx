@@ -20,6 +20,33 @@ const box = (r: Rect, key: string | number, cls: string) => (
   <rect key={key} className={cls} x={sx(r.x + r.w / 2)} y={sy(r.z + r.d / 2)} width={r.w} height={r.d} />
 );
 
+/** Unexplored ground under a dark veil; explored squares are cut out of it with soft edges. */
+function Fog({ f, vx, vy, vw, vh }: { f: MapState["fog"]; vx: number; vy: number; vw: number; vh: number }) {
+  const holes: ReactNode[] = [];
+  for (let z = 0; z < f.rows; z++)
+    for (let x = 0; x < f.cols; x++) {
+      if (!f.seen[z * f.cols + x]) continue;
+      const x0 = f.minX + x * f.cell;
+      const z0 = f.minZ + z * f.cell;
+      // world box [x0, x0+cell] x [z0, z0+cell] on screen (x and z flip), a hair wider so squares meet
+      holes.push(<rect key={z * f.cols + x} x={sx(x0 + f.cell) - 0.2} y={sy(z0 + f.cell) - 0.2} width={f.cell + 0.4} height={f.cell + 0.4} />);
+    }
+  return (
+    <>
+      <defs>
+        <filter id="fog-soft" x="-5%" y="-5%" width="110%" height="110%">
+          <feGaussianBlur stdDeviation={f.cell * 0.6} />
+        </filter>
+        <mask id="fog-mask" maskUnits="userSpaceOnUse" x={vx} y={vy} width={vw} height={vh}>
+          <rect x={vx} y={vy} width={vw} height={vh} fill="#fff" />
+          <g fill="#000" filter="url(#fog-soft)">{holes}</g>
+        </mask>
+      </defs>
+      <rect className="m-fog" x={vx} y={vy} width={vw} height={vh} mask="url(#fog-mask)" />
+    </>
+  );
+}
+
 function MapView({ def, s }: { def: LevelDef; s: MapState | null }) {
   const b = def.bounds;
   const pad = 6;
@@ -49,6 +76,7 @@ function MapView({ def, s }: { def: LevelDef; s: MapState | null }) {
       {[...def.hay, ...def.bushes].map((h, i) => <circle key={i} className="m-hide" cx={sx(h.x)} cy={sy(h.z)} r={0.9} />)}
       <rect className="m-wall" x={sx(pal.maxX)} y={sy(pal.maxZ)} width={pal.maxX - pal.minX} height={pal.maxZ - pal.minZ} />
       {def.fences?.map((f, i) => <line key={i} className="m-fence" x1={sx(f.minX)} x2={sx(f.maxX)} y1={sy(f.z)} y2={sy(f.z)} />)}
+      {s && s.fog.cols > 0 && <Fog f={s.fog} vx={vx} vy={vy} vw={vw} vh={vh} />}
       {s && (
         <>
           <g transform={`translate(${sx(s.exit.x)} ${sy(s.exit.z)})`}>
@@ -130,7 +158,7 @@ export default function PauseMenu({
               <MapView def={def} s={s} />
               <p className="legend small dim">
                 <i className="k-you" /> You <i className="k-obj" /> {def.objective.kind === "steal" ? "Item" : "Target"} <i className="k-exit" /> Escape{" "}
-                <i className="k-hide" /> Hiding spot
+                <i className="k-hide" /> Hiding spot <i className="k-fog" /> Not explored yet
               </p>
             </>
           )}

@@ -29,6 +29,8 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
 | Esc | Pause: map (Peta), gear (Kelengkapan), skills (Ilmu) and mission (Hikayat) tabs; Q / E or the arrow keys switch tabs |
 
+Peta (map): only ground you have come within about 18 m of is shown; the rest stays dark. The objective, the escape and you are always marked. Exploration resets with a fresh attempt and is kept when you retry from the checkpoint.
+
 Ilmu (skills): each completed mission gives 2 skill points, and a Ghost rating on it 1 more. Spend them from the main menu or the pause menu on nine upgrades in three branches (Bayang: quieter steps, slower to be spotted, longer breath; Silat: wider parry window, an extra health point, faster recovery; Helang: 3 more knives, longer knife stun, leap takedowns from 10 m). Unlearn all gives the points back; Reset progress clears them with the missions.
 
 Tangkal (amulets): one is hidden on each mission, a gold pendant turning above a haystack or bush in the target's part of the map (E to take it). Found ones are kept even if the mission fails; wear one at a time from Kelengkapan in the pause menu. Harimau: quieter footsteps. Kancil: slower to be spotted. Besi: 2 more knives. Buaya: longer breath. Puteri: health returns sooner.

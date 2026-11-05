@@ -137,7 +137,9 @@ export default function PauseMenu({
           {cur === "kelengkapan" && (
             <div className="slots">
               <Slot sub="Senjata" name="Keris" value="Takedowns and close fighting" />
-              <Slot sub="Lempar" name="Pisau lempar" value={s ? `${s.knives} of ${s.maxKnives} left` : "-"} />
+              <Slot sub="Alat 1" name="Pisau lempar" value={s ? `${s.knives} of ${s.maxKnives} left` : "-"} />
+              <Slot sub="Alat 2" name="Batu" value={s ? `${s.stones} stones left` : "-"} />
+              <Slot sub="Alat 3" name="Serbuk lada" value={s ? `${s.pepper} handfuls left` : "-"} />
               <Slot sub="Pakaian" name="Baju pendekar" value="Dark cloth for the dusk" />
               {worn ? <Slot sub="Tangkal" name={worn.name} value={worn.desc} /> : <Slot sub="Tangkal" name="Empty" value={charms.found.length ? "None worn" : "No amulet found yet"} empty />}
               <Slot sub="Nyawa" name="Health" value={s ? `${Math.ceil(s.hp)} of ${s.maxHp}` : "-"} />

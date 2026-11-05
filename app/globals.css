@@ -38,6 +38,15 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .chips em { font-style: normal; font-size: .75rem; background: rgba(20,10,24,.6); padding: 2px 8px; border-radius: 10px; }
 .chips .gold { color: #ffd24a; }
 
+.tool-chip { border: 1px solid rgba(255,207,138,.6); }
+.wheel { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.wheel::before { content: ""; position: absolute; left: -150px; top: -150px; width: 300px; height: 300px; border-radius: 50%; background: radial-gradient(circle, rgba(20,10,24,.15) 30%, rgba(20,10,24,.7) 70%); border: 1px solid rgba(255,207,138,.4); }
+.wheel-slot { position: absolute; left: -55px; top: -34px; width: 110px; height: 68px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: rgba(20,10,24,.75); border: 1px solid rgba(255,255,255,.3); border-radius: 8px; font-size: .8rem; }
+.wheel-slot b { font-size: .85rem; }
+.wheel-slot kbd { font-size: .6rem; padding: 0 4px; }
+.wheel-slot.on { border-color: #ffcf8a; background: rgba(120,70,20,.75); color: #ffcf8a; box-shadow: 0 0 12px rgba(255,207,138,.5); }
+.wheel-slot.out { opacity: .5; }
+.wheel-desc { position: absolute; left: -160px; top: 170px; width: 320px; margin: 0; text-align: center; font-size: .8rem; }
 .compass { position: absolute; top: 16px; right: 16px; width: 92px; height: 92px; border-radius: 50%; background: rgba(20,10,24,.55); border: 1px solid rgba(255,255,255,.25); }
 .compass-ring, .compass-obj { position: absolute; inset: 0; }
 .compass-ring span { position: absolute; left: 50%; top: 50%; width: 14px; margin-left: -7px; margin-top: -8px; text-align: center; font-size: .75rem; font-weight: 700; }

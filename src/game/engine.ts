@@ -37,6 +37,7 @@ import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
 import { BASE_MODS, type SkillMods } from "./skills";
 import { amuletForLevel, amuletSpot } from "./amulets";
+import { TOOLS, type ToolId } from "./tools";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
@@ -44,8 +45,15 @@ export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
 export type LoseReason = "slain" | "detected" | null;
 
+/** stones and pepper per attempt, pepper reach and blind time, stone hearing range, game speed while the wheel is open */
+const TOOL = { stones: 8, pepper: 2, pepperR: 4.5, pepperBlind: 3.5, stoneHear: 14, slow: 0.25 };
+
 export interface HudState {
   meter: number;
+  /** the tool in hand, how many of each are left, and the wheel (open: the highlighted tool) */
+  tool: ToolId;
+  ammo: Record<ToolId, number>;
+  wheel: ToolId | null;
   /** swimming: breath left, 0..1 (null on land) */
   breath: number | null;
   alert: GuardState | "calm";
@@ -111,6 +119,8 @@ export interface MapState {
   alerts: number;
   knives: number;
   maxKnives: number;
+  stones: number;
+  pepper: number;
   hp: number;
   maxHp: number;
 }
@@ -394,6 +404,13 @@ export class Game {
   private mods: SkillMods = BASE_MODS;
   private knives = START_KNIVES;
   private knifeCd = 0;
+  private tool: ToolId = "knife";
+  private stones = TOOL.stones;
+  private pepper = TOOL.pepper;
+  /** tool wheel held open: the stick / mouse offset that picks a slot, and the slot it points at */
+  private wheel: { x: number; y: number; sel: ToolId } | null = null;
+  /** pepper cloud: seconds since thrown */
+  private puff: { t: number; mesh: THREE.Mesh } | null = null;
   private hp = MAX_HP;
   private hurtT = 99;
   private hurtAnimT = 0;
@@ -700,6 +717,9 @@ export class Game {
     this.eagle = false;
     this.knives = this.maxKnives;
     this.knifeCd = 0;
+    this.stones = TOOL.stones;
+    this.pepper = TOOL.pepper;
+    this.wheel = null;
     this.hp = this.maxHp;
     this.hurtT = 99;
     this.hurtAnimT = 0;
@@ -788,7 +808,7 @@ export class Game {
       if (e.repeat) return;
       this.pressKey(e.code);
     });
-    on("keyup", (e) => this.keys.delete(e.code));
+    on("keyup", (e) => this.releaseKey(e.code));
     // mouse look needs the pointer captured; after an intro that ended on its own there was no click to do it
     el.addEventListener("click", () => {
       if (this.phase === "playing" && document.pointerLockElement !== el) this.lock();
@@ -800,7 +820,10 @@ export class Game {
     });
     on("mouseup", (e) => this.keys.delete(`Mouse${e.button}`));
     el.addEventListener("contextmenu", (e) => e.preventDefault());
-    on("blur", () => this.keys.clear());
+    on("blur", () => {
+      this.keys.clear();
+      this.wheel = null;
+    });
     on("mousemove", (e) => {
       if (this.phase === "playing" && document.pointerLockElement === el) this.look(e.movementX, e.movementY);
     });
@@ -965,6 +988,8 @@ export class Game {
       alerts: this.run.alerts,
       knives: this.knives,
       maxKnives: this.maxKnives,
+      stones: this.stones,
+      pepper: this.pepper,
       hp: this.hp,
       maxHp: this.maxHp,
     };
@@ -1001,6 +1026,7 @@ export class Game {
   pause() {
     if (this.phase === "playing") {
       this.keys.clear();
+      this.wheel = null;
       this.setTouchMove(0, 0, false);
       this.setPhase("paused");
     }
@@ -1021,7 +1047,13 @@ export class Game {
     if (code === "KeyE" || code === "Mouse0") this.tryTakedown();
     if (code === "KeyR" || code === "Mouse2") this.tryParry();
     if (code === "KeyX") this.tryRoll();
-    if (code === "KeyQ") this.tryThrow();
+    if (code === "KeyQ") this.useTool();
+    if (code === "Tab") this.wheel = { x: 0, y: 0, sel: this.tool };
+    if (code === "Digit1" || code === "Digit2" || code === "Digit3") this.pickTool(TOOLS[Number(code.slice(5)) - 1].id);
+    if (code === "ToolPrev" || code === "ToolNext") {
+      const i = TOOLS.findIndex((t) => t.id === this.tool);
+      this.pickTool(TOOLS[(i + (code === "ToolNext" ? 1 : TOOLS.length - 1)) % TOOLS.length].id);
+    }
     if (code === "KeyF") this.tryCarry();
     if (code === "KeyV") this.eagle = !this.eagle;
     if (code === "KeyC") this.crouchToggle = !this.crouchToggle;
@@ -1029,6 +1061,67 @@ export class Game {
   }
   releaseKey(code: string) {
     this.keys.delete(code);
+    if (code === "Tab" && this.wheel) {
+      const sel = this.wheel.sel;
+      this.wheel = null;
+      this.pickTool(sel);
+    }
+  }
+  private pickTool(id: ToolId) {
+    if (id !== this.tool) this.toast(TOOLS.find((t) => t.id === id)!.name);
+    this.tool = id;
+    this.hudTimer = 0;
+  }
+  private useTool() {
+    if (this.tool === "knife") this.tryThrow();
+    else if (this.tool === "stone") this.throwStone();
+    else this.throwPepper();
+  }
+  /** Camera aim point: the first wall or roof along the view, else the ground, at most 40 m out. */
+  private aimPoint(): THREE.Vector3 {
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const o = this.camera.position;
+    let t = 40;
+    const wall = raycastBoxes({ x: o.x, y: o.y, z: o.z }, dir, this.level.colliders, t);
+    if (wall !== null) t = wall;
+    if (dir.y < -0.01) t = Math.min(t, o.y / -dir.y);
+    return o.clone().addScaledVector(dir, t);
+  }
+  private throwStone() {
+    if (this.stones <= 0 || this.knifeCd > 0 || this.climb || this.leap || this.swim) return;
+    this.stones--;
+    this.knifeCd = 0.6;
+    const hit = this.aimPoint();
+    this.knifeFly = { t: 0, from: new THREE.Vector3(this.p.x, this.p.y + 1.3, this.p.z), to: hit };
+    let n = 0;
+    for (const g of this.guards) {
+      if (g.dead || dist2D(g, hit) >= TOOL.stoneHear) continue;
+      this.hear(g, { x: hit.x, z: hit.z, y: hit.y });
+      n++;
+    }
+    this.toast(n ? "Stone thrown. They heard it." : "Stone thrown.");
+  }
+  private throwPepper() {
+    if (this.pepper <= 0 || this.knifeCd > 0 || this.climb || this.leap || this.swim) return;
+    this.pepper--;
+    this.knifeCd = 0.8;
+    let n = 0;
+    for (const g of this.guards) {
+      if (g.dead || dist2D(g, this.p) > TOOL.pepperR || Math.abs(g.y - this.p.y) > 2) continue;
+      g.stun = Math.max(g.stun, TOOL.pepperBlind);
+      g.atk = null;
+      g.meter = 0;
+      n++;
+    }
+    if (!this.puff) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0xc8823a, transparent: true, opacity: 0.5, depthWrite: false }));
+      this.scene.add(m);
+      this.puff = { t: 0, mesh: m };
+    }
+    this.puff.t = 0;
+    this.puff.mesh.position.set(this.p.x, this.p.y + 1.2, this.p.z);
+    this.toast(n ? `Pepper! ${n} guard${n === 1 ? "" : "s"} blinded.` : "Pepper thrown. Nobody close enough.");
   }
   /** Analog movement from the touch joystick: x strafe, y forward, both -1..1 already deadzoned. */
   setTouchMove(x: number, y: number, run: boolean) {
@@ -1037,6 +1130,26 @@ export class Game {
     this.touchMove.run = run;
   }
   look(dx: number, dy: number) {
+    if (this.wheel) {
+      // the wheel takes the mouse / right stick: point at a slot (up: knife, then clockwise)
+      const w = this.wheel;
+      w.x += dx;
+      w.y += dy;
+      const m = Math.hypot(w.x, w.y);
+      if (m > 120) {
+        w.x *= 120 / m;
+        w.y *= 120 / m;
+      }
+      if (m > 30) {
+        const a = (Math.atan2(w.x, -w.y) + Math.PI * 2) % (Math.PI * 2);
+        const sel = TOOLS[Math.round(a / ((Math.PI * 2) / TOOLS.length)) % TOOLS.length].id;
+        if (sel !== w.sel) {
+          w.sel = sel;
+          this.hudTimer = 0;
+        }
+      }
+      return;
+    }
     const k = 0.0022 * this.lookSens;
     this.camYaw -= dx * k;
     this.camPitch = clamp(this.camPitch + dy * k * (this.invertY ? -1 : 1), -0.25, 1.2);
@@ -1337,7 +1450,7 @@ export class Game {
     this.last = now;
     this.time += dt;
     this.pollPad(dt);
-    if (this.phase === "playing") this.update(dt);
+    if (this.phase === "playing") this.update(this.wheel ? dt * TOOL.slow : dt);
     if (this.phase === "title") this.attractCamera();
     if (this.phase === "intro") this.stepIntro(dt);
     this.render(dt);
@@ -2638,6 +2751,9 @@ export class Game {
       crouched: this.crouched,
       hidden: this.hidden,
       knives: this.knives,
+      tool: this.tool,
+      ammo: { knife: this.knives, stone: this.stones, pepper: this.pepper },
+      wheel: this.wheel?.sel ?? null,
       prompt,
       carrying: !!this.carrying,
       toast: this.toastT > 0 ? this.toastText : "",
@@ -2792,6 +2908,14 @@ export class Game {
     const eb = this.level.exitBeam.material as THREE.MeshBasicMaterial;
     if (eb.opacity > 0) eb.opacity = 0.3 + Math.sin(this.time * 3) * 0.08;
 
+    // pepper cloud: swells, then thins out
+    if (this.puff) {
+      const f = this.puff;
+      f.t += dt;
+      f.mesh.visible = f.t < 1.4;
+      f.mesh.scale.setScalar(0.4 + Math.min(1, f.t / 0.35) * (TOOL.pepperR - 0.4));
+      (f.mesh.material as THREE.MeshBasicMaterial).opacity = 0.45 * Math.max(0, 1 - f.t / 1.4);
+    }
     // knife flight
     if (this.knifeFly) {
       const k = this.knifeFly;

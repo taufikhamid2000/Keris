@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, MapState, Phase } from "@/game/engine";
+import { TOOLS } from "@/game/tools";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
 import { LEVELS, initialLevel, type LevelDef } from "@/game/levels";
 import {
@@ -39,6 +40,9 @@ const EMPTY: HudState = {
   crouched: false,
   hidden: false,
   knives: 0,
+  tool: "knife",
+  ammo: { knife: 0, stone: 0, pepper: 0 },
+  wheel: null,
   prompt: "",
   toast: "",
   carrying: false,
@@ -93,14 +97,15 @@ const CONTROLS: [string, string][] = [
   ["E / Left click", "Tikam: keris takedown from behind. In a fight, tap to strike, hold and let go for a heavy strike that breaks his guard"],
   ["R / Right click", "Parry: just before a guard strikes (his marker flashes white), then strike to finish him"],
   ["X", "Roll: dodge a strike or break away"],
-  ["Q", "Pisau lempar: stun / distract"],
+  ["Q", "Use the tool in hand: pisau lempar (stun / distract), batu (stone: draws guards), serbuk lada (pepper: blinds guards close by)"],
+  ["Hold Tab", "Tool wheel: move the mouse to pick, let go to take it (1, 2, 3 pick directly)"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["E by a horse", "Mount it; WASD rides, Shift gallops (loud), E gets down"],
   ["E by a sampan", "Board it; WASD paddles, Shift faster, E by a bank goes ashore"],
   ["Walk into water (river, pool, sea)", "Swim; Shift faster, Ctrl / C dives out of sight while breath lasts, Space climbs aboard"],
   ["V", "Mata Helang vision"],
   ["Esc", "Pause"],
-  ["Controller", "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT knife, Y carry, R3 crouch, RB vision, LB run, Start pause"],
+  ["Controller", "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT use tool, hold d-pad up for the tool wheel (right stick picks), d-pad left / right switch tool, Y carry, R3 crouch, RB vision, LB run, Start pause"],
 ];
 
 const TOUCH_CONTROLS: [string, string][] = [
@@ -111,7 +116,8 @@ const TOUCH_CONTROLS: [string, string][] = [
   ["E", "Tikam: takedown from behind. In a fight, tap to strike, hold for a heavy strike"],
   ["R", "Parry: just before a guard strikes (his marker flashes white)"],
   ["X", "Roll: dodge a strike or break away"],
-  ["Q", "Pisau lempar: stun / distract"],
+  ["Q", "Use the tool in hand (knife, stone or pepper)"],
+  ["Alat", "Switch tool"],
   ["F", "Carry / drop a body (hide it in hay or bush)"],
   ["E by a horse", "Mount it; the stick rides, E gets down"],
   ["E by a sampan", "Board it; the stick paddles, E by a bank goes ashore"],
@@ -428,7 +434,9 @@ export default function GameClient() {
               {hud.hidden && <em>Hidden</em>}
               {hud.crouched && <em>Crouched</em>}
               {hud.eagle && <em className="gold">Mata Helang</em>}
-              <em>Pisau lempar x{hud.knives}</em>
+              <em className="tool-chip">
+                {TOOLS.find((t) => t.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
+              </em>
             </div>
           </div>
           <Compass north={hud.northDeg} obj={hud.objDeg} />
@@ -448,8 +456,27 @@ export default function GameClient() {
           )}
           {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : hud.prompt}</div>}
           {hud.toast && <div className="toast">{hud.toast}</div>}
+          {hud.wheel && (
+            <div className="wheel" aria-label="Tool wheel">
+              {TOOLS.map((t, i) => {
+                const a = (i * 2 * Math.PI) / TOOLS.length;
+                return (
+                  <div
+                    key={t.id}
+                    className={`wheel-slot${hud.wheel === t.id ? " on" : ""}${hud.ammo[t.id] <= 0 ? " out" : ""}`}
+                    style={{ transform: `translate(${Math.sin(a) * 110}px, ${-Math.cos(a) * 110}px)` }}
+                  >
+                    <kbd>{i + 1}</kbd>
+                    <b>{t.name}</b>
+                    <span>x{hud.ammo[t.id]}</span>
+                  </div>
+                );
+              })}
+              <p className="wheel-desc">{TOOLS.find((t) => t.id === hud.wheel)?.desc}</p>
+            </div>
+          )}
           <div className="hint">
-            WASD move · Shift run · C crouch · Space climb · E / click tikam · R / right-click parry · X roll · Q throw · F carry body · V Mata Helang · Esc pause
+            WASD move · Shift run · C crouch · Space climb · E / click tikam · R / right-click parry · X roll · Q tool · Tab wheel · F carry body · V Mata Helang · Esc pause
           </div>
         </div>
       )}

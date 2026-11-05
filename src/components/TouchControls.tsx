@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef } from "react";
 import type { Game, HudState } from "@/game/engine";
 import { clampToRadius, joystickVector, lookDelta } from "@/game/touch";
 
+const TOOL_SHORT = { knife: "Pisau", stone: "Batu", pepper: "Lada" } as const;
+
 const JOY_R = 56; // px, thumb travel from the stick centre to the edge (run zone)
 
 /** Ask for fullscreen and landscape. Both are best-effort: iPhone Safari allows neither for pages. */
@@ -159,11 +161,12 @@ export default function TouchControls({ game, hud }: { game: Game | null; hud: H
         <Btn game={game} code="KeyV" label="V" sub="Mata Helang" cls="eagle" on={hud.eagle} />
         <Btn game={game} code="KeyF" label="F" sub={hud.carrying ? "Drop" : "Carry"} cls="carry" on={hud.carrying || t.startsWith("F")} />
         <Btn game={game} code="KeyC" label="C" sub="Crouch" cls="crouch" on={hud.crouched} />
-        <Btn game={game} code="KeyQ" label="Q" sub={`Lempar x${hud.knives}`} cls="throw" dim={hud.knives <= 0} />
+        <Btn game={game} code="KeyQ" label="Q" sub={`${TOOL_SHORT[hud.tool]} x${hud.ammo[hud.tool]}`} cls="throw" dim={hud.ammo[hud.tool] <= 0} />
         <Btn game={game} code="KeyX" label="X" sub="Roll" cls="roll" />
         <Btn game={game} code="KeyR" label="R" sub="Parry" cls="parry" on={hud.incoming} />
         <Btn game={game} code="KeyE" label="E" sub={hud.combat && !t.startsWith("E  Keris") ? "Strike" : "Tikam"} cls="stab" on={t.startsWith("E")} />
         <Btn game={game} code="Space" label="Jump" sub="Climb" cls="jump" />
+        <Btn game={game} code="ToolNext" label="Alat" sub="Switch" cls="tool" />
       </div>
     </div>
   );

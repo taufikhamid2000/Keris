@@ -10,6 +10,9 @@ export const PAD_KEYS: Record<number, string> = {
   6: "KeyR", // LT / L2: parry
   7: "KeyQ", // RT / R2: throw knife
   11: "KeyC", // right stick click: crouch toggle
+  12: "Tab", // d-pad up, held: tool wheel (right stick picks)
+  14: "ToolPrev", // d-pad left / right: previous / next tool
+  15: "ToolNext",
 };
 export const PAD_RUN = [4, 10]; // LB / L1 or left stick click
 export const PAD_START = 9;

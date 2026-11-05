@@ -20,7 +20,8 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | E or left click | Tikam: keris takedown from behind, or on a stunned or parried guard. In a fight, tap for a strike, or hold and let go for a heavy strike |
 | R or right click | Parry: press just before a guard's strike lands (his marker flashes white) to stagger him |
 | X | Roll: dodge a strike or break away from a crowd |
-| Q | Pisau lempar: throw a knife to stun a guard, or make noise to distract |
+| Q | Use the tool in hand: pisau lempar (6 knives, stuns a guard or clatters to distract), batu (8 stones, guards within 14 m of the landing go and look), serbuk lada (2 handfuls, blinds every guard within 4.5 m for 3.5 s, even mid-fight) |
+| Hold Tab | Tool wheel: the game slows, move the mouse to pick, let go to take it; 1 / 2 / 3 pick directly |
 | F | Carry the nearest body, or drop it. Drop it inside a haystack or bush to hide it |
 | E by a horse | Mount it. WASD rides (camera-relative), Shift gallops (loud), E gets down |
 | Walk into a river, pool or the sea | Swim (slower than walking; Shift is faster but splashes). Hold Ctrl or press C to dive: unseen and silent for 8 s of breath. Swim to a bank to walk out; Space beside a jetty, deck, prahu or the anchored ship climbs aboard (walk off the side to jump back in); E by a sampan climbs in. Diving takes you under jetties and bridges. The anchored ship has a crew of three on watch (two on deck, a lookout on the aft castle) |
@@ -32,7 +33,7 @@ Ilmu (skills): each completed mission gives 2 skill points, and a Ghost rating o
 
 Tangkal (amulets): one is hidden on each mission, a gold pendant turning above a haystack or bush in the target's part of the map (E to take it). Found ones are kept even if the mission fails; wear one at a time from Kelengkapan in the pause menu. Harimau: quieter footsteps. Kancil: slower to be spotted. Besi: 2 more knives. Buaya: longer breath. Puteri: health returns sooner.
 
-A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam / strike, LT parry, B roll, RT throw knife, Y carry, R3 crouch, RB Mata Helang, LB or L3 run, Start pause. On menus the d-pad moves between buttons and A or Start picks one; in the pause menu LB / RB (or d-pad left / right) switch tabs; any button gets past the start screen, and A or Start skips the intro.
+A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad API): left stick moves, right stick looks, A jump/climb, X tikam / strike, LT parry, B roll, RT use tool, hold d-pad up for the tool wheel (right stick picks), d-pad left / right switch tool, Y carry, R3 crouch, RB Mata Helang, LB or L3 run, Start pause. On menus the d-pad moves between buttons and A or Start picks one; in the pause menu LB / RB (or d-pad left / right) switch tabs; any button gets past the start screen, and A or Start skips the intro.
 
 Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. Being seen is a fight, not an instant loss. An alert guard in reach winds up a strike (his marker grows and flashes white): parry it to stagger him and finish him with E, or roll clear. Open strikes take three hits per guard; a heavy strike (hold E, then let go) is slower and can be cut short by a blow, but deals double and always staggers him, so the next strike kills. Otherwise at most two guards swing at once, and you can take three cuts; health comes back slowly once you break away. On a mission that must stay unseen, the alarm still ends it.
 
@@ -42,7 +43,7 @@ Touch controls appear on touch devices (detected by `pointer: coarse`, not user 
 
 - Left thumb: floating joystick. Push to the edge to run (louder).
 - Drag the right side: look.
-- Buttons: Jump/Climb, C crouch (toggle), E Tikam / Strike, R parry, X roll, Q knife, F carry/drop, V Mata Helang, and a pause button. Multi-touch works, so you can move, look and press at once.
+- Buttons: Jump/Climb, C crouch (toggle), E Tikam / Strike, R parry, X roll, Q use tool, Alat switch tool, F carry/drop, V Mata Helang, and a pause button. Multi-touch works, so you can move, look and press at once.
 - Phones default to a lighter quality tier (pixel ratio capped at 1.5, no antialiasing, smaller basic shadows, shorter fog, 5 real lantern lights). Force it with `?quality=low` or `?quality=high`. `?touch=1` or `?touch=0` forces the control scheme.
 
 ![Phone title screen](docs/mobile-title-667x375.png)

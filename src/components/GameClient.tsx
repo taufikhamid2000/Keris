@@ -186,6 +186,24 @@ function Controls({ touch }: { touch: boolean }) {
   );
 }
 
+/**
+ * The engine sends the HUD about 12 times a second; standing still (or looking at a menu) most of those are the
+ * same as the last one. This keeps the previous object when nothing changed, so React skips the re-render.
+ */
+function keepSameHud(set: (h: HudState) => void) {
+  let last = "";
+  return (h: HudState) => {
+    const key = JSON.stringify(h);
+    if (key === last) return;
+    last = key;
+    set(h);
+  };
+}
+
+/** Ilmu actions: the save store is one per tab, so these never change and the memoized SkillTree can skip renders. */
+const learn = (id: string) => getSaveStore().update((d) => learnSkill(d, id));
+const unlearnAll = () => getSaveStore().update(resetSkills);
+
 /** The menu currently on top: settings over the title, or whichever overlay is last in the DOM. */
 const topOverlay = () => {
   const all = document.querySelectorAll<HTMLElement>(".overlay");
@@ -260,7 +278,7 @@ export default function GameClient() {
         inst = new Game(
           mount.current,
           {
-            onHud: setHud,
+            onHud: keepSameHud(setHud),
             onPhase: (p, r) => {
               if (p === "won" && inst) {
                 const before = store.get();
@@ -455,7 +473,7 @@ export default function GameClient() {
     g()?.resume();
   };
   const skillTree = (
-    <SkillTree save={save} onLearn={(id) => store.update((d) => learnSkill(d, id))} onReset={() => store.update(resetSkills)} />
+    <SkillTree save={save} onLearn={learn} onReset={unlearnAll} />
   );
   const alertCls = hud.alert === "calm" ? "" : hud.alert;
 

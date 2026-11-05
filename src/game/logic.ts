@@ -51,32 +51,48 @@ export function inVisionCone(
 
 /** Slab test. Returns distance along the (normalised) ray to the box, or null. 0 if origin is inside. */
 export function rayBoxDistance(o: Vec3, d: Vec3, b: Box, maxDist = Infinity): number | null {
-  let tmin = 0;
-  let tmax = maxDist;
-  const axes: [number, number, number, number][] = [
-    [o.x, d.x, b.minX, b.maxX],
-    [o.y, d.y, b.minY, b.maxY],
-    [o.z, d.z, b.minZ, b.maxZ],
-  ];
-  for (const [oo, dd, lo, hi] of axes) {
-    if (Math.abs(dd) < 1e-9) {
-      if (oo < lo || oo > hi) return null;
-    } else {
-      let t1 = (lo - oo) / dd;
-      let t2 = (hi - oo) / dd;
-      if (t1 > t2) [t1, t2] = [t2, t1];
-      tmin = Math.max(tmin, t1);
-      tmax = Math.min(tmax, t2);
-      if (tmin > tmax) return null;
-    }
+  // runs for every box on every sight line and camera ray each frame, so it allocates nothing
+  SLAB.tmin = 0;
+  SLAB.tmax = maxDist;
+  if (!slab(o.x, d.x, b.minX, b.maxX)) return null;
+  if (!slab(o.y, d.y, b.minY, b.maxY)) return null;
+  if (!slab(o.z, d.z, b.minZ, b.maxZ)) return null;
+  return SLAB.tmin;
+}
+/** the running [tmin, tmax] of rayBoxDistance */
+const SLAB = { tmin: 0, tmax: 0 };
+/** One axis of the slab test: narrows SLAB, false when the ray misses the box. */
+function slab(oo: number, dd: number, lo: number, hi: number): boolean {
+  if (Math.abs(dd) < 1e-9) return !(oo < lo || oo > hi);
+  let t1 = (lo - oo) / dd;
+  let t2 = (hi - oo) / dd;
+  if (t1 > t2) {
+    const s = t1;
+    t1 = t2;
+    t2 = s;
   }
-  return tmin;
+  SLAB.tmin = Math.max(SLAB.tmin, t1);
+  SLAB.tmax = Math.min(SLAB.tmax, t2);
+  return SLAB.tmin <= SLAB.tmax;
 }
 
 /** Nearest hit of a ray against many boxes. */
 export function raycastBoxes(o: Vec3, d: Vec3, boxes: Box[], maxDist: number): number | null {
   let best: number | null = null;
+  // broadphase: a box clear of the bounds of the segment o .. o + d * maxDist cannot be hit within maxDist
+  const finite = Number.isFinite(maxDist);
+  const ex = o.x + d.x * maxDist;
+  const ey = o.y + d.y * maxDist;
+  const ez = o.z + d.z * maxDist;
+  const E = 1e-6;
+  const minX = Math.min(o.x, ex) - E;
+  const maxX = Math.max(o.x, ex) + E;
+  const minY = Math.min(o.y, ey) - E;
+  const maxY = Math.max(o.y, ey) + E;
+  const minZ = Math.min(o.z, ez) - E;
+  const maxZ = Math.max(o.z, ez) + E;
   for (const b of boxes) {
+    if (finite && (b.maxX < minX || b.minX > maxX || b.maxY < minY || b.minY > maxY || b.maxZ < minZ || b.minZ > maxZ)) continue;
     const t = rayBoxDistance(o, d, b, maxDist);
     if (t !== null && (best === null || t < best)) best = t;
   }

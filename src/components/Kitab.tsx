@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { AMULETS } from "@/game/amulets";
 import { CHARM_LORE, MISSION_LORE, PLACES } from "@/game/kitab";
 import { LEVELS } from "@/game/levels";
@@ -38,7 +39,7 @@ function Section({ name, sub, pages }: { name: string; sub: string; pages: Page[
 }
 
 /** The journal: places reached, tangkal found and missions completed, each with a page of its own. */
-export default function Kitab({ save }: { save: SaveData }) {
+export default memo(function Kitab({ save }: { save: SaveData }) {
   const places: Page[] = PLACES.map((p) => ({ key: p.id, open: save.kitab.includes(p.id), title: p.title, text: p.text, hint: p.hint }));
   const charms: Page[] = AMULETS.map((a) => {
     const level = LEVELS.find((l) => l.id === a.level);
@@ -63,4 +64,4 @@ export default function Kitab({ save }: { save: SaveData }) {
       <Section name="Ghaib" sub="The unseen" pages={ghaib} />
     </div>
   );
-}
+});

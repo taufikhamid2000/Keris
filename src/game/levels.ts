@@ -1,6 +1,7 @@
 // Level definitions: plain data, no three.js. buildLevel() in level.ts turns one into meshes and
 // colliders, so a new mission is a new definition built from the same kit of parts.
 import type { Vec2 } from "./logic";
+import type { WayangDef } from "./wayang";
 
 export interface HouseDef {
   x: number;
@@ -97,6 +98,8 @@ export interface LevelDef {
   shrine?: { x: number; z: number; y: number };
   /** mountain mist: the fog thickens north of this z */
   mistZ?: number;
+  /** played as wayang kulit: ink silhouettes on a lit screen, and guards see the player's shadow near these lamps (wayang.ts) */
+  wayang?: WayangDef;
   /** market stalls */
   stalls: Rect[];
   wells: Vec2[];
@@ -737,9 +740,48 @@ export const LEDANG: LevelDef = {
   },
 };
 
-/** Every mission, in play order. */
-export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG];
+/**
+ * Wayang kulit: the dalang tells the night of the Bridge Battery again, as a shadow play. The same harbour and the same
+ * Kapitan, but drawn in ink on a lit kelir, and the blencong lamps throw the Pendekar's shadow where the guards can see it.
+ */
+export const WAYANG: LevelDef = {
+  ...WORLD,
+  id: "wayang",
+  name: "Wayang: The Battery Retold",
+  missionId: "wayang-kulit",
+  guards: [...HARBOUR_GUARDS, { waypoints: [{ x: -2.4, z: 5.8 }, { x: 2.4, z: 5.8 }], isTarget: true }],
+  objective: { kind: "kill" },
+  start: { x: -31.5, z: 31.5 },
+  exit: { x: 0, z: -36 },
+  // the harbour's own lanterns around the well, the palace and the market lanes stand in for the blencong
+  wayang: {
+    lamps: [
+      { x: -5, z: 5 }, { x: 5, z: -5 }, { x: -8, z: 16 }, { x: 8, z: 16 }, { x: -14, z: 0 }, { x: 14, z: 0 },
+      { x: -11, z: -12 }, { x: 11, z: 12 }, { x: 0, z: -29 },
+    ],
+    r: 6,
+  },
+  story:
+    "Night in the kampung, and the dalang has lit the blencong behind the kelir. Tonight he tells the Hikayat of the Bridge Battery " +
+    "again, with you as his Pendekar. Keep out of the lamplight: so close to the flame your shadow grows huge on the screen, and the " +
+    "guards watch the screen too. How he ends the tale depends on how you play it.",
+  checkpointLabel: "the Kapitan's puppet is down",
+  win: {
+    title: "The tale is told",
+    body: "The dalang lays the puppets down and the blencong burns low.",
+  },
+  text: {
+    objective: "Silence the Kapitan's puppet by the well",
+    escape: "Slip away to the jetty before the lamp burns low",
+    targetDown: "The Kapitan's puppet falls. Reach the jetty.",
+    targetSpotted: "The Kapitan has seen your shadow!",
+    strike: "Strike the Kapitan with the keris",
+    leap: "Leap down on the Kapitan",
+  },
+};
 
+/** Every mission, in play order. */
+export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG, WAYANG];
 /** The level named by ?level=<id> in a query string, else the first mission. */
 export function levelFromSearch(search: string): LevelDef {
   const id = new URLSearchParams(search).get("level");

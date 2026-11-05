@@ -41,6 +41,8 @@ import { packFog, unpackFog } from "./fog";
 import { placesAt } from "./kitab";
 import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./barks";
 import { TOOLS, type ToolId } from "./tools";
+import { Dalang, shadowOnScreen, shadowVision } from "./wayang";
+import { WayangLook } from "./wayangLook";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
@@ -79,6 +81,9 @@ export interface HudState {
   combat: boolean;
   /** a guard is winding up a strike at the player: parry or roll now */
   incoming: boolean;
+  /** wayang missions: the dalang's narration ("" when quiet), and how far the player's shadow is on the screen, 0..1 */
+  narration?: string;
+  shadow?: number;
 }
 
 export interface RunStats {
@@ -498,6 +503,10 @@ export class Game {
   private run: RunStats = { time: 0, alerts: 0, fromStart: true };
   readonly quality: Quality;
   private def: LevelDef;
+  /** wayang kulit missions: the shadow-play look, the narrator, and the player's shadow on the screen this frame (0..1) */
+  private wayangLook: WayangLook | null = null;
+  private dalang = new Dalang();
+  private shade = 0;
   /** the mission being played */
   get levelDef(): LevelDef {
     return this.def;
@@ -632,6 +641,8 @@ export class Game {
     }
 
     this.level.guards.forEach((def, i) => this.guards.push(this.makeGuard(def.waypoints, !!def.isTarget, i)));
+    this.wayangLook = new WayangLook(this.scene, this.renderer, this.sky, this.quality === "low");
+    this.wayangLook.setActive(!!this.def.wayang);
 
     this.resetWorld();
     this.bindEvents();
@@ -931,6 +942,8 @@ export class Game {
     this.run = { time: 0, alerts: 0, fromStart: from === "start" };
     if (from === "start" || this.fog.seen.length === 0) this.clearFog();
     if (from === "target") this.applyTargetCheckpoint();
+    this.dalang.begin(!!this.def.wayang, from === "target");
+    this.shade = 0;
     this.cb.onCheckpoint?.(from);
     this.setPhase("playing");
     this.lock();
@@ -959,6 +972,7 @@ export class Game {
     this.objective = "escape";
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
     this.toast(this.level.text.targetDown);
+    this.dalang.cue("checkpoint");
     this.cb.onCheckpoint?.("target");
   }
   /** A small chest with a gold band and a faint glow, for steal objectives; part of the level root so it is disposed with it. */
@@ -1117,6 +1131,10 @@ export class Game {
   /** Play stats for the current attempt (read when it ends). */
   stats(): RunStats {
     return { ...this.run };
+  }
+  /** The win screen's wording: the mission's own, or on a wayang mission the dalang's ending for how it was played. */
+  winText(): { title: string; body: string } {
+    return this.dalang.ending(this.run.alerts) ?? this.def.win;
   }
   /** Mouse and touch look settings: sensitivity multiplier and inverted vertical look. */
   setLookSettings(sens: number, invertY: boolean) {
@@ -1452,6 +1470,7 @@ export class Game {
       this.scene.add(this.navDbg.group);
     }
     this.level.guards.forEach((gd, i) => this.guards.push(this.makeGuard(gd.waypoints, !!gd.isTarget, i)));
+    this.wayangLook?.setActive(!!def.wayang);
     this.resetWorld();
   }
   /** Swap the procedural figures for the loaded models (player and every guard that has none yet). */
@@ -1534,6 +1553,7 @@ export class Game {
   }
   dispose() {
     this.disposed = true;
+    this.wayangLook?.dispose();
     this.playerRig?.dispose();
     for (const g of this.guards) g.rig?.dispose();
     cancelAnimationFrame(this.raf);
@@ -1744,6 +1764,9 @@ export class Game {
 
     // ---- hiding
     this.hidden = !!this.swim?.under || L.hides.some((h) => p.y < 1 && dist2D(p, h) < h.r);
+    // wayang: near a blencong the player's shadow is thrown large on the screen, where guards see it
+    this.shade = shadowOnScreen(this.def.wayang, p, this.hidden || !!this.swim);
+    this.dalang.tick(dt, this.shade);
 
     // ---- noise
     const stance = { crouched, running: p.running };
@@ -1999,12 +2022,14 @@ export class Game {
     const alertNow = g.brain.state === "alert";
     const eye = { x: g.x, y: g.y + 1.7, z: g.z };
     const chest = { x: p.x, y: p.y + (stance.crouched ? 0.6 : 1.1), z: p.z };
-    const seen = canSee(eye, g.yaw, chest, VIS, L.occluders, this.hidden);
+    // wayang: a shadow on the screen is seen from further and sooner (VIS itself when there is none)
+    const vis = shadowVision(VIS, this.shade);
+    const seen = canSee(eye, g.yaw, chest, vis, L.occluders, this.hidden);
     g.seesPlayer = seen;
     if (seen) {
       g.lastKnown = { x: p.x, z: p.z };
       g.lastKnownY = p.y;
-      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), VIS.range, stance) * this.mods.detect, dt);
+      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), vis.range, stance) * vis.rate * this.mods.detect, dt);
     } else {
       g.meter = stepMeter(g.meter, false, 0, dt, alertNow || g.brain.state === "search" ? 0.1 : 0.25);
     }
@@ -2026,6 +2051,7 @@ export class Game {
       else if (now === "patrol") this.say(g, "giveup");
       if (now === "alert") {
         this.run.alerts++;
+        this.dalang.cue(found ? "body" : "spotted");
         if (this.def.undetected) this.detected = true;
         g.meter = 1;
         if (!g.lastKnown) {
@@ -2741,6 +2767,7 @@ export class Game {
     for (const o of this.guards) if (!o.dead && o !== guard && dist2D(o, guard) < 5) this.hear(o, guard);
     if (guard.isTarget && this.def.objective.kind === "kill") this.completeObjective();
     else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
+    if (!guard.isTarget) this.dalang.cue("kill");
   }
 
   /** F: pick up the nearest body, or drop the one being carried (hidden if dropped inside cover). */
@@ -2884,6 +2911,8 @@ export class Game {
       maxHp: this.maxHp,
       combat: this.hp < this.maxHp || !!this.hostileNear(8),
       incoming,
+      narration: this.dalang.line,
+      shadow: this.shade,
     };
   }
 
@@ -3013,6 +3042,8 @@ export class Game {
     fog.near = Q.fogNear * (1 - MIST.near * mist);
     fog.far = Q.fogFar * (1 - MIST.far * mist);
     if (!e && mist > 0) fog.color.lerp(FOG_MIST, mist * 0.75);
+    // wayang kulit: the lit kelir's colour and depth, and the player's shadow thrown from the nearest blencong
+    this.wayangLook?.frame(dt, fog, p, this.def.wayang, this.shade, this.player.group.visible && !this.swim);
     // trees and rocks stop at the fog; ferns (small, and many) much sooner
     const fo = this.level.foliage;
     const cam = this.camera.position;

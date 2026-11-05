@@ -30,6 +30,7 @@ import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
 import { amuletForLevel, withAmulet } from "@/game/amulets";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
+import WayangOverlay from "./WayangOverlay";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -64,6 +65,8 @@ interface WinResult {
   newBestRating: boolean;
   /** skill points this win earned (first completion, first Ghost) */
   points: number;
+  /** the win screen's wording for this run (a wayang mission's ending depends on how it was played) */
+  text?: { title: string; body: string };
 }
 
 declare global {
@@ -257,6 +260,7 @@ export default function GameClient() {
                   newBestTime: out.newBestTime,
                   newBestRating: out.newBestRating,
                   points: earnedPoints(out.data) - earnedPoints(before),
+                  text: inst.winText(),
                 });
               }
               if (p === "paused" && inst) setMapState(inst.mapState());
@@ -424,6 +428,7 @@ export default function GameClient() {
   return (
     <div className={`root${touch ? " touch-ui" : ""}`} onContextMenu={(e) => touch && e.preventDefault()}>
       <div ref={mount} className="stage" />
+      {level.wayang && game && <WayangOverlay hud={hud} playing={phase === "playing"} />}
       {failed && (
         <div className="overlay">
           <div className="panel">
@@ -650,8 +655,8 @@ export default function GameClient() {
       {phase === "won" && (
         <div className="overlay">
           <div className="panel">
-            <h2>{level.win.title}</h2>
-            <p>{level.win.body}</p>
+            <h2>{(win?.text ?? level.win).title}</h2>
+            <p>{(win?.text ?? level.win).body}</p>
             {win && (
               <p className={`best ${win.newBestTime || win.newBestRating ? "new" : ""}`}>
                 Time {formatTime(win.time)} · {ratingLabel(win.rating)}

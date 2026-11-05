@@ -101,6 +101,7 @@ export const MISSION_LORE: Record<string, { title: string; text: string }> = {
   plans: { title: "The plans", text: "The plans came back in a chest from under the penghulu's hall, and nobody in the kampung ever knew they had been gone." },
   jungle: { title: "The scouts", text: "Without their captain the scouts lost the trails they had mapped. The way in from the hutan is closed, for now." },
   ledang: { title: "The tepak sireh", text: "The betel box is back on the summit altar. The mist came down again behind you, as if the mountain had been waiting." },
+  wayang: { title: "The shadow play", text: "The dalang keeps the Pendekar's puppet in a box of its own. He says it moves on the kelir before he touches the rods." },
 };
 
 const placeIds = new Set(PLACES.map((p) => p.id));

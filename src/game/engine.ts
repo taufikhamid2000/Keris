@@ -35,6 +35,7 @@ import { advanceIntro, cameraAt, captionAt, fadeAt, isSkipKey, skipIntro, startI
 import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
+import { BASE_MODS, type SkillMods } from "./skills";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
@@ -138,8 +139,7 @@ const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbien
 const STEP_H = 0.6;
 // ---- combat: stealth stays the better option, but being seen is a fight you can win, not an instant loss
 const MAX_HP = 3;
-/** seconds without being hit before health creeps back, and seconds per point after that */
-const REGEN_DELAY = 6;
+/** seconds per point of health coming back (it starts after SkillMods.regenDelay seconds without a hit) */
 const REGEN_STEP = 3;
 /** the first iframes seconds of a roll cannot be hit */
 const ROLL = { dur: 0.55, iframes: 0.4, speed: 7.5, cd: 0.3 };
@@ -387,6 +387,8 @@ export class Game {
   /** air assassination in flight: the player tracks the guard and kills him on landing */
   private leap: { t: number; dur: number; from: THREE.Vector3; guard: Guard } | null = null;
   private eagle = false;
+  /** what the learned Ilmu skills change (setSkills) */
+  private mods: SkillMods = BASE_MODS;
   private knives = START_KNIVES;
   private knifeCd = 0;
   private hp = MAX_HP;
@@ -689,9 +691,9 @@ export class Game {
     this.climb = null;
     this.leap = null;
     this.eagle = false;
-    this.knives = START_KNIVES;
+    this.knives = this.maxKnives;
     this.knifeCd = 0;
-    this.hp = MAX_HP;
+    this.hp = this.maxHp;
     this.hurtT = 99;
     this.hurtAnimT = 0;
     this.roll = null;
@@ -930,10 +932,24 @@ export class Game {
       time: this.run.time,
       alerts: this.run.alerts,
       knives: this.knives,
-      maxKnives: START_KNIVES,
+      maxKnives: this.maxKnives,
       hp: this.hp,
-      maxHp: MAX_HP,
+      maxHp: this.maxHp,
     };
+  }
+  private get maxHp() {
+    return MAX_HP + this.mods.maxHp;
+  }
+  private get maxKnives() {
+    return START_KNIVES + this.mods.knives;
+  }
+  /** Learned Ilmu skills; mid-mission, extra health and knives are handed over at once. */
+  setSkills(m: SkillMods) {
+    const hp = m.maxHp - this.mods.maxHp;
+    const kn = m.knives - this.mods.knives;
+    this.mods = m;
+    this.hp = clamp(this.hp + Math.max(0, hp), 0, this.maxHp);
+    this.knives = clamp(this.knives + Math.max(0, kn), 0, this.maxKnives);
   }
   /** Play stats for the current attempt (read when it ends). */
   stats(): RunStats {
@@ -1130,7 +1146,7 @@ export class Game {
           g.lastKnown = { x: p.x, z: p.z };
           g.lastKnownY = 0;
         }
-        Object.assign(this, { hp: MAX_HP, hurtT: 99, roll: null, rollCd: 0, swing: null, parryT: 0, parryCd: 0 });
+        Object.assign(this, { hp: this.maxHp, hurtT: 99, roll: null, rollCd: 0, swing: null, parryT: 0, parryCd: 0 });
         return i;
       }
     }
@@ -1468,7 +1484,7 @@ export class Game {
 
     // ---- noise
     const stance = { crouched, running: p.running };
-    const nr = this.hidden ? 0 : noiseRadius(stance, p.moving && p.grounded);
+    const nr = this.hidden ? 0 : noiseRadius(stance, p.moving && p.grounded) * this.mods.noise;
     if (nr > 0) for (const g of this.guards) if (!g.dead && dist2D(g, p) < nr * (Math.abs(g.y - p.y) > 2 ? 0.5 : 1)) this.hear(g, p);
 
     // ---- guards
@@ -1501,7 +1517,7 @@ export class Game {
 
   private enterWater() {
     const p = this.p;
-    this.swim = { under: false, breath: SWIM.breath, gasp: 0 };
+    this.swim = { under: false, breath: SWIM.breath * this.mods.breath, gasp: 0 };
     this.crouchToggle = false;
     this.swing = null;
     this.charge = null;
@@ -1527,7 +1543,7 @@ export class Game {
         this.crouchToggle = false;
         this.toast("Out of breath!");
       }
-    } else s.breath = Math.min(SWIM.breath, s.breath + dt * SWIM.refill);
+    } else s.breath = Math.min(SWIM.breath * this.mods.breath, s.breath + dt * SWIM.refill);
     // diving is silent; a fast crawl at the surface splashes like running
     p.running = !s.under && p.running;
     const speed = s.under ? SWIM.dive : p.running ? SWIM.fast : SWIM.speed;
@@ -1725,7 +1741,7 @@ export class Game {
     if (seen) {
       g.lastKnown = { x: p.x, z: p.z };
       g.lastKnownY = p.y;
-      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), VIS.range, stance), dt);
+      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), VIS.range, stance) * this.mods.detect, dt);
     } else {
       g.meter = stepMeter(g.meter, false, 0, dt, alertNow || g.brain.state === "search" ? 0.1 : 0.25);
     }
@@ -1944,7 +1960,7 @@ export class Game {
     // nobody looks up: from above, facing does not matter, only that he has not spotted the player
     for (const g of this.guards) {
       if (g.dead || g.climb || (g.brain.state === "alert" && g.stun <= 0)) continue;
-      if (!canAirAssassinate(p, g, this.level.colliders)) continue;
+      if (!canAirAssassinate(p, g, this.level.colliders, this.mods.airDrop)) continue;
       if (!best || dist2D(g, p) < dist2D(best, p)) best = g;
     }
     return { guard: best, near, air: !!best };
@@ -2272,8 +2288,8 @@ export class Game {
   /** R / right click: a short parry window. A strike that lands inside it staggers the guard. */
   private tryParry() {
     if (this.parryCd > 0 || this.roll || this.climb || this.leap || this.carrying || this.swim) return;
-    this.parryT = PARRY.win;
-    this.parryCd = PARRY.win + PARRY.cd;
+    this.parryT = PARRY.win * this.mods.parryWin;
+    this.parryCd = this.parryT + PARRY.cd;
     this.swing = null;
     this.charge = null;
     this.playerKick = "block";
@@ -2319,7 +2335,7 @@ export class Game {
     this.parryT = Math.max(0, this.parryT - dt);
     this.parryCd = Math.max(0, this.parryCd - dt);
     this.hurtT += dt;
-    if (this.hurtT > REGEN_DELAY) this.hp = Math.min(MAX_HP, this.hp + dt / REGEN_STEP);
+    if (this.hurtT > this.mods.regenDelay) this.hp = Math.min(this.maxHp, this.hp + dt / REGEN_STEP);
     this.stepCharge(dt);
     const s = this.swing;
     if (!s) return;
@@ -2512,7 +2528,7 @@ export class Game {
     const chest = new THREE.Vector3(this.p.x, this.p.y + 1.3, this.p.z);
     this.knifeFly = { t: 0, from: chest, to: hit };
     if (hitGuard) {
-      hitGuard.stun = 5;
+      hitGuard.stun = this.mods.knifeStun;
       hitGuard.atk = null;
       hitGuard.meter = 0;
       this.toast("Guard stunned.");
@@ -2572,7 +2588,7 @@ export class Game {
     const rel = wrapAngle(yawTo(p, obj) - this.camYaw);
     return {
       meter,
-      breath: this.swim ? this.swim.breath / SWIM.breath : null,
+      breath: this.swim ? this.swim.breath / (SWIM.breath * this.mods.breath) : null,
       alert,
       objective: this.objective === "main" ? this.level.text.objective : this.level.text.escape,
       northDeg: (this.camYaw * 180) / Math.PI,
@@ -2585,8 +2601,8 @@ export class Game {
       carrying: !!this.carrying,
       toast: this.toastT > 0 ? this.toastText : "",
       hp: this.hp,
-      maxHp: MAX_HP,
-      combat: this.hp < MAX_HP || !!this.hostileNear(8),
+      maxHp: this.maxHp,
+      combat: this.hp < this.maxHp || !!this.hostileNear(8),
       incoming,
     };
   }

@@ -77,37 +77,6 @@ function Slot({ name, sub, value, empty = false }: { name: string; sub: string; 
   );
 }
 
-const ILMU: { branch: string; sub: string; skills: [string, string][] }[] = [
-  {
-    branch: "Bayang",
-    sub: "Shadow",
-    skills: [
-      ["Langkah senyap", "Crouch to move quietly and stay low"],
-      ["Bersembunyi", "Vanish into haystacks and bushes"],
-      ["Angkat mayat", "Carry a body and hide it"],
-      ["Selam", "Dive under the water while your breath lasts"],
-    ],
-  },
-  {
-    branch: "Silat",
-    sub: "Combat",
-    skills: [
-      ["Tikam", "Keris takedown from behind, or from a ledge above"],
-      ["Pukulan berat", "Hold to strike hard and break a guard"],
-      ["Tangkis", "Parry just before a guard strikes"],
-      ["Golek", "Roll clear of a blow or a crowd"],
-    ],
-  },
-  {
-    branch: "Helang",
-    sub: "Eagle",
-    skills: [
-      ["Mata Helang", "See every guard and where he is looking"],
-      ["Pisau lempar", "Throw a knife to stun or distract"],
-    ],
-  },
-];
-
 export default function PauseMenu({
   def,
   s,
@@ -117,6 +86,7 @@ export default function PauseMenu({
   controls,
   best,
   actions,
+  skills,
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -126,6 +96,7 @@ export default function PauseMenu({
   controls: ReactNode;
   best: ReactNode;
   actions: ReactNode;
+  skills: ReactNode;
 }) {
   const cur = PAUSE_TABS[tab]?.id ?? "peta";
   const step = (d: number) => setTab((tab + d + PAUSE_TABS.length) % PAUSE_TABS.length);
@@ -166,25 +137,7 @@ export default function PauseMenu({
               <Slot sub="Nyawa" name="Health" value={s ? `${Math.ceil(s.hp)} of ${s.maxHp}` : "-"} />
             </div>
           )}
-          {cur === "ilmu" && (
-            <div className="ilmu">
-              {ILMU.map((b) => (
-                <div key={b.branch} className="branch">
-                  <h3>
-                    {b.branch} <span className="dim small">{b.sub}</span>
-                  </h3>
-                  <ul>
-                    {b.skills.map(([n, d]) => (
-                      <li key={n}>
-                        <b>{n}</b>
-                        <span className="dim small">{d}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
+          {cur === "ilmu" && skills}
           {cur === "hikayat" && (
             <>
               <h3>{def.name}</h3>

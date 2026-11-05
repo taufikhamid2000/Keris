@@ -1,6 +1,7 @@
 // Browser progress saving. Pure data helpers plus a small store over an injected Storage-like object,
 // so everything is unit tested in save.test.ts. No DOM or three.js. Every storage access is wrapped in
 // try/catch and degrades to in-memory when localStorage is missing or blocked (private mode, SSR).
+import { cleanSkills } from "./skills";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -36,6 +37,8 @@ export interface SaveData {
   settings: SaveSettings;
   /** the intro cutscene has been shown (or skipped) once; Reset progress clears it */
   seenIntro: boolean;
+  /** Ilmu upgrades learned, by id (skills.ts); points are worked out from the mission records */
+  skills: string[];
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -50,7 +53,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [] };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -120,6 +123,7 @@ export function sanitize(v: unknown): SaveData {
     missions,
     settings: cleanSettings(v.settings),
     seenIntro: v.seenIntro === true,
+    skills: cleanSkills(v.skills),
   };
 }
 

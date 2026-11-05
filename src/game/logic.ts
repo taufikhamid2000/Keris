@@ -339,9 +339,9 @@ export const AIR = { minDrop: 1.8, maxDrop: 7, reach: 3.5 } as const;
  * survivable, the guard within reach, and the line from the player's chest to the guard's head clear,
  * so the edge of the roof the player stands on blocks it until they step up to the edge.
  */
-export function canAirAssassinate(p: Vec3, g: Vec3, boxes: Box[]): boolean {
+export function canAirAssassinate(p: Vec3, g: Vec3, boxes: Box[], maxDrop: number = AIR.maxDrop): boolean {
   const drop = p.y - g.y;
-  if (drop < AIR.minDrop || drop > AIR.maxDrop) return false;
+  if (drop < AIR.minDrop || drop > maxDrop) return false;
   if (dist2D(p, g) > AIR.reach) return false;
   return hasLineOfSight({ x: p.x, y: p.y + 0.9, z: p.z }, { x: g.x, y: g.y + 1.6, z: g.z }, boxes);
 }

@@ -22,6 +22,8 @@ import {
 import KerisEmblem from "./KerisEmblem";
 import PauseMenu, { PAUSE_TABS } from "./PauseMenu";
 import SettingsPanel from "./SettingsPanel";
+import SkillTree from "./SkillTree";
+import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
 
 const EMPTY: HudState = {
@@ -51,6 +53,8 @@ interface WinResult {
   rating: number;
   newBestTime: boolean;
   newBestRating: boolean;
+  /** skill points this win earned (first completion, first Ghost) */
+  points: number;
 }
 
 declare global {
@@ -184,7 +188,7 @@ function padConfirm() {
   else top?.querySelector<HTMLButtonElement>(".btn:not(.ghost):not(:disabled)")?.click();
 }
 
-type MenuView = "main" | "controls" | "credits";
+type MenuView = "main" | "ilmu" | "controls" | "credits";
 
 export default function GameClient() {
   const mount = useRef<HTMLDivElement>(null);
@@ -233,9 +237,16 @@ export default function GameClient() {
             onHud: setHud,
             onPhase: (p, r) => {
               if (p === "won" && inst) {
-                const out = recordWin(store.get(), inst.stats(), missionId());
+                const before = store.get();
+                const out = recordWin(before, inst.stats(), missionId());
                 store.set(out.data);
-                setWin({ time: inst.stats().time, rating: out.rating, newBestTime: out.newBestTime, newBestRating: out.newBestRating });
+                setWin({
+                  time: inst.stats().time,
+                  rating: out.rating,
+                  newBestTime: out.newBestTime,
+                  newBestRating: out.newBestRating,
+                  points: earnedPoints(out.data) - earnedPoints(before),
+                });
               }
               if (p === "paused" && inst) setMapState(inst.mapState());
               setPhase(p);
@@ -274,6 +285,10 @@ export default function GameClient() {
       delete window.__keris;
     };
   }, [touch, qualityPref, store]);
+
+  useEffect(() => {
+    game?.setSkills(skillMods(save.skills));
+  }, [game, save.skills]);
 
   useEffect(() => {
     game?.setLookSettings(save.settings.lookSens, save.settings.invertY);
@@ -370,6 +385,9 @@ export default function GameClient() {
     if (touch) enterFullscreenLandscape();
     g()?.resume();
   };
+  const skillTree = (
+    <SkillTree save={save} onLearn={(id) => store.update((d) => learnSkill(d, id))} onReset={() => store.update(resetSkills)} />
+  );
   const alertCls = hud.alert === "calm" ? "" : hud.alert;
 
   return (
@@ -475,6 +493,9 @@ export default function GameClient() {
             <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
               New game
             </button>
+            <button className={`btn ghost${view === "ilmu" ? " on" : ""}`} onClick={() => setView(view === "ilmu" ? "main" : "ilmu")}>
+              Ilmu
+            </button>
             {settingsBtn}
             <button className={`btn ghost${view === "controls" ? " on" : ""}`} onClick={() => setView(view === "controls" ? "main" : "controls")}>
               Controls
@@ -504,6 +525,12 @@ export default function GameClient() {
                   <p className="dim small">{checkpointHere === "target" ? `Checkpoint: ${level.checkpointLabel}` : "Checkpoint: mission start"}</p>
                 )}
                 <Best m={mission} />
+              </>
+            )}
+            {view === "ilmu" && (
+              <>
+                <h2>Ilmu</h2>
+                {skillTree}
               </>
             )}
             {view === "controls" && (
@@ -540,6 +567,7 @@ export default function GameClient() {
           touch={touch}
           controls={<Controls touch={touch} />}
           best={<Best m={mission} />}
+          skills={skillTree}
           actions={
             <>
               <button className="btn" onClick={resume}>
@@ -564,6 +592,11 @@ export default function GameClient() {
               <p className={`best ${win.newBestTime || win.newBestRating ? "new" : ""}`}>
                 Time {formatTime(win.time)} · {ratingLabel(win.rating)}
                 {(win.newBestTime || win.newBestRating) && " · New best!"}
+              </p>
+            )}
+            {win && win.points > 0 && (
+              <p className="best new">
+                +{win.points} skill point{win.points === 1 ? "" : "s"}. Learn new Ilmu from the main menu or the pause menu.
               </p>
             )}
             <Best m={mission} />

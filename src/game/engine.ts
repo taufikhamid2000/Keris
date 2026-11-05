@@ -46,6 +46,8 @@ import { Dalang, shadowOnScreen, shadowVision } from "./wayang";
 import { WayangLook } from "./wayangLook";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
+import { PantunGates } from "./pantunGates";
+import type { PantunHud } from "./pantun";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
@@ -85,6 +87,8 @@ export interface HudState {
   /** wayang missions: the dalang's narration ("" when quiet), and how far the player's shadow is on the screen, 0..1 */
   narration?: string;
   shadow?: number;
+  /** pantun passwords (pantunGates.ts): the answer dialogue, an overheard line, disguise seconds left */
+  pantun?: PantunHud;
 }
 
 export interface RunStats {
@@ -119,6 +123,8 @@ export interface GameCallbacks {
   onExplored?: (level: string, packed: string) => void;
   /** the player reached a Kitab place for the first time (id from kitab.ts) */
   onKitab?: (id: string) => void;
+  /** a pantun password was overheard or answered rightly (id from pantun.ts) */
+  onPantun?: (id: string) => void;
 }
 
 /** Where things stand, for the pause menu's map and gear tabs (read when the game pauses). */
@@ -474,6 +480,8 @@ export class Game {
   /** Kitab places already written (from the save), so each is announced once */
   private kitab = new Set<string>();
   private kitabT = 0;
+  /** gate sentries and their pantun passwords */
+  private pantun = new PantunGates({ toast: (t) => this.toast(t), learn: (id) => this.cb.onPantun?.(id) });
   /** the overheard subtitle, its time left and priority; idle chatter waits idleT between lines */
   private talk = { text: "", t: 0, pri: -1 };
   private idleT = 6;
@@ -577,6 +585,7 @@ export class Game {
     this.level = buildLevel(this.levelDef, { lampLights: Q.lampLights });
     this.loot = this.buildLoot();
     this.charm = this.buildCharm();
+    this.pantun.build(this.level.root);
     this.takeBoats();
     this.takeHorses();
     this.nav = buildNav(this.level.colliders, this.navBounds());
@@ -787,6 +796,7 @@ export class Game {
     this.crouchToggle = false;
     this.lowCeiling = false;
     this.toastText = "";
+    this.pantun.reset();
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0;
     for (const g of this.guards) {
       g.x = g.waypoints[0].x;
@@ -1057,6 +1067,14 @@ export class Game {
   setKitab(ids: readonly string[]) {
     for (const id of ids) this.kitab.add(id);
   }
+  /** Pantun already overheard (from the save): their right answers are marked at the gates. */
+  setPantun(ids: readonly string[]) {
+    this.pantun.setKnown(ids);
+  }
+  /** Answer the open pantun dialogue with option i (touch or a mouse click on the panel). */
+  pantunPick(i: number) {
+    if (this.phase === "playing") this.pantun.pick(i, this.p, this.guards);
+  }
   /** A few times a second: any Kitab place the player is standing in for the first time gets a page. */
   private checkKitab(dt: number) {
     this.kitabT -= dt;
@@ -1176,6 +1194,11 @@ export class Game {
   /** Key press as the keyboard handler sees it. Touch buttons call this with the same codes (KeyE, KeyQ, KeyF, KeyV, KeyC, KeyR, KeyX, Space). */
   pressKey(code: string) {
     if (this.phase !== "playing") return;
+    if (this.pantun.choosing) {
+      this.pantun.key(code, this.p, this.guards);
+      this.hudTimer = 0;
+      return;
+    }
     this.keys.add(code);
     if (code === "KeyE" || code === "Mouse0") this.tryTakedown();
     if (code === "KeyR" || code === "Mouse2") this.tryParry();
@@ -1266,6 +1289,10 @@ export class Game {
     this.touchMove.run = run;
   }
   look(dx: number, dy: number) {
+    if (this.pantun.choosing) {
+      this.pantun.look(dy);
+      return;
+    }
     if (this.wheel) {
       // the wheel takes the mouse / right stick: point at a slot (up: knife, then clockwise)
       const w = this.wheel;
@@ -1470,6 +1497,7 @@ export class Game {
     this.lampTimer = 0;
     this.loot = this.buildLoot();
     this.charm = this.buildCharm();
+    this.pantun.build(this.level.root);
     this.takeBoats();
     this.takeHorses();
     this.dressFoliage();
@@ -1629,6 +1657,7 @@ export class Game {
       this.pause();
       return;
     }
+    if (this.pantun.choosing && pressed(PAD_DOWN)) this.pressKey("PadDown");
     for (const i of down) if (PAD_KEYS[i]) this.pressKey(PAD_KEYS[i]);
     this.padMove = { ...s.move, run: PAD_RUN.some((i) => s.buttons[i]) };
     if (s.look.x || s.look.y) this.look(s.look.x * PAD_LOOK_RATE * dt, s.look.y * PAD_LOOK_RATE * dt);
@@ -1645,6 +1674,15 @@ export class Game {
   }
 
   private update(dt: number) {
+    // answering a penjaga pintu: the world holds still until the player picks or steps back
+    if (this.pantun.choosing) {
+      this.hudTimer -= dt;
+      if (this.hudTimer <= 0) {
+        this.hudTimer = 0.05;
+        this.cb.onHud(this.buildHud());
+      }
+      return;
+    }
     this.run.time += dt;
     this.toastT = Math.max(0, this.toastT - dt);
     this.knifeCd = Math.max(0, this.knifeCd - dt);
@@ -1660,6 +1698,7 @@ export class Game {
     this.reveal();
     this.checkKitab(dt);
     this.chatter(dt);
+    this.pantun.update(dt, this.p, this.guards);
 
     // ---- player movement
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
@@ -2042,7 +2081,7 @@ export class Game {
     if (seen) {
       g.lastKnown = { x: p.x, z: p.z };
       g.lastKnownY = p.y;
-      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), vis.range, stance) * vis.rate * this.mods.detect, dt);
+      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), vis.range, stance) * vis.rate * this.mods.detect * this.pantun.detectMul(g), dt);
     } else {
       g.meter = stepMeter(g.meter, false, 0, dt, alertNow || g.brain.state === "search" ? 0.1 : 0.25);
     }
@@ -2305,6 +2344,10 @@ export class Game {
     }
     const { guard, air } = this.takedownTarget();
     if (!guard) {
+      if (this.pantun.tryOpen(this.p)) {
+        this.hudTimer = 0;
+        return;
+      }
       const b = this.nearBoat();
       const h = b ? null : this.nearHorse();
       if (b) this.board(b);
@@ -2898,6 +2941,7 @@ export class Game {
     else if (foe && !this.carrying) prompt = "E  Strike (hold: heavy)  ·  R  Parry  ·  X  Roll";
     else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
     else if (tg.near) prompt = "Get behind him";
+    else if (this.pantun.prompt(p)) prompt = this.pantun.prompt(p);
     else if (this.nearBoat()) prompt = "E  Board the sampan";
     else if (this.nearHorse()) prompt = "E  Mount the horse";
     else if (this.nearestBody()) prompt = "F  Carry body";
@@ -2932,6 +2976,7 @@ export class Game {
       incoming,
       narration: this.dalang.line,
       shadow: this.shade,
+      pantun: this.pantun.hud(),
     };
   }
 

@@ -296,3 +296,24 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .wayang-dalang { position: absolute; left: 50%; bottom: 5.5%; transform: translateX(-50%); width: min(720px, calc(100vw - 48px)); margin: 0; text-align: center; font-size: clamp(.95rem, 2.2vw, 1.3rem); line-height: 1.45; font-style: italic; color: #2a1608; text-shadow: 0 0 10px rgba(255,236,200,.9), 0 0 2px rgba(255,236,200,.9); }
 .wayang-dalang span { display: block; margin-bottom: 2px; font-style: normal; font-size: .62rem; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
 .wayang-shadow { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); margin: 0; padding: 3px 12px; font-size: .78rem; letter-spacing: .08em; color: #ffe2b0; background: rgba(30,14,4,.6); border-radius: 10px; }
+/* ------------------------------------------------------------------ pantun passwords (PantunChoice.tsx) */
+.pantun-line { position: absolute; left: 50%; bottom: 25%; transform: translateX(-50%); max-width: min(86vw, 620px); padding: 5px 14px; text-align: center; font-size: 1rem; color: #ffe9c8; background: rgba(10,8,6,.6); border-left: 2px solid #ffcf8a; border-radius: 4px; pointer-events: none; }
+.pantun-line b { color: #ffcf8a; font-weight: 600; margin-right: 4px; }
+.pantun-line i { display: block; font-size: .78rem; opacity: .75; }
+.pantun-choice { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 7; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 14px 18px; background: rgba(20,10,24,.88); border: 1px solid rgba(255,207,138,.55); border-radius: 10px; text-shadow: 0 1px 2px #000; }
+.pantun-where { margin: 0 0 6px; font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: #ffcf8a; }
+.pantun-ask { margin: 0 0 10px; padding: 0 0 0 10px; border-left: 2px solid #ffcf8a; font-size: 1.05rem; font-style: italic; }
+.pantun-ask span, .pantun-ask i, .pantun-opt i { display: block; }
+.pantun-ask i, .pantun-opt i { font-size: .74rem; opacity: .7; }
+.pantun-opts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pantun-opt { width: 100%; display: flex; align-items: center; gap: 10px; padding: 7px 10px; text-align: left; color: #f2e6d0; font: inherit; font-size: .92rem; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.22); border-radius: 6px; cursor: pointer; touch-action: manipulation; }
+.pantun-opt span { flex: 1; }
+.pantun-opt.on { border-color: #ffcf8a; background: rgba(120,70,20,.6); }
+.pantun-known { font-style: normal; font-size: .7rem; padding: 1px 6px; color: #1a1208; background: #ffcf8a; border-radius: 3px; }
+.pantun-help { margin: 8px 0 0; text-align: center; }
+@media (max-height: 480px) {
+  .pantun-line { bottom: 48%; font-size: .8rem; }
+  .pantun-choice { padding: 8px 12px; }
+  .pantun-ask { font-size: .85rem; margin-bottom: 6px; }
+  .pantun-opt { padding: 4px 8px; font-size: .76rem; }
+}

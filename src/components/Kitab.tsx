@@ -4,6 +4,7 @@ import { AMULETS } from "@/game/amulets";
 import { CHARM_LORE, MISSION_LORE, PLACES } from "@/game/kitab";
 import { LEVELS } from "@/game/levels";
 import type { SaveData } from "@/game/save";
+import { pantunPages } from "@/game/pantun";
 
 interface Page {
   key: string;
@@ -46,7 +47,8 @@ export default function Kitab({ save }: { save: SaveData }) {
     const lore = MISSION_LORE[l.id];
     return { key: l.id, open: !!save.missions[l.missionId]?.completed, title: lore?.title ?? l.name, text: lore?.text ?? l.win.body, hint: `Complete ${l.name}` };
   });
-  const all = [...places, ...charms, ...tales];
+  const pantun: Page[] = pantunPages(save.pantun);
+  const all = [...places, ...charms, ...tales, ...pantun];
   return (
     <div className="kitab">
       <p className="points">
@@ -55,6 +57,7 @@ export default function Kitab({ save }: { save: SaveData }) {
       <Section name="Tempat" sub="Places reached" pages={places} />
       <Section name="Tangkal" sub="Amulets found" pages={charms} />
       <Section name="Hikayat" sub="Missions completed" pages={tales} />
+      <Section name="Pantun" sub="Passwords overheard" pages={pantun} />
     </div>
   );
 }

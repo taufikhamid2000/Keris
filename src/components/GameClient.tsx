@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Game, HudState, IntroView, LoseReason, Phase } from "@/game/engine";
+import type { Game, HudState, IntroView, LoseReason, MapState, Phase } from "@/game/engine";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
 import { LEVELS, initialLevel, type LevelDef } from "@/game/levels";
 import {
@@ -20,6 +20,7 @@ import {
   type MissionStats,
 } from "@/game/save";
 import KerisEmblem from "./KerisEmblem";
+import PauseMenu, { PAUSE_TABS } from "./PauseMenu";
 import SettingsPanel from "./SettingsPanel";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
 
@@ -201,6 +202,9 @@ export default function GameClient() {
   const [started, setStarted] = useState(false);
   const startedRef = useRef(false);
   const [view, setView] = useState<MenuView>("main");
+  /** pause menu: open tab, and the map and run numbers read when the game paused */
+  const [pauseTab, setPauseTab] = useState(0);
+  const [mapState, setMapState] = useState<MapState | null>(null);
   const store = getSaveStore();
   const save = useSyncExternalStore(store.subscribe, store.getSnapshot, () => SERVER_SAVE);
   // the mission picked on the title screen; the ref lets engine callbacks read the current one
@@ -233,6 +237,7 @@ export default function GameClient() {
                 store.set(out.data);
                 setWin({ time: inst.stats().time, rating: out.rating, newBestTime: out.newBestTime, newBestRating: out.newBestRating });
               }
+              if (p === "paused" && inst) setMapState(inst.mapState());
               setPhase(p);
               setReason(r);
             },
@@ -248,6 +253,7 @@ export default function GameClient() {
             },
             onPadConfirm: padConfirm,
             onPadNav: moveFocus,
+            onPadTab: (d) => setPauseTab((t) => (t + d + PAUSE_TABS.length) % PAUSE_TABS.length),
             onPadAny: () => {
               if (startedRef.current) return false;
               startedRef.current = true;
@@ -305,6 +311,24 @@ export default function GameClient() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // pause menu: Q / E or left / right switch tabs, up / down move through the buttons
+  useEffect(() => {
+    if (phase !== "paused" || showSettings) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const d = e.code === "KeyQ" || e.key === "ArrowLeft" ? -1 : e.code === "KeyE" || e.key === "ArrowRight" ? 1 : 0;
+      if (d) {
+        e.preventDefault();
+        setPauseTab((t) => (t + d + PAUSE_TABS.length) % PAUSE_TABS.length);
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        moveFocus(e.key === "ArrowDown" ? 1 : -1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, showSettings]);
 
   const g = () => game;
   /** Pick a mission on the title screen: the engine swaps the map in place. */
@@ -508,20 +532,27 @@ export default function GameClient() {
       )}
 
       {phase === "paused" && (
-        <div className="overlay">
-          <div className="panel">
-            <h2>Paused</h2>
-            <Controls touch={touch} />
-            <button className="btn" onClick={resume}>
-              Resume
-            </button>
-            <button className="btn ghost" onClick={() => begin("start")}>
-              Restart
-            </button>
-            {settingsBtn}
-            {menuBtn}
-          </div>
-        </div>
+        <PauseMenu
+          def={level}
+          s={mapState}
+          tab={pauseTab}
+          setTab={setPauseTab}
+          touch={touch}
+          controls={<Controls touch={touch} />}
+          best={<Best m={mission} />}
+          actions={
+            <>
+              <button className="btn" onClick={resume}>
+                Resume
+              </button>
+              <button className="btn ghost" onClick={() => begin("start")}>
+                Restart
+              </button>
+              {settingsBtn}
+              {menuBtn}
+            </>
+          }
+        />
       )}
 
       {phase === "won" && (

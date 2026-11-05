@@ -35,7 +35,7 @@ import { advanceIntro, cameraAt, captionAt, fadeAt, isSkipKey, skipIntro, startI
 import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
-import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
+import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
@@ -90,6 +90,25 @@ export interface GameCallbacks {
   onPadAny?: () => boolean;
   /** d-pad up (-1) or down (+1) on a menu screen */
   onPadNav?: (dir: -1 | 1) => void;
+  /** LB / RB or d-pad left / right on a menu screen: previous (-1) or next (+1) tab */
+  onPadTab?: (dir: -1 | 1) => void;
+}
+
+/** Where things stand, for the pause menu's map and gear tabs (read when the game pauses). */
+export interface MapState {
+  player: { x: number; z: number; yaw: number };
+  /** the target or the item while the objective is open, null once it is done */
+  objective: { x: number; z: number } | null;
+  exit: { x: number; z: number };
+  escape: boolean;
+  guards: number;
+  guardsDown: number;
+  time: number;
+  alerts: number;
+  knives: number;
+  maxKnives: number;
+  hp: number;
+  maxHp: number;
 }
 
 export interface IntroView {
@@ -897,6 +916,25 @@ export class Game {
     const o = this.def.objective;
     return o.kind === "steal" && !this.taken && dist2D(this.p, o.at) < 1.4 && Math.abs(this.p.y - o.at.y) < 1.2;
   }
+  /** Player, objective and run numbers for the pause menu. */
+  mapState(): MapState {
+    const o = this.def.objective;
+    const tgt = this.objective !== "main" ? null : o.kind === "steal" ? o.at : this.guards.find((g) => g.isTarget && !g.dead);
+    return {
+      player: { x: this.p.x, z: this.p.z, yaw: this.p.yaw },
+      objective: tgt ? { x: tgt.x, z: tgt.z } : null,
+      exit: { x: this.level.exit.x, z: this.level.exit.z },
+      escape: this.objective === "escape",
+      guards: this.guards.length,
+      guardsDown: this.guards.filter((g) => g.dead).length,
+      time: this.run.time,
+      alerts: this.run.alerts,
+      knives: this.knives,
+      maxKnives: START_KNIVES,
+      hp: this.hp,
+      maxHp: MAX_HP,
+    };
+  }
   /** Play stats for the current attempt (read when it ends). */
   stats(): RunStats {
     return { ...this.run };
@@ -1274,6 +1312,8 @@ export class Game {
       if (down.length && this.cb.onPadAny?.()) return;
       if (pressed(PAD_UP)) this.cb.onPadNav?.(-1);
       if (pressed(PAD_DOWN)) this.cb.onPadNav?.(1);
+      if (PAD_TAB_PREV.some(pressed)) this.cb.onPadTab?.(-1);
+      if (PAD_TAB_NEXT.some(pressed)) this.cb.onPadTab?.(1);
       if (pressed(PAD_CONFIRM) || pressed(PAD_START)) this.cb.onPadConfirm?.();
       return;
     }

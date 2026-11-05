@@ -16,6 +16,9 @@ export const PAD_START = 9;
 export const PAD_CONFIRM = 0;
 export const PAD_UP = 12; // d-pad, menus only
 export const PAD_DOWN = 13;
+/** pause menu tabs: LB / RB (L1 / R1) and d-pad left / right */
+export const PAD_TAB_PREV = [4, 14];
+export const PAD_TAB_NEXT = [5, 15];
 /** Look speed at full right-stick deflection, in mouse pixels per second. */
 export const PAD_LOOK_RATE = 900;
 

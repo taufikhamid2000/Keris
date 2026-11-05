@@ -2111,9 +2111,8 @@ export class Game {
       h.group.add(blockHorse());
       return;
     }
+    // the model's head is already at +z, the way the horse moves (rest pose: head z +2.5, tail z -2.0)
     const o = cloneSkinned(m.object);
-    // the model faces -z; turn it to face the way the horse moves (+z)
-    o.rotation.y = Math.PI;
     h.group.add(o);
     h.mixer = new THREE.AnimationMixer(o);
     // the pack names clips both "Gallop" and "AnimalArmature|Gallop"; take the plain one, else the prefixed one

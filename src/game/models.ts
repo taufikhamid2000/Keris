@@ -104,18 +104,20 @@ export function matchClips(names: string[], overrides: Partial<Record<Anim, stri
 
 /**
  * Clips that move the character forward (Mixamo without "In Place", some library clips) fight the engine, which
- * moves the character itself: pin the root bone over the origin on the ground plane, keeping its height.
+ * moves the character itself: pin the root bone over its first-frame spot on the ground plane, keeping its height.
+ * Which local axis is "height" depends on the rig (Mixamo hips: y; Quaternius pelvis under a Z-up root: z), so it
+ * is the axis holding the biggest first-frame value: the hips start about a metre up and near zero sideways. Pinning
+ * the wrong one left a death clip's body lying flat at standing hip height, floating.
  */
 function stripRootMotion(clip: THREE.AnimationClip) {
   for (const t of clip.tracks) {
     if (!/(hips|pelvis|root)\.position$/i.test(t.name)) continue;
     const v = t.values;
-    const x0 = v[0];
-    const z0 = v[2];
-    for (let i = 0; i < v.length; i += 3) {
-      v[i] = x0;
-      v[i + 2] = z0;
-    }
+    let up = 1;
+    for (const a of [0, 2]) if (Math.abs(v[a]) > Math.abs(v[up])) up = a;
+    const pinned = [0, 1, 2].filter((a) => a !== up);
+    const first = pinned.map((a) => v[a]);
+    for (let i = 0; i < v.length; i += 3) pinned.forEach((a, k) => (v[i + a] = first[k]));
   }
 }
 

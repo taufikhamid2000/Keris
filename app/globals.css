@@ -224,6 +224,14 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .skill .gold { color: #ffcf8a; margin-top: 2px; }
 .skill .btn.sm { align-self: flex-start; margin: 4px 0 0; }
 .skilltree .btn:disabled { cursor: default; }
+.charms { margin-top: 16px; }
+.charms h3 { margin: 0 0 8px; color: #ffcf8a; }
+.charms ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.charm { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-left: 2px solid #2f8f8a; }
+.charm.on { border-left-color: #ffcf8a; background: rgba(255,207,138,.08); }
+.charm.on b { color: #ffcf8a; }
+.charm.missing { opacity: .5; }
+.charm .btn.sm { align-self: flex-start; margin: 4px 0 0; }
 .menu-pane:not(.pause-pane) .ilmu { grid-template-columns: 1fr; }
 @media (max-width: 760px), (max-height: 480px) {
   .overlay.pause { flex-direction: column; gap: 8px; }

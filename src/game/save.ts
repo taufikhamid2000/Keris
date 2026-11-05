@@ -2,6 +2,7 @@
 // so everything is unit tested in save.test.ts. No DOM or three.js. Every storage access is wrapped in
 // try/catch and degrades to in-memory when localStorage is missing or blocked (private mode, SSR).
 import { cleanSkills } from "./skills";
+import { cleanAmulets } from "./amulets";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -39,6 +40,9 @@ export interface SaveData {
   seenIntro: boolean;
   /** Ilmu upgrades learned, by id (skills.ts); points are worked out from the mission records */
   skills: string[];
+  /** tangkal found, by id (amulets.ts), and the one worn */
+  amulets: string[];
+  amulet: string | null;
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -53,7 +57,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [] };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -106,6 +110,23 @@ function cleanSettings(v: unknown): SaveSettings {
   };
 }
 
+function cleanCharms(list: unknown, worn: unknown): { amulets: string[]; amulet: string | null } {
+  const amulets = cleanAmulets(list);
+  return { amulets, amulet: typeof worn === "string" && amulets.includes(worn) ? worn : null };
+}
+
+/** A tangkal picked up; the first one found is put on straight away. */
+export function addAmulet(d: SaveData, id: string): SaveData {
+  if (d.amulets.includes(id)) return d;
+  const next = cleanCharms([...d.amulets, id], d.amulet ?? id);
+  return { ...d, ...next };
+}
+
+/** Wear a found tangkal, or none (null). */
+export function wearAmulet(d: SaveData, id: string | null): SaveData {
+  return { ...d, amulet: id && d.amulets.includes(id) ? id : null };
+}
+
 /** Field-by-field clean of a current-version object: bad fields fall back to defaults, unknown fields are dropped. */
 export function sanitize(v: unknown): SaveData {
   if (!isObj(v)) return defaultSave();
@@ -124,6 +145,7 @@ export function sanitize(v: unknown): SaveData {
     settings: cleanSettings(v.settings),
     seenIntro: v.seenIntro === true,
     skills: cleanSkills(v.skills),
+    ...cleanCharms(v.amulets, v.amulet),
   };
 }
 

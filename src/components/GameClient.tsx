@@ -15,6 +15,8 @@ import {
   ratingLabel,
   recordStart,
   recordWin,
+  addAmulet,
+  wearAmulet,
   withCheckpoint,
   type Checkpoint,
   type MissionStats,
@@ -24,6 +26,7 @@ import PauseMenu, { PAUSE_TABS } from "./PauseMenu";
 import SettingsPanel from "./SettingsPanel";
 import SkillTree from "./SkillTree";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
+import { amuletForLevel, withAmulet } from "@/game/amulets";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
 
 const EMPTY: HudState = {
@@ -271,6 +274,7 @@ export default function GameClient() {
               setStarted(true);
               return true;
             },
+            onAmulet: (id) => store.update((d) => addAmulet(d, id)),
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d, missionId()) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
@@ -287,8 +291,15 @@ export default function GameClient() {
   }, [touch, qualityPref, store]);
 
   useEffect(() => {
-    game?.setSkills(skillMods(save.skills));
-  }, [game, save.skills]);
+    game?.setSkills(withAmulet(skillMods(save.skills), save.amulet, save.amulets));
+  }, [game, save.skills, save.amulet, save.amulets]);
+
+  // this mission's tangkal is left off the map once it is found
+  const charmId = amuletForLevel(level.id)?.id;
+  const charmFound = !!charmId && save.amulets.includes(charmId);
+  useEffect(() => {
+    game?.setAmuletFound(charmFound);
+  }, [game, charmFound, level]);
 
   useEffect(() => {
     game?.setLookSettings(save.settings.lookSens, save.settings.invertY);
@@ -568,6 +579,7 @@ export default function GameClient() {
           controls={<Controls touch={touch} />}
           best={<Best m={mission} />}
           skills={skillTree}
+          charms={{ found: save.amulets, worn: save.amulet, wear: (id) => store.update((d) => wearAmulet(d, id)) }}
           actions={
             <>
               <button className="btn" onClick={resume}>

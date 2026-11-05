@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { MapState } from "@/game/engine";
+import { AMULETS, amuletById, amuletForLevel } from "@/game/amulets";
 import type { LevelDef, Rect } from "@/game/levels";
 import { formatTime } from "@/game/save";
 
@@ -87,6 +88,7 @@ export default function PauseMenu({
   best,
   actions,
   skills,
+  charms,
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -97,8 +99,12 @@ export default function PauseMenu({
   best: ReactNode;
   actions: ReactNode;
   skills: ReactNode;
+  /** tangkal found (ids) and the one worn */
+  charms: { found: string[]; worn: string | null; wear: (id: string | null) => void };
 }) {
   const cur = PAUSE_TABS[tab]?.id ?? "peta";
+  const worn = amuletById(charms.found.includes(charms.worn ?? "") ? charms.worn : null);
+  const here = amuletForLevel(def.id);
   const step = (d: number) => setTab((tab + d + PAUSE_TABS.length) % PAUSE_TABS.length);
   return (
     <div className="overlay menu-screen pause">
@@ -133,8 +139,32 @@ export default function PauseMenu({
               <Slot sub="Senjata" name="Keris" value="Takedowns and close fighting" />
               <Slot sub="Lempar" name="Pisau lempar" value={s ? `${s.knives} of ${s.maxKnives} left` : "-"} />
               <Slot sub="Pakaian" name="Baju pendekar" value="Dark cloth for the dusk" />
-              <Slot sub="Tangkal" name="Empty" value="No amulet found yet" empty />
+              {worn ? <Slot sub="Tangkal" name={worn.name} value={worn.desc} /> : <Slot sub="Tangkal" name="Empty" value={charms.found.length ? "None worn" : "No amulet found yet"} empty />}
               <Slot sub="Nyawa" name="Health" value={s ? `${Math.ceil(s.hp)} of ${s.maxHp}` : "-"} />
+            </div>
+          )}
+          {cur === "kelengkapan" && (
+            <div className="charms">
+              <h3>
+                Tangkal <span className="dim small">{charms.found.length} of {AMULETS.length} found · one hidden in a haystack or bush on each mission</span>
+              </h3>
+              <ul>
+                {AMULETS.map((a) => {
+                  const have = charms.found.includes(a.id);
+                  const on = charms.worn === a.id;
+                  return (
+                    <li key={a.id} className={`charm${have ? "" : " missing"}${on ? " on" : ""}`}>
+                      <b>{have ? a.name : "Not found yet"}</b>
+                      <span className="small dim">{have ? a.desc : a.level === def.id ? "Hidden somewhere on this mission" : "On another mission"}</span>
+                      {have && (
+                        <button className="btn ghost sm" onClick={() => charms.wear(on ? null : a.id)}>
+                          {on ? "Take off" : "Wear"}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
           {cur === "ilmu" && skills}
@@ -148,6 +178,7 @@ export default function PauseMenu({
                 </p>
               )}
               {best}
+              {here && <p className="small">Tangkal: {charms.found.includes(here.id) ? `${here.name} found` : "still hidden on this mission"}</p>}
               <h3>Controls</h3>
               {controls}
             </>

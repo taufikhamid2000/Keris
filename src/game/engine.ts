@@ -36,6 +36,7 @@ import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
 import { BASE_MODS, type SkillMods } from "./skills";
+import { amuletForLevel, amuletSpot } from "./amulets";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
@@ -93,6 +94,8 @@ export interface GameCallbacks {
   onPadNav?: (dir: -1 | 1) => void;
   /** LB / RB or d-pad left / right on a menu screen: previous (-1) or next (+1) tab */
   onPadTab?: (dir: -1 | 1) => void;
+  /** the player picked up this mission's tangkal (amulet id) */
+  onAmulet?: (id: string) => void;
 }
 
 /** Where things stand, for the pause menu's map and gear tabs (read when the game pauses). */
@@ -422,6 +425,9 @@ export class Game {
   /** steal objectives: the item's mesh, and whether it has been taken */
   private loot: THREE.Group | null = null;
   private taken = false;
+  /** this mission's hidden tangkal: its mesh and spot, and whether the player already has it (setAmuletFound) */
+  private charm: { group: THREE.Group; x: number; z: number; id: string; name: string } | null = null;
+  private charmFound = false;
   /** set when an alarm is raised on an undetected mission; the mission ends after this frame's guards */
   private detected = false;
   private hidden = false;
@@ -513,6 +519,7 @@ export class Game {
 
     this.level = buildLevel(this.levelDef, { lampLights: Q.lampLights });
     this.loot = this.buildLoot();
+    this.charm = this.buildCharm();
     this.takeBoats();
     this.takeHorses();
     this.nav = buildNav(this.level.colliders, this.navBounds());
@@ -707,6 +714,7 @@ export class Game {
     this.taken = false;
     this.detected = false;
     if (this.loot) this.loot.visible = true;
+    if (this.charm) this.charm.group.visible = !this.charmFound;
     this.hidden = false;
     this.carrying = null;
     this.boat = null;
@@ -912,6 +920,30 @@ export class Game {
     g.position.set(o.at.x, o.at.y, o.at.z);
     this.level.root.add(g);
     return g;
+  }
+  /** The mission's tangkal: a small gold pendant turning above its haystack or bush, with a faint glow; part of the level root. */
+  private buildCharm() {
+    const a = amuletForLevel(this.def.id);
+    const at = a && amuletSpot(this.def);
+    if (!a || !at) return null;
+    const g = new THREE.Group();
+    const gold = std(0xe0b040, { metalness: 0.7, roughness: 0.35, emissive: 0x6a4a10 });
+    add(g, new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 6, 16), gold), 0, 0.22);
+    add(g, new THREE.Mesh(new THREE.OctahedronGeometry(0.11), gold));
+    add(g, new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.22, depthWrite: false })));
+    g.position.set(at.x, 1.7, at.z);
+    g.visible = !this.charmFound;
+    this.level.root.add(g);
+    return { group: g, x: at.x, z: at.z, id: a.id, name: a.name };
+  }
+  /** Whether the player already owns this mission's tangkal (then it is not on the map). */
+  setAmuletFound(found: boolean) {
+    this.charmFound = found;
+    if (this.charm) this.charm.group.visible = !found;
+  }
+  private nearCharm() {
+    const c = this.charm;
+    return !!c && !this.charmFound && c.group.visible && dist2D(this.p, c) < 1.7 && this.p.y < 1.2;
   }
   /** steal objectives: the player is close enough to take the item */
   private nearLoot() {
@@ -1185,6 +1217,7 @@ export class Game {
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
     this.lampTimer = 0;
     this.loot = this.buildLoot();
+    this.charm = this.buildCharm();
     this.takeBoats();
     this.takeHorses();
     this.dressFoliage();
@@ -1982,6 +2015,13 @@ export class Game {
       return;
     }
     if (this.climb || this.leap || this.carrying) return;
+    if (this.nearCharm() && this.charm) {
+      this.charmFound = true;
+      this.charm.group.visible = false;
+      this.toast(`Found the ${this.charm.name}. Your tangkal are under Kelengkapan in the pause menu.`);
+      this.cb.onAmulet?.(this.charm.id);
+      return;
+    }
     if (this.nearLoot()) {
       this.taken = true;
       if (this.loot) this.loot.visible = false;
@@ -2570,6 +2610,7 @@ export class Game {
     else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
     else if (this.horse) prompt = this.horseSpot() ? "E  Dismount" : "";
     else if (this.charge !== null) prompt = this.charge >= HEAVY.hold ? "Let go: heavy strike" : "Hold for a heavy strike";
+    else if (this.nearCharm() && !this.carrying && this.charm) prompt = `E  Take the ${this.charm.name}`;
     else if (this.nearLoot() && !this.carrying) prompt = `E  ${this.level.text.take ?? "Take it"}`;
     else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : "E  Air assassination";
     else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stagger > 0 ? "E  Finish him" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
@@ -2742,6 +2783,11 @@ export class Game {
     // the falls flow
     if (this.level.flow) this.level.flow.offset.y = (this.time * 0.9) % 1;
 
+    // the hidden tangkal turns and bobs
+    if (this.charm?.group.visible) {
+      this.charm.group.rotation.y += dt * 1.6;
+      this.charm.group.position.y = 1.7 + Math.sin(this.time * 2) * 0.08;
+    }
     // exit beam pulse
     const eb = this.level.exitBeam.material as THREE.MeshBasicMaterial;
     if (eb.opacity > 0) eb.opacity = 0.3 + Math.sin(this.time * 3) * 0.08;

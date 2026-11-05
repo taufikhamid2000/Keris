@@ -55,6 +55,7 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 
 .prompt { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); background: rgba(20,10,24,.7); padding: 6px 16px; border-radius: 6px; border: 1px solid rgba(255,200,140,.4); }
 .toast { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); font-size: 1.1rem; color: #ffd9a0; }
+.talk { position: absolute; left: 50%; bottom: 17%; transform: translateX(-50%); max-width: min(80vw, 560px); padding: 4px 12px; text-align: center; font-style: italic; font-size: 1rem; color: #f2e6d0; background: rgba(10,8,6,.55); border-radius: 4px; pointer-events: none; }
 .hint { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: .72rem; opacity: .6; }
 .hp { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); display: flex; gap: 6px; }
 .hp > div { width: 46px; height: 8px; background: rgba(20,10,24,.6); border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; }
@@ -118,6 +119,7 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
   .compass { top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); transform: scale(.7); transform-origin: top right; }
   .prompt { bottom: 17%; font-size: .8rem; padding: 4px 12px; }
   .toast { top: 12%; font-size: .95rem; }
+  .talk { bottom: 40%; font-size: .85rem; }
   .hp { top: 24%; }
 }
 @media (max-height: 480px) and (pointer: coarse) {

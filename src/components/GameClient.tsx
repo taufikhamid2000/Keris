@@ -46,6 +46,7 @@ const EMPTY: HudState = {
   wheel: null,
   prompt: "",
   toast: "",
+  talk: "",
   carrying: false,
   hp: 3,
   maxHp: 3,
@@ -469,6 +470,7 @@ export default function GameClient() {
           )}
           {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : hud.prompt}</div>}
           {hud.toast && <div className="toast">{hud.toast}</div>}
+          {hud.talk && <div className="talk">&ldquo;{hud.talk}&rdquo;</div>}
           {hud.wheel && (
             <div className="wheel" aria-label="Tool wheel">
               {TOOLS.map((t, i) => {

@@ -31,6 +31,8 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 
 Peta (map): only ground you have come within about 18 m of is shown; the rest stays dark. The objective, the escape and you are always marked. What you have explored on a mission is saved and kept on every later attempt (Reset progress clears it).
 
+Guard chatter: guards you are close enough to overhear talk as subtitles. On patrol they grumble about the heat and the mission; they call out when they hear something, spot you, search, give up, find a body, or are hit by a knife or pepper. Shouts carry further than idle talk, which is a hint of who is near.
+
 Kitab (journal): a page for each place reached (nine, from the harbour jetty to the summit shrine), each tangkal found and each mission completed. Read it from the main menu or the pause menu. Places are saved as you reach them; tangkal and mission pages follow from what the save already records.
 
 Ilmu (skills): each completed mission gives 2 skill points, and a Ghost rating on it 1 more. Spend them from the main menu or the pause menu on nine upgrades in three branches (Bayang: quieter steps, slower to be spotted, longer breath; Silat: wider parry window, an extra health point, faster recovery; Helang: 3 more knives, longer knife stun, leap takedowns from 10 m). Unlearn all gives the points back; Reset progress clears them with the missions.

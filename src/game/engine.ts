@@ -39,6 +39,7 @@ import { BASE_MODS, type SkillMods } from "./skills";
 import { amuletForLevel, amuletSpot } from "./amulets";
 import { packFog, unpackFog } from "./fog";
 import { placesAt } from "./kitab";
+import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./barks";
 import { TOOLS, type ToolId } from "./tools";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
@@ -69,6 +70,8 @@ export interface HudState {
   prompt: string;
   carrying: boolean;
   toast: string;
+  /** a guard's line the player overheard, shown as a subtitle ("" when quiet) */
+  talk: string;
   /** player health, 0..maxHp (fractional while it regenerates) */
   hp: number;
   maxHp: number;
@@ -220,6 +223,8 @@ const STAND_H = 2.1;
 
 interface Guard {
   id: number;
+  /** seconds before this guard speaks again */
+  talkCd?: number;
   isTarget: boolean;
   group: THREE.Group;
   body: THREE.Mesh;
@@ -463,6 +468,10 @@ export class Game {
   /** Kitab places already written (from the save), so each is announced once */
   private kitab = new Set<string>();
   private kitabT = 0;
+  /** the overheard subtitle, its time left and priority; idle chatter waits idleT between lines */
+  private talk = { text: "", t: 0, pri: -1 };
+  private idleT = 6;
+  private lastLine = "";
   private charmFound = false;
   /** set when an alarm is raised on an undetected mission; the mission ends after this frame's guards */
   private detected = false;
@@ -999,6 +1008,33 @@ export class Game {
     const rows = Math.ceil((b.maxZ - b.minZ) / FOG.cell);
     this.fog = { cols, rows, seen: (this.fogSaved && unpackFog(this.fogSaved, cols * rows)) || new Uint8Array(cols * rows), at: -1 };
   }
+  /** A guard says a line of this kind, if the player is near enough to hear and nothing louder is being said. */
+  private say(g: Guard, kind: BarkKind) {
+    if ((g.talkCd ?? 0) > 0 && kind !== "alert") return;
+    if (dist2D(g, this.p) > BARK_RANGE[kind]) return;
+    const pri = BARK_PRIORITY[kind];
+    if (this.talk.t > 0 && pri < this.talk.pri) return;
+    const pool = (kind === "idle" ? idleLines(this.def.id) : BARKS[kind]).filter((l) => l !== this.lastLine);
+    const line = pool[Math.floor(Math.random() * pool.length)];
+    if (!line) return;
+    this.lastLine = line;
+    this.talk = { text: line, t: 2.2 + line.length * 0.035, pri };
+    g.talkCd = kind === "idle" ? 12 : 4;
+  }
+  /** Patrolling guards near the player grumble now and then. */
+  private chatter(dt: number) {
+    this.talk.t = Math.max(0, this.talk.t - dt);
+    for (const g of this.guards) if (g.talkCd) g.talkCd = Math.max(0, g.talkCd - dt);
+    this.idleT -= dt;
+    if (this.idleT > 0 || this.talk.t > 0) return;
+    this.idleT = 9 + Math.random() * 9;
+    let best: Guard | null = null;
+    for (const g of this.guards) {
+      if (g.dead || g.stun > 0 || g.brain.state !== "patrol" || g.seesPlayer) continue;
+      if (!best || dist2D(g, this.p) < dist2D(best, this.p)) best = g;
+    }
+    if (best) this.say(best, "idle");
+  }
   setKitab(ids: readonly string[]) {
     for (const id of ids) this.kitab.add(id);
   }
@@ -1180,6 +1216,7 @@ export class Game {
     for (const g of this.guards) {
       if (g.dead || dist2D(g, this.p) > TOOL.pepperR || Math.abs(g.y - this.p.y) > 2) continue;
       g.stun = Math.max(g.stun, TOOL.pepperBlind);
+      this.say(g, "blind");
       g.atk = null;
       g.meter = 0;
       n++;
@@ -1590,6 +1627,7 @@ export class Game {
     const p = this.p;
     this.reveal();
     this.checkKitab(dt);
+    this.chatter(dt);
 
     // ---- player movement
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
@@ -1982,6 +2020,10 @@ export class Game {
     const now = g.brain.state;
     if (now !== "alert") g.atk = null;
     if (now !== prev) {
+      if (now === "alert") this.say(g, found ? "body" : "alert");
+      else if (now === "suspicious") this.say(g, "suspicious");
+      else if (now === "search") this.say(g, "search");
+      else if (now === "patrol") this.say(g, "giveup");
       if (now === "alert") {
         this.run.alerts++;
         if (this.def.undetected) this.detected = true;
@@ -2761,6 +2803,7 @@ export class Game {
     this.knifeFly = { t: 0, from: chest, to: hit };
     if (hitGuard) {
       hitGuard.stun = this.mods.knifeStun;
+      this.say(hitGuard, "stunned");
       hitGuard.atk = null;
       hitGuard.meter = 0;
       this.toast("Guard stunned.");
@@ -2836,6 +2879,7 @@ export class Game {
       prompt,
       carrying: !!this.carrying,
       toast: this.toastT > 0 ? this.toastText : "",
+      talk: this.talk.t > 0 ? this.talk.text : "",
       hp: this.hp,
       maxHp: this.maxHp,
       combat: this.hp < this.maxHp || !!this.hostileNear(8),

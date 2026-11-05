@@ -37,6 +37,7 @@ import WayangOverlay from "./WayangOverlay";
 import { PantunChoice, PantunLine } from "./PantunChoice";
 import { addPantun } from "@/game/pantun";
 import { TideBadge } from "./Tide";
+import { DuaPemainButton, KapitanHostPanel } from "./KapitanHost";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -573,6 +574,7 @@ export default function GameClient() {
             <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
               New game
             </button>
+            <DuaPemainButton disabled={!game} />
             <button className={`btn ghost${view === "ilmu" ? " on" : ""}`} onClick={() => setView(view === "ilmu" ? "main" : "ilmu")}>
               Ilmu
             </button>
@@ -742,6 +744,8 @@ export default function GameClient() {
           onClose={() => setShowSettings(false)}
         />
       )}
+
+      {started && <KapitanHostPanel game={game} phase={phase} />}
 
       {portrait && phase !== "intro" && (
         <div className="overlay rotate" role="alert">

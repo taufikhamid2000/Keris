@@ -289,3 +289,10 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .hikayat-scroll .btn.sm { color: #3a2414; border-color: rgba(58,36,20,.45); }
 .pause-pane .hikayat-scroll blockquote { max-height: none; }
 @media (max-height: 500px) { .hikayat-scroll blockquote { max-height: 26vh; font-size: .74rem; line-height: 1.4; } }
+/* ------------------------------------------------------------------ wayang kulit: the backlit kelir over the canvas */
+.wayang { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.wayang-glow { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 62% at 50% 46%, rgba(255,236,190,.16) 0%, rgba(255,214,140,0) 46%, rgba(120,62,18,.38) 82%, rgba(46,20,6,.78) 100%); mix-blend-mode: multiply; }
+.wayang-grain { position: absolute; inset: 0; opacity: .16; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .2 0 0 0 0 .08 0 0 0 1.2 -.2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.wayang-dalang { position: absolute; left: 50%; bottom: 5.5%; transform: translateX(-50%); width: min(720px, calc(100vw - 48px)); margin: 0; text-align: center; font-size: clamp(.95rem, 2.2vw, 1.3rem); line-height: 1.45; font-style: italic; color: #2a1608; text-shadow: 0 0 10px rgba(255,236,200,.9), 0 0 2px rgba(255,236,200,.9); }
+.wayang-dalang span { display: block; margin-bottom: 2px; font-style: normal; font-size: .62rem; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
+.wayang-shadow { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); margin: 0; padding: 3px 12px; font-size: .78rem; letter-spacing: .08em; color: #ffe2b0; background: rgba(30,14,4,.6); border-radius: 10px; }

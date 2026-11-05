@@ -31,6 +31,7 @@ import {
   type Vec2,
 } from "./logic";
 import { NavDebug } from "./navDebug";
+import { GhaibLayer } from "./ghaibLayer";
 import { advanceIntro, cameraAt, captionAt, fadeAt, isSkipKey, skipIntro, startIntro, type IntroState } from "./intro";
 import type { Checkpoint } from "./save";
 import { QUALITY, pixelRatioFor, type Quality } from "./touch";
@@ -64,6 +65,8 @@ export interface HudState {
   northDeg: number;
   objDeg: number | null;
   eagle: boolean;
+  /** semangat left for Mata Helang, 0..1 (ghaib.ts) */
+  semangat?: number;
   crouched: boolean;
   hidden: boolean;
   knives: number;
@@ -416,6 +419,8 @@ export class Game {
   /** air assassination in flight: the player tracks the guard and kills him on landing */
   private leap: { t: number; dur: number; from: THREE.Vector3; guard: Guard } | null = null;
   private eagle = false;
+  /** alam ghaib: semangat meter, bunian paths and the puteri's tally (ghaibLayer.ts) */
+  private ghaib = new GhaibLayer(this.scene);
   /** what the learned Ilmu skills change (setSkills) */
   private mods: SkillMods = BASE_MODS;
   private knives = START_KNIVES;
@@ -743,6 +748,7 @@ export class Game {
     this.climb = null;
     this.leap = null;
     this.eagle = false;
+    this.ghaib.reset();
     this.knives = this.maxKnives;
     this.knifeCd = 0;
     this.stones = TOOL.stones;
@@ -1118,6 +1124,14 @@ export class Game {
   stats(): RunStats {
     return { ...this.run };
   }
+  /** The puteri's tally of the current attempt (read when it is won). */
+  ghaibTally() {
+    return this.ghaib.tally(this.run.alerts);
+  }
+  /** The save's cumulative restu: the bunian paths shine brighter or flicker, and semangat drains slower when blessed. */
+  setRestu(restu: number) {
+    this.ghaib.setRestu(restu);
+  }
   /** Mouse and touch look settings: sensitivity multiplier and inverted vertical look. */
   setLookSettings(sens: number, invertY: boolean) {
     this.lookSens = Number.isFinite(sens) && sens > 0 ? sens : 1;
@@ -1216,6 +1230,7 @@ export class Game {
     for (const g of this.guards) {
       if (g.dead || dist2D(g, this.p) > TOOL.pepperR || Math.abs(g.y - this.p.y) > 2) continue;
       g.stun = Math.max(g.stun, TOOL.pepperBlind);
+      this.ghaib.onStun(g.id);
       this.say(g, "blind");
       g.atk = null;
       g.meter = 0;
@@ -1628,6 +1643,10 @@ export class Game {
     this.reveal();
     this.checkKitab(dt);
     this.chatter(dt);
+    // ---- alam ghaib: Mata Helang burns semangat; the bunian paths are solid while it is open (or while stood on)
+    const gh = this.ghaib.step(dt, this.eagle, p, L.colliders);
+    this.eagle = gh.open;
+    if (gh.say) this.toast(gh.say);
 
     // ---- player movement
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
@@ -1698,7 +1717,7 @@ export class Game {
       p.moving = false;
     } else {
       const from = { x: p.x, z: p.z };
-      const speed = this.swing || this.charge !== null ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
+      const speed = (this.swing || this.charge !== null ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4) * this.ghaib.speedMul(this.eagle);
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       const rx = -Math.cos(this.camYaw);
@@ -2731,6 +2750,7 @@ export class Game {
     guard.meter = 0;
     guard.climb = null;
     guard.agent.reset();
+    this.ghaib.onKill(guard.id, guard.isTarget && this.def.objective.kind === "kill");
     // a takedown made from inside a haystack or bush drags the body into the cover
     const cover = this.level.hides.find((h) => this.hidden && dist2D(this.p, h) < h.r);
     if (cover) {
@@ -2803,6 +2823,7 @@ export class Game {
     this.knifeFly = { t: 0, from: chest, to: hit };
     if (hitGuard) {
       hitGuard.stun = this.mods.knifeStun;
+      this.ghaib.onStun(hitGuard.id);
       this.say(hitGuard, "stunned");
       hitGuard.atk = null;
       hitGuard.meter = 0;
@@ -2870,6 +2891,7 @@ export class Game {
       northDeg: (this.camYaw * 180) / Math.PI,
       objDeg: (-rel * 180) / Math.PI,
       eagle: this.eagle,
+      semangat: this.ghaib.semangat,
       crouched: this.crouched,
       hidden: this.hidden,
       knives: this.knives,
@@ -3013,6 +3035,7 @@ export class Game {
     fog.near = Q.fogNear * (1 - MIST.near * mist);
     fog.far = Q.fogFar * (1 - MIST.far * mist);
     if (!e && mist > 0) fog.color.lerp(FOG_MIST, mist * 0.75);
+    this.ghaib.render(dt, this.time, e, p, fog);
     // trees and rocks stop at the fog; ferns (small, and many) much sooner
     const fo = this.level.foliage;
     const cam = this.camera.position;

@@ -5,6 +5,7 @@ import { cleanSkills } from "./skills";
 import { cleanAmulets } from "./amulets";
 import { cleanExplored } from "./fog";
 import { cleanKitab } from "./kitab";
+import { cleanPuteri, defaultPuteri, type PuteriSave } from "./ghaib";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -49,6 +50,8 @@ export interface SaveData {
   explored: Record<string, string>;
   /** Kitab places reached, by id (kitab.ts); tangkal and mission pages come from amulets and missions */
   kitab: string[];
+  /** the puteri of Gunung Ledang's cumulative restu (mercy less blood) and how many missions she has judged (ghaib.ts) */
+  puteri: PuteriSave;
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -63,7 +66,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [] };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [], puteri: defaultPuteri() };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -164,6 +167,7 @@ export function sanitize(v: unknown): SaveData {
     ...cleanCharms(v.amulets, v.amulet),
     explored: cleanExplored(v.explored),
     kitab: cleanKitab(v.kitab),
+    puteri: cleanPuteri(v.puteri),
   };
 }
 

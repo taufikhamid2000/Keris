@@ -30,6 +30,7 @@ import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
 import { amuletForLevel, withAmulet } from "@/game/amulets";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
+import { CHANGE_NOTE, judge, recordJudgement, type Whisper } from "@/game/ghaib";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -210,6 +211,8 @@ export default function GameClient() {
   const [failed, setFailed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [win, setWin] = useState<WinResult | null>(null);
+  /** the puteri's whisper on the last win (ghaib.ts) */
+  const [whisper, setWhisper] = useState<Whisper | null>(null);
   const [introView, setIntroView] = useState<IntroView | null>(null);
   /** what to do when the cutscene ends: go on into the mission, or back to the title (replay) */
   const introMode = useRef<"mission" | "replay">("mission");
@@ -258,6 +261,13 @@ export default function GameClient() {
                   newBestRating: out.newBestRating,
                   points: earnedPoints(out.data) - earnedPoints(before),
                 });
+              }
+              if (p === "won" && inst) {
+                // Bisikan puteri: her verdict on how this mission was played, added to the save's restu
+                const d = store.get();
+                const w = judge(inst.ghaibTally(), d.puteri.restu, inst.levelDef.id, d.puteri.judged);
+                store.set(recordJudgement(d, w));
+                setWhisper(w);
               }
               if (p === "paused" && inst) setMapState(inst.mapState());
               setPhase(p);
@@ -314,6 +324,10 @@ export default function GameClient() {
   useEffect(() => {
     game?.setKitab(save.kitab);
   }, [game, save.kitab]);
+
+  useEffect(() => {
+    game?.setRestu(save.puteri.restu);
+  }, [game, save.puteri.restu]);
 
   // the pause map remembers explored ground between attempts
   const explored = save.explored[level.id] ?? null;
@@ -452,7 +466,14 @@ export default function GameClient() {
                 {TOOLS.find((t) => t.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
               </em>
             </div>
+            {hud.semangat !== undefined && (hud.eagle || hud.semangat < 0.999) && (
+              <div className={`semangat${hud.eagle ? " on" : ""}`} aria-label={`Semangat ${Math.round(hud.semangat * 100)}%`}>
+                <div style={{ width: `${Math.round(hud.semangat * 100)}%` }} />
+                <span>Semangat</span>
+              </div>
+            )}
           </div>
+          {hud.eagle && <div className="ghaib-veil" aria-hidden="true" />}
           <Compass north={hud.northDeg} obj={hud.objDeg} />
           {hud.combat && (
             <div className={`hp ${hud.incoming ? "incoming" : ""}`} aria-label={`Health ${Math.ceil(hud.hp)} of ${hud.maxHp}`}>
@@ -662,6 +683,13 @@ export default function GameClient() {
               <p className="best new">
                 +{win.points} skill point{win.points === 1 ? "" : "s"}. Learn new Ilmu from the main menu or the pause menu.
               </p>
+            )}
+            {whisper && (
+              <blockquote className={`bisikan ${whisper.mood}`}>
+                <span className="small">Bisikan puteri</span>
+                <p>&ldquo;{whisper.line}&rdquo;</p>
+                {whisper.change && <p className="small">{CHANGE_NOTE[whisper.change]}</p>}
+              </blockquote>
             )}
             <Best m={mission} />
             <button className="btn" onClick={() => begin("start")}>

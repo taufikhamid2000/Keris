@@ -281,3 +281,15 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
   .splash-inner h1 { font-size: 2.6rem; }
   .press { margin-top: 16px; }
 }
+
+/* ------------------------------------------------------------------ alam ghaib: semangat meter, spirit veil, the puteri's whisper */
+.semangat { position: relative; height: 8px; margin-top: 6px; width: 160px; background: rgba(20,24,12,.55); border: 1px solid rgba(217,231,164,.35); border-radius: 4px; overflow: hidden; }
+.semangat > div { height: 100%; background: linear-gradient(90deg, #8ea566, #d9e7a4); transition: width .15s linear; }
+.semangat span { position: absolute; inset: 0; font-size: .5rem; line-height: 7px; letter-spacing: .2em; text-transform: uppercase; text-align: center; color: rgba(255,255,240,.8); }
+.semangat.on { box-shadow: 0 0 8px rgba(217,231,164,.45); }
+.ghaib-veil { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(120,150,80,.16) 80%, rgba(200,190,110,.24) 100%); }
+.bisikan { margin: 12px 0; padding: 8px 12px; border-left: 2px solid #d9e7a4; background: rgba(40,50,24,.35); font-style: italic; }
+.bisikan span { font-style: normal; letter-spacing: .15em; text-transform: uppercase; color: #d9e7a4; }
+.bisikan p { margin: 4px 0 0; }
+.bisikan.murka { border-left-color: #b0573c; background: rgba(60,24,18,.35); }
+.bisikan.murka span { color: #e08a6a; }

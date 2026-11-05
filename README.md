@@ -27,9 +27,11 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 | Walk into a river, pool or the sea | Swim (slower than walking; Shift is faster but splashes). Hold Ctrl or press C to dive: unseen and silent for 8 s of breath. Swim to a bank to walk out; Space beside a jetty, deck, prahu or the anchored ship climbs aboard (walk off the side to jump back in); E by a sampan climbs in. Diving takes you under jetties and bridges. The anchored ship has a crew of three on watch (two on deck, a lookout on the aft castle) |
 | E by a sampan | Board it. In the boat, WASD steers (camera-relative), Shift paddles faster, E beside a bank or jetty goes ashore |
 | V | Mata Helang: shows guards, their vision cones and the target through walls |
-| Esc | Pause: map (Peta), gear (Kelengkapan), skills (Ilmu) and mission (Hikayat) tabs; Q / E or the arrow keys switch tabs |
+| Esc | Pause: map (Peta), gear (Kelengkapan), skills (Ilmu), journal (Kitab) and mission (Hikayat) tabs; Q / E or the arrow keys switch tabs |
 
 Peta (map): only ground you have come within about 18 m of is shown; the rest stays dark. The objective, the escape and you are always marked. What you have explored on a mission is saved and kept on every later attempt (Reset progress clears it).
+
+Kitab (journal): a page for each place reached (nine, from the harbour jetty to the summit shrine), each tangkal found and each mission completed. Read it from the main menu or the pause menu. Places are saved as you reach them; tangkal and mission pages follow from what the save already records.
 
 Ilmu (skills): each completed mission gives 2 skill points, and a Ghost rating on it 1 more. Spend them from the main menu or the pause menu on nine upgrades in three branches (Bayang: quieter steps, slower to be spotted, longer breath; Silat: wider parry window, an extra health point, faster recovery; Helang: 3 more knives, longer knife stun, leap takedowns from 10 m). Unlearn all gives the points back; Reset progress clears them with the missions.
 

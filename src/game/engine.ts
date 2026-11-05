@@ -38,6 +38,7 @@ import { harbourDrift } from "./menuCamera";
 import { BASE_MODS, type SkillMods } from "./skills";
 import { amuletForLevel, amuletSpot } from "./amulets";
 import { packFog, unpackFog } from "./fog";
+import { placesAt } from "./kitab";
 import { TOOLS, type ToolId } from "./tools";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
@@ -107,6 +108,8 @@ export interface GameCallbacks {
   onAmulet?: (id: string) => void;
   /** the explored map changed (sent when play stops: pause, win, loss), packed for the save */
   onExplored?: (level: string, packed: string) => void;
+  /** the player reached a Kitab place for the first time (id from kitab.ts) */
+  onKitab?: (id: string) => void;
 }
 
 /** Where things stand, for the pause menu's map and gear tabs (read when the game pauses). */
@@ -457,6 +460,9 @@ export class Game {
   /** the saved explored map for this level (packed), laid under each fresh attempt */
   private fogSaved: string | null = null;
   private fogDirty = false;
+  /** Kitab places already written (from the save), so each is announced once */
+  private kitab = new Set<string>();
+  private kitabT = 0;
   private charmFound = false;
   /** set when an alarm is raised on an undetected mission; the mission ends after this frame's guards */
   private detected = false;
@@ -992,6 +998,21 @@ export class Game {
     const cols = Math.ceil((b.maxX - b.minX) / FOG.cell);
     const rows = Math.ceil((b.maxZ - b.minZ) / FOG.cell);
     this.fog = { cols, rows, seen: (this.fogSaved && unpackFog(this.fogSaved, cols * rows)) || new Uint8Array(cols * rows), at: -1 };
+  }
+  setKitab(ids: readonly string[]) {
+    for (const id of ids) this.kitab.add(id);
+  }
+  /** A few times a second: any Kitab place the player is standing in for the first time gets a page. */
+  private checkKitab(dt: number) {
+    this.kitabT -= dt;
+    if (this.kitabT > 0) return;
+    this.kitabT = 0.4;
+    for (const pl of placesAt(this.p.x, this.p.y, this.p.z)) {
+      if (this.kitab.has(pl.id)) continue;
+      this.kitab.add(pl.id);
+      this.toast(`Kitab: ${pl.title}`);
+      this.cb.onKitab?.(pl.id);
+    }
   }
   /** The save's explored map for the current level; used from the next fresh attempt, and merged in now. */
   setExplored(packed: string | null) {
@@ -1568,6 +1589,7 @@ export class Game {
     const L = this.level;
     const p = this.p;
     this.reveal();
+    this.checkKitab(dt);
 
     // ---- player movement
     let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);

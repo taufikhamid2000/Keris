@@ -16,7 +16,7 @@ import {
   ratingLabel,
   recordStart,
   recordWin,
-  addAmulet, setExplored,
+  addAmulet, setExplored, addKitab,
   wearAmulet,
   withCheckpoint,
   type Checkpoint,
@@ -26,6 +26,7 @@ import KerisEmblem from "./KerisEmblem";
 import PauseMenu, { PAUSE_TABS } from "./PauseMenu";
 import SettingsPanel from "./SettingsPanel";
 import SkillTree from "./SkillTree";
+import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
 import { amuletForLevel, withAmulet } from "@/game/amulets";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
@@ -197,7 +198,7 @@ function padConfirm() {
   else top?.querySelector<HTMLButtonElement>(".btn:not(.ghost):not(:disabled)")?.click();
 }
 
-type MenuView = "main" | "ilmu" | "controls" | "credits";
+type MenuView = "main" | "ilmu" | "kitab" | "controls" | "credits";
 
 export default function GameClient() {
   const mount = useRef<HTMLDivElement>(null);
@@ -282,6 +283,7 @@ export default function GameClient() {
             },
             onAmulet: (id) => store.update((d) => addAmulet(d, id)),
             onExplored: (lvl, packed) => store.update((d) => setExplored(d, lvl, packed)),
+            onKitab: (id) => store.update((d) => addKitab(d, id)),
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d, missionId()) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
@@ -307,6 +309,10 @@ export default function GameClient() {
   useEffect(() => {
     game?.setAmuletFound(charmFound);
   }, [game, charmFound, level]);
+
+  useEffect(() => {
+    game?.setKitab(save.kitab);
+  }, [game, save.kitab]);
 
   // the pause map remembers explored ground between attempts
   const explored = save.explored[level.id] ?? null;
@@ -541,6 +547,9 @@ export default function GameClient() {
             <button className={`btn ghost${view === "ilmu" ? " on" : ""}`} onClick={() => setView(view === "ilmu" ? "main" : "ilmu")}>
               Ilmu
             </button>
+            <button className={`btn ghost${view === "kitab" ? " on" : ""}`} onClick={() => setView(view === "kitab" ? "main" : "kitab")}>
+              Kitab
+            </button>
             {settingsBtn}
             <button className={`btn ghost${view === "controls" ? " on" : ""}`} onClick={() => setView(view === "controls" ? "main" : "controls")}>
               Controls
@@ -578,6 +587,12 @@ export default function GameClient() {
                 {skillTree}
               </>
             )}
+            {view === "kitab" && (
+              <>
+                <h2>Kitab</h2>
+                <Kitab save={save} />
+              </>
+            )}
             {view === "controls" && (
               <>
                 <h2>Controls</h2>
@@ -613,6 +628,7 @@ export default function GameClient() {
           controls={<Controls touch={touch} />}
           best={<Best m={mission} />}
           skills={skillTree}
+          kitab={<Kitab save={save} />}
           charms={{ found: save.amulets, worn: save.amulet, wear: (id) => store.update((d) => wearAmulet(d, id)) }}
           actions={
             <>

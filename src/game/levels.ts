@@ -288,14 +288,14 @@ const northArea = (a: Area): Area => ({
   lamps: north(a.lamps),
 });
 const KAMPUNG_N = northArea(KAMPUNG_AREA);
-const RIVER = { x: 0, z: 41.5, w: 80, d: 9 };
+export const RIVER = { x: 0, z: 41.5, w: 80, d: 9 };
 
 // ---------------------------------------------------------------------------------------------------------------
 // Hutan: the jungle beyond Kampung Hulu's north fence (z = 112) up to the map's north edge.
-const JUNGLE_Z0 = 35 + KAMPUNG_DZ;
-const JUNGLE_Z1 = 166;
+export const JUNGLE_Z0 = 35 + KAMPUNG_DZ;
+export const JUNGLE_Z1 = 166;
 /** the Portuguese scouts' camp, in a clearing */
-const CAMP = { x: 2, z: 143, r: 10 };
+export const CAMP = { x: 2, z: 143, r: 10 };
 /** gates in the kampung's north fence: the main lane, and the north-east gate by the Kampung Hulu start */
 const JUNGLE_GATES = [
   { x: 0, w: 4 },
@@ -368,7 +368,7 @@ const TIERS: Rect[][] = [
   [{ x: 0, z: 213, w: 24, d: 20 }, { x: -9, z: 201.5, w: 6, d: 3 }],
   [{ x: 0, z: 214, w: 12, d: 10 }],
 ];
-const SUMMIT = { x: 0, z: 214, y: TIERS.length * TIER_H };
+export const SUMMIT = { x: 0, z: 214, y: TIERS.length * TIER_H };
 /** stairs up the south face of each tier: x, and the z of the face they climb */
 const STAIRS = [
   { x: -4, face: 182 },
@@ -380,7 +380,7 @@ const STAIRS = [
 const STAIR = { n: 5, depth: 0.9, w: 3 };
 /** the falls run down the south faces at this x, from a spring on the fourth tier to the pool */
 const FALLS_X = 8;
-const POOL = { x: FALLS_X, z: 178, w: 7, d: 7 };
+export const POOL = { x: FALLS_X, z: 178, w: 7, d: 7 };
 const inRect = (r: Rect, x: number, z: number, m = 0) => Math.abs(x - r.x) < r.w / 2 + m && Math.abs(z - r.z) < r.d / 2 + m;
 /** the tier (1-based) a point stands on, 0 for the ground */
 const tierAt = (x: number, z: number, m = 0) => {

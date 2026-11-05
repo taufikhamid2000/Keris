@@ -4,6 +4,7 @@
 import { cleanSkills } from "./skills";
 import { cleanAmulets } from "./amulets";
 import { cleanExplored } from "./fog";
+import { cleanKitab } from "./kitab";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -46,6 +47,8 @@ export interface SaveData {
   amulet: string | null;
   /** pause-map ground explored, per level id (packed grid, fog.ts); kept across attempts */
   explored: Record<string, string>;
+  /** Kitab places reached, by id (kitab.ts); tangkal and mission pages come from amulets and missions */
+  kitab: string[];
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -60,7 +63,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {} };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [] };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -130,6 +133,11 @@ export function setExplored(d: SaveData, level: string, packed: string): SaveDat
   return d.explored[level] === packed ? d : { ...d, explored: { ...d.explored, [level]: packed } };
 }
 
+/** A Kitab place reached. */
+export function addKitab(d: SaveData, id: string): SaveData {
+  return d.kitab.includes(id) ? d : { ...d, kitab: cleanKitab([...d.kitab, id]) };
+}
+
 /** Wear a found tangkal, or none (null). */
 export function wearAmulet(d: SaveData, id: string | null): SaveData {
   return { ...d, amulet: id && d.amulets.includes(id) ? id : null };
@@ -155,6 +163,7 @@ export function sanitize(v: unknown): SaveData {
     skills: cleanSkills(v.skills),
     ...cleanCharms(v.amulets, v.amulet),
     explored: cleanExplored(v.explored),
+    kitab: cleanKitab(v.kitab),
   };
 }
 

@@ -10,6 +10,7 @@ export const PAUSE_TABS = [
   { id: "peta", name: "Peta", sub: "Map" },
   { id: "kelengkapan", name: "Kelengkapan", sub: "Gear" },
   { id: "ilmu", name: "Ilmu", sub: "Skills" },
+  { id: "kitab", name: "Kitab", sub: "Journal" },
   { id: "hikayat", name: "Hikayat", sub: "Mission" },
 ] as const;
 
@@ -116,6 +117,7 @@ export default function PauseMenu({
   best,
   actions,
   skills,
+  kitab,
   charms,
 }: {
   def: LevelDef;
@@ -127,6 +129,7 @@ export default function PauseMenu({
   best: ReactNode;
   actions: ReactNode;
   skills: ReactNode;
+  kitab: ReactNode;
   /** tangkal found (ids) and the one worn */
   charms: { found: string[]; worn: string | null; wear: (id: string | null) => void };
 }) {
@@ -198,6 +201,7 @@ export default function PauseMenu({
             </div>
           )}
           {cur === "ilmu" && skills}
+          {cur === "kitab" && kitab}
           {cur === "hikayat" && (
             <>
               <h3>{def.name}</h3>

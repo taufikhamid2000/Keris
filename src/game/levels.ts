@@ -2,6 +2,7 @@
 // colliders, so a new mission is a new definition built from the same kit of parts.
 import type { Vec2 } from "./logic";
 import type { WayangDef } from "./wayang";
+import { TIDE_HOUSES } from "./tide";
 
 export interface HouseDef {
   x: number;
@@ -458,7 +459,7 @@ const WORLD: Area &
   > = {
   seed: 1511,
   shoreZ: -31,
-  houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses, ...JUNGLE.houses],
+  houses: [...HARBOUR_AREA.houses, ...KAMPUNG_N.houses, ...JUNGLE.houses, ...TIDE_HOUSES],
   cliffs: MOUNTAIN.cliffs,
   rocks: MOUNTAIN.rocks,
   falls: MOUNTAIN.falls,

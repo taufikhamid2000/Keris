@@ -36,6 +36,7 @@ import { setTale } from "@/game/save";
 import WayangOverlay from "./WayangOverlay";
 import { PantunChoice, PantunLine } from "./PantunChoice";
 import { addPantun } from "@/game/pantun";
+import { TideBadge } from "./Tide";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -477,6 +478,7 @@ export default function GameClient() {
             </div>
           </div>
           <Compass north={hud.northDeg} obj={hud.objDeg} />
+          <TideBadge t={hud.tide} />
           {hud.combat && (
             <div className={`hp ${hud.incoming ? "incoming" : ""}`} aria-label={`Health ${Math.ceil(hud.hp)} of ${hud.maxHp}`}>
               {Array.from({ length: hud.maxHp }, (_, i) => (

@@ -5,6 +5,7 @@ import type { MapState } from "@/game/engine";
 import { AMULETS, amuletById, amuletForLevel } from "@/game/amulets";
 import type { LevelDef, Rect } from "@/game/levels";
 import { formatTime } from "@/game/save";
+import { TideNote } from "./Tide";
 
 export const PAUSE_TABS = [
   { id: "peta", name: "Peta", sub: "Map" },
@@ -166,6 +167,7 @@ export default function PauseMenu({
                 <i className="k-you" /> You <i className="k-obj" /> {def.objective.kind === "steal" ? "Item" : "Target"} <i className="k-exit" /> Escape{" "}
                 <i className="k-hide" /> Hiding spot <i className="k-fog" /> Not explored yet
               </p>
+              {s && <TideNote levelId={def.id} time={s.time} />}
             </>
           )}
           {cur === "kelengkapan" && (
@@ -214,6 +216,7 @@ export default function PauseMenu({
                   Time {formatTime(s.time)} · Guards down {s.guardsDown} of {s.guards} · Times seen {s.alerts}
                 </p>
               )}
+              {s && <TideNote levelId={def.id} time={s.time} />}
               {best}
               {here && <p className="small">Tangkal: {charms.found.includes(here.id) ? `${here.name} found` : "still hidden on this mission"}</p>}
               {lastTale}

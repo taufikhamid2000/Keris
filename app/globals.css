@@ -52,6 +52,15 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .compass-ring span { position: absolute; left: 50%; top: 50%; width: 14px; margin-left: -7px; margin-top: -8px; text-align: center; font-size: .75rem; font-weight: 700; }
 .compass-obj i { position: absolute; left: 50%; top: 4px; margin-left: -5px; border: 5px solid transparent; border-bottom: 10px solid #ffd24a; }
 .compass b { position: absolute; left: 50%; bottom: -8px; margin-left: -5px; border: 5px solid transparent; border-bottom: 8px solid #fff; transform: rotate(180deg); display: none; }
+/* pasang surut: the tide gauge under the compass */
+.tide { position: absolute; top: 116px; right: 10px; width: 104px; display: flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 6px; background: rgba(20,10,24,.55); border: 1px solid rgba(255,255,255,.2); font-size: .68rem; line-height: 1.2; }
+.tide b { flex: 1; font-weight: 600; white-space: nowrap; }
+.tide-well { position: relative; width: 9px; height: 16px; border: 1px solid rgba(255,255,255,.45); border-radius: 0 0 4px 4px; overflow: hidden; background: #4a3a29; }
+.tide-well i { position: absolute; left: 0; right: 0; bottom: 0; background: #3f93a3; transition: height .6s; }
+.tide-dir { font-size: .6rem; color: #9fd8e2; }
+.tide-surut b { color: #e0b47a; }
+.tide-pasang b { color: #9fd8e2; }
+.tide-note { color: #9fd8e2; }
 
 .prompt { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); background: rgba(20,10,24,.7); padding: 6px 16px; border-radius: 6px; border: 1px solid rgba(255,200,140,.4); }
 .toast { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); font-size: 1.1rem; color: #ffd9a0; }
@@ -117,6 +126,7 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
   .chips { margin-top: 5px; gap: 4px; }
   .chips em { font-size: .62rem; padding: 1px 6px; }
   .compass { top: max(8px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); transform: scale(.7); transform-origin: top right; }
+  .tide { top: calc(max(8px, env(safe-area-inset-top)) + 72px); right: max(6px, env(safe-area-inset-right)); transform: scale(.8); transform-origin: top right; }
   .prompt { bottom: 17%; font-size: .8rem; padding: 4px 12px; }
   .toast { top: 12%; font-size: .95rem; }
   .talk { bottom: 40%; font-size: .85rem; }

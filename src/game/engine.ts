@@ -41,6 +41,7 @@ import { packFog, unpackFog } from "./fog";
 import { placesAt } from "./kitab";
 import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./barks";
 import { TOOLS, type ToolId } from "./tools";
+import { Chronicle, type ChronicleData } from "./chronicle";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
@@ -496,6 +497,8 @@ export class Game {
   private lookSens = 1;
   private invertY = false;
   private run: RunStats = { time: 0, alerts: 0, fromStart: true };
+  /** what happened this attempt, for the hikayat told at the end (chronicle.ts) */
+  private chron = new Chronicle();
   readonly quality: Quality;
   private def: LevelDef;
   /** the mission being played */
@@ -931,6 +934,7 @@ export class Game {
     this.run = { time: 0, alerts: 0, fromStart: from === "start" };
     if (from === "start" || this.fog.seen.length === 0) this.clearFog();
     if (from === "target") this.applyTargetCheckpoint();
+    this.chron.begin(this.def.id, from, this.guards.length);
     this.cb.onCheckpoint?.(from);
     this.setPhase("playing");
     this.lock();
@@ -959,6 +963,7 @@ export class Game {
     this.objective = "escape";
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
     this.toast(this.level.text.targetDown);
+    this.chron.add({ k: "objective" });
     this.cb.onCheckpoint?.("target");
   }
   /** A small chest with a gold band and a faint glow, for steal objectives; part of the level root so it is disposed with it. */
@@ -1118,6 +1123,10 @@ export class Game {
   stats(): RunStats {
     return { ...this.run };
   }
+  /** The event log of the current attempt, as plain data (hikayat.ts tells it). */
+  chronicle(): ChronicleData {
+    return this.chron.snapshot();
+  }
   /** Mouse and touch look settings: sensitivity multiplier and inverted vertical look. */
   setLookSettings(sens: number, invertY: boolean) {
     this.lookSens = Number.isFinite(sens) && sens > 0 ? sens : 1;
@@ -1206,6 +1215,7 @@ export class Game {
       this.hear(g, { x: hit.x, z: hit.z, y: hit.y });
       n++;
     }
+    this.chron.add({ k: "tool", tool: "stone", hit: n });
     this.toast(n ? "Stone thrown. They heard it." : "Stone thrown.");
   }
   private throwPepper() {
@@ -1228,6 +1238,7 @@ export class Game {
     }
     this.puff.t = 0;
     this.puff.mesh.position.set(this.p.x, this.p.y + 1.2, this.p.z);
+    this.chron.add({ k: "tool", tool: "pepper", hit: n });
     this.toast(n ? `Pepper! ${n} guard${n === 1 ? "" : "s"} blinded.` : "Pepper thrown. Nobody close enough.");
   }
   /** Analog movement from the touch joystick: x strafe, y forward, both -1..1 already deadzoned. */
@@ -1545,6 +1556,7 @@ export class Game {
     this.phase = p;
     this.loseReason = reason;
     if (p !== "playing" && document.pointerLockElement) document.exitPointerLock();
+    if (p === "won" || p === "lost") this.chron.end(p === "won", reason);
     if (p !== "playing" && this.fogDirty && this.fog.cols) {
       this.fogDirty = false;
       this.cb.onExplored?.(this.def.id, packFog(this.fog.seen));
@@ -1744,6 +1756,7 @@ export class Game {
 
     // ---- hiding
     this.hidden = !!this.swim?.under || L.hides.some((h) => p.y < 1 && dist2D(p, h) < h.r);
+    this.chron.tick(this.run.time, { x: p.x, y: p.y, z: p.z, hidden: this.hidden, swim: !!this.swim, dive: !!this.swim?.under, horse: !!this.horse, boat: !!this.boat, hp: this.hp });
 
     // ---- noise
     const stance = { crouched, running: p.running };
@@ -2026,6 +2039,7 @@ export class Game {
       else if (now === "patrol") this.say(g, "giveup");
       if (now === "alert") {
         this.run.alerts++;
+        this.chron.add({ k: "spotted", body: found, target: g.isTarget });
         if (this.def.undetected) this.detected = true;
         g.meter = 1;
         if (!g.lastKnown) {
@@ -2254,6 +2268,7 @@ export class Game {
       this.charm.group.visible = false;
       this.toast(`Found the ${this.charm.name}. Your tangkal are under Kelengkapan in the pause menu.`);
       this.cb.onAmulet?.(this.charm.id);
+      this.chron.add({ k: "charm", name: this.charm.name });
       return;
     }
     if (this.nearLoot()) {
@@ -2705,6 +2720,7 @@ export class Game {
       this.parryT = 0;
       this.parryCd = 0;
       this.toast("Parried! Strike now.");
+      this.chron.add({ k: "parry" });
       return;
     }
     this.hp = Math.max(0, this.hp - 1);
@@ -2738,6 +2754,7 @@ export class Game {
       guard.z = cover.z + (guard.z - cover.z) * 0.2;
     }
     this.p.yaw = yawTo(this.p, guard);
+    this.chron.kill(msg, guard.isTarget, !!cover);
     for (const o of this.guards) if (!o.dead && o !== guard && dist2D(o, guard) < 5) this.hear(o, guard);
     if (guard.isTarget && this.def.objective.kind === "kill") this.completeObjective();
     else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
@@ -2754,6 +2771,7 @@ export class Game {
       b.x = p.x + Math.sin(p.yaw) * 0.6;
       b.z = p.z + Math.cos(p.yaw) * 0.6;
       b.y = p.y;
+      if (isBodyHidden(b, this.level.hides)) this.chron.add({ k: "hideBody" });
       this.toast(isBodyHidden(b, this.level.hides) ? "Body hidden." : "Body dropped. Hide it in a haystack or bush.");
       return;
     }
@@ -2801,6 +2819,7 @@ export class Game {
     const hit = o.clone().addScaledVector(dir, t);
     const chest = new THREE.Vector3(this.p.x, this.p.y + 1.3, this.p.z);
     this.knifeFly = { t: 0, from: chest, to: hit };
+    this.chron.add({ k: "tool", tool: "knife", hit: hitGuard ? 1 : 0 });
     if (hitGuard) {
       hitGuard.stun = this.mods.knifeStun;
       this.say(hitGuard, "stunned");

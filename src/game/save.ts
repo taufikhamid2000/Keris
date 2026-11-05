@@ -5,6 +5,7 @@ import { cleanSkills } from "./skills";
 import { cleanAmulets } from "./amulets";
 import { cleanExplored } from "./fog";
 import { cleanKitab } from "./kitab";
+import { cleanTales } from "./hikayat";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -49,6 +50,8 @@ export interface SaveData {
   explored: Record<string, string>;
   /** Kitab places reached, by id (kitab.ts); tangkal and mission pages come from amulets and missions */
   kitab: string[];
+  /** the last hikayat told for each mission id (hikayat.ts), shown in the pause menu */
+  tales: Record<string, string>;
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -63,7 +66,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [] };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [], tales: {} };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -138,6 +141,11 @@ export function addKitab(d: SaveData, id: string): SaveData {
   return d.kitab.includes(id) ? d : { ...d, kitab: cleanKitab([...d.kitab, id]) };
 }
 
+/** Keep the tale just told as the mission's last one. */
+export function setTale(d: SaveData, mission: string, tale: string): SaveData {
+  return d.tales[mission] === tale ? d : { ...d, tales: cleanTales({ ...d.tales, [mission]: tale }) };
+}
+
 /** Wear a found tangkal, or none (null). */
 export function wearAmulet(d: SaveData, id: string | null): SaveData {
   return { ...d, amulet: id && d.amulets.includes(id) ? id : null };
@@ -164,6 +172,7 @@ export function sanitize(v: unknown): SaveData {
     ...cleanCharms(v.amulets, v.amulet),
     explored: cleanExplored(v.explored),
     kitab: cleanKitab(v.kitab),
+    tales: cleanTales(v.tales),
   };
 }
 

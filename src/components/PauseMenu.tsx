@@ -119,6 +119,7 @@ export default function PauseMenu({
   skills,
   kitab,
   charms,
+  lastTale,
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -132,6 +133,8 @@ export default function PauseMenu({
   kitab: ReactNode;
   /** tangkal found (ids) and the one worn */
   charms: { found: string[]; worn: string | null; wear: (id: string | null) => void };
+  /** the hikayat told at the end of this mission's last attempt, if any */
+  lastTale?: ReactNode;
 }) {
   const cur = PAUSE_TABS[tab]?.id ?? "peta";
   const worn = amuletById(charms.found.includes(charms.worn ?? "") ? charms.worn : null);
@@ -213,6 +216,7 @@ export default function PauseMenu({
               )}
               {best}
               {here && <p className="small">Tangkal: {charms.found.includes(here.id) ? `${here.name} found` : "still hidden on this mission"}</p>}
+              {lastTale}
               <h3>Controls</h3>
               {controls}
             </>

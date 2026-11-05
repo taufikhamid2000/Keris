@@ -16,7 +16,7 @@ import {
   ratingLabel,
   recordStart,
   recordWin,
-  addAmulet,
+  addAmulet, setExplored,
   wearAmulet,
   withCheckpoint,
   type Checkpoint,
@@ -281,6 +281,7 @@ export default function GameClient() {
               return true;
             },
             onAmulet: (id) => store.update((d) => addAmulet(d, id)),
+            onExplored: (lvl, packed) => store.update((d) => setExplored(d, lvl, packed)),
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d, missionId()) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
@@ -306,6 +307,12 @@ export default function GameClient() {
   useEffect(() => {
     game?.setAmuletFound(charmFound);
   }, [game, charmFound, level]);
+
+  // the pause map remembers explored ground between attempts
+  const explored = save.explored[level.id] ?? null;
+  useEffect(() => {
+    game?.setExplored(explored);
+  }, [game, explored, level]);
 
   useEffect(() => {
     game?.setLookSettings(save.settings.lookSens, save.settings.invertY);

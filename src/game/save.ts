@@ -3,6 +3,7 @@
 // try/catch and degrades to in-memory when localStorage is missing or blocked (private mode, SSR).
 import { cleanSkills } from "./skills";
 import { cleanAmulets } from "./amulets";
+import { cleanExplored } from "./fog";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -43,6 +44,8 @@ export interface SaveData {
   /** tangkal found, by id (amulets.ts), and the one worn */
   amulets: string[];
   amulet: string | null;
+  /** pause-map ground explored, per level id (packed grid, fog.ts); kept across attempts */
+  explored: Record<string, string>;
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -57,7 +60,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {} };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -122,6 +125,11 @@ export function addAmulet(d: SaveData, id: string): SaveData {
   return { ...d, ...next };
 }
 
+/** Store a level's explored map (unchanged data keeps the same object, so no rewrite). */
+export function setExplored(d: SaveData, level: string, packed: string): SaveData {
+  return d.explored[level] === packed ? d : { ...d, explored: { ...d.explored, [level]: packed } };
+}
+
 /** Wear a found tangkal, or none (null). */
 export function wearAmulet(d: SaveData, id: string | null): SaveData {
   return { ...d, amulet: id && d.amulets.includes(id) ? id : null };
@@ -146,6 +154,7 @@ export function sanitize(v: unknown): SaveData {
     seenIntro: v.seenIntro === true,
     skills: cleanSkills(v.skills),
     ...cleanCharms(v.amulets, v.amulet),
+    explored: cleanExplored(v.explored),
   };
 }
 

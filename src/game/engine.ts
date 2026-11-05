@@ -37,6 +37,7 @@ import { QUALITY, pixelRatioFor, type Quality } from "./touch";
 import { harbourDrift } from "./menuCamera";
 import { BASE_MODS, type SkillMods } from "./skills";
 import { amuletForLevel, amuletSpot } from "./amulets";
+import { packFog, unpackFog } from "./fog";
 import { TOOLS, type ToolId } from "./tools";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
@@ -104,6 +105,8 @@ export interface GameCallbacks {
   onPadTab?: (dir: -1 | 1) => void;
   /** the player picked up this mission's tangkal (amulet id) */
   onAmulet?: (id: string) => void;
+  /** the explored map changed (sent when play stops: pause, win, loss), packed for the save */
+  onExplored?: (level: string, packed: string) => void;
 }
 
 /** Where things stand, for the pause menu's map and gear tabs (read when the game pauses). */
@@ -450,7 +453,10 @@ export class Game {
   /** this mission's hidden tangkal: its mesh and spot, and whether the player already has it (setAmuletFound) */
   private charm: { group: THREE.Group; x: number; z: number; id: string; name: string } | null = null;
   /** explored squares for the pause map; cleared on a fresh attempt, kept across a checkpoint retry */
-  private fog = { cols: 0, rows: 0, seen: new Uint8Array(0), at: -1 };
+  private fog: { cols: number; rows: number; seen: Uint8Array; at: number } = { cols: 0, rows: 0, seen: new Uint8Array(0), at: -1 };
+  /** the saved explored map for this level (packed), laid under each fresh attempt */
+  private fogSaved: string | null = null;
+  private fogDirty = false;
   private charmFound = false;
   /** set when an alarm is raised on an undetected mission; the mission ends after this frame's guards */
   private detected = false;
@@ -985,7 +991,14 @@ export class Game {
     const b = this.def.bounds;
     const cols = Math.ceil((b.maxX - b.minX) / FOG.cell);
     const rows = Math.ceil((b.maxZ - b.minZ) / FOG.cell);
-    this.fog = { cols, rows, seen: new Uint8Array(cols * rows), at: -1 };
+    this.fog = { cols, rows, seen: (this.fogSaved && unpackFog(this.fogSaved, cols * rows)) || new Uint8Array(cols * rows), at: -1 };
+  }
+  /** The save's explored map for the current level; used from the next fresh attempt, and merged in now. */
+  setExplored(packed: string | null) {
+    this.fogSaved = packed;
+    const { cols, rows, seen } = this.fog;
+    const old = packed && cols ? unpackFog(packed, cols * rows) : null;
+    if (old) for (let i = 0; i < seen.length; i++) seen[i] |= old[i];
   }
   /** Mark the squares around the player as explored (only when they step into a new square). */
   private reveal() {
@@ -1002,7 +1015,10 @@ export class Game {
       for (let x = Math.max(0, cx - n); x <= Math.min(cols - 1, cx + n); x++) {
         const dx = (x + 0.5) * FOG.cell + b.minX - this.p.x;
         const dz = (z + 0.5) * FOG.cell + b.minZ - this.p.z;
-        if (dx * dx + dz * dz <= FOG.r * FOG.r) seen[z * cols + x] = 1;
+        if (dx * dx + dz * dz <= FOG.r * FOG.r && !seen[z * cols + x]) {
+          seen[z * cols + x] = 1;
+          this.fogDirty = true;
+        }
       }
   }
   /** Player, objective and run numbers for the pause menu. */
@@ -1361,6 +1377,8 @@ export class Game {
     this.guards = [];
     this.def = def;
     this.fog = { cols: 0, rows: 0, seen: new Uint8Array(0), at: -1 };
+    this.fogSaved = null;
+    this.fogDirty = false;
     this.level = buildLevel(def, { lampLights: QUALITY[this.quality].lampLights });
     this.lampTimer = 0;
     this.loot = this.buildLoot();
@@ -1469,6 +1487,10 @@ export class Game {
     this.phase = p;
     this.loseReason = reason;
     if (p !== "playing" && document.pointerLockElement) document.exitPointerLock();
+    if (p !== "playing" && this.fogDirty && this.fog.cols) {
+      this.fogDirty = false;
+      this.cb.onExplored?.(this.def.id, packFog(this.fog.seen));
+    }
     this.cb.onPhase(p, reason);
   }
   private toast(t: string) {

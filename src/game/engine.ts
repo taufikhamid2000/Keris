@@ -42,6 +42,7 @@ import { placesAt } from "./kitab";
 import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./barks";
 import { TOOLS, type ToolId } from "./tools";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
+import { KAPITAN, round1, type GuardTuple, type KapitanWorld } from "./kapitan";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
@@ -928,6 +929,7 @@ export class Game {
   /** Begin the mission, from the beginning or from the "target down" checkpoint. Guard and alert state is never restored. */
   start(from: Checkpoint = "start") {
     this.resetWorld();
+    this.clearKapitan(true);
     this.run = { time: 0, alerts: 0, fromStart: from === "start" };
     if (from === "start" || this.fog.seen.length === 0) this.clearFog();
     if (from === "target") this.applyTargetCheckpoint();
@@ -1099,6 +1101,122 @@ export class Game {
       maxHp: this.maxHp,
       fog: { minX: this.def.bounds.minX, minZ: this.def.bounds.minZ, cell: FOG.cell, cols: this.fog.cols, rows: this.fog.rows, seen: this.fog.seen.slice() },
     };
+  }
+  // ------------------------------------------------------------------ Dua pemain: the Kapitan's hand
+  // A friend plays the Kapitan from a phone (kapitanHost.ts). This game is authoritative: the host
+  // checks limits, cooldowns and the rate limit (kapitan.ts); these methods only check the world.
+  private kap = {
+    epoch: 0,
+    lanterns: [] as { x: number; z: number; obj: THREE.Group }[],
+    /** guards sent somewhere keep "hearing" the spot until they reach it (hold: until the time runs out) */
+    orders: new Map<Guard, { x: number; z: number; until: number; hold: boolean }>(),
+    /** where a guard last saw the pendekar, in play time */
+    seen: null as { x: number; z: number; t: number } | null,
+  };
+  /** The Kapitan's view: guards, pelita, and the pendekar only where a guard sees or last saw him. */
+  kapitanSnapshot(): KapitanWorld {
+    const live = this.phase === "playing" || this.phase === "paused";
+    const seen = live && this.guards.some((g) => !g.dead && g.stun <= 0 && g.seesPlayer);
+    if (seen) this.kap.seen = { x: this.p.x, z: this.p.z, t: this.run.time };
+    const k = this.kap.seen;
+    const o = this.def.objective;
+    const tgt = this.objective !== "main" ? null : o.kind === "steal" ? o.at : this.guards.find((g) => g.isTarget && !g.dead);
+    const st: Record<GuardState, number> = { patrol: 0, suspicious: 1, search: 2, alert: 3 };
+    return {
+      epoch: this.kap.epoch,
+      level: this.def.id,
+      phase: this.phase,
+      t: round1(this.run.time),
+      guards: this.guards.map((g): GuardTuple => [
+        g.id,
+        round1(g.x),
+        round1(g.z),
+        Math.round(g.yaw * 100) / 100,
+        st[g.brain.state],
+        (g.dead ? 1 : 0) | (g.isTarget ? 2 : 0) | (g.stun > 0 ? 4 : 0) | (this.kap.orders.has(g) ? 8 : 0),
+      ]),
+      lanterns: this.kap.lanterns.map((l): [number, number] => [round1(l.x), round1(l.z)]),
+      pendekar: k ? { x: round1(k.x), z: round1(k.z), seen, age: round1(this.run.time - k.t) } : null,
+      objective: tgt ? { x: round1(tgt.x), z: round1(tgt.z) } : null,
+      exit: { x: this.level.exit.x, z: this.level.exit.z },
+      escape: this.objective === "escape",
+    };
+  }
+  private kapInside(x: number, z: number) {
+    const b = this.def.bounds;
+    return Number.isFinite(x) && Number.isFinite(z) && x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+  }
+  /** Light a pelita at (x, z): guards spot the pendekar faster inside its glow. */
+  addLantern(x: number, z: number): boolean {
+    if (this.phase !== "playing" || !this.kapInside(x, z) || this.kap.lanterns.length >= KAPITAN.lanterns) return false;
+    if (this.kap.lanterns.some((l) => Math.hypot(l.x - x, l.z - z) < KAPITAN.lanternGap)) return false;
+    const obj = new THREE.Group();
+    add(obj, new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.2, 6), std(0x3a2616)), 0, 1.1);
+    add(obj, new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, 0.32), new THREE.MeshBasicMaterial({ color: 0xffb347 })), 0, 2.35);
+    add(obj, new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.25, depthWrite: false })), 0, 2.35);
+    const pool = add(
+      obj,
+      new THREE.Mesh(
+        new THREE.CircleGeometry(KAPITAN.lanternR, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.14, depthWrite: false, blending: THREE.AdditiveBlending }),
+      ),
+      0,
+      0.06,
+    );
+    pool.rotation.x = -Math.PI / 2;
+    obj.position.set(x, groundHeight(x, z, 99, this.level.colliders), z);
+    this.scene.add(obj);
+    this.kap.lanterns.push({ x, z, obj });
+    if (dist2D(this.p, { x, z }) < 30) this.toast("A pelita is lit nearby: guards spot you faster in its glow");
+    return true;
+  }
+  /** Send guard `id` to look at (x, z), as if he heard something there. */
+  sendGuard(id: number, x: number, z: number): boolean {
+    const g = this.guards.find((o) => o.id === id);
+    if (this.phase !== "playing" || !g || g.dead || g.carried || g.stun > 0 || g.brain.state === "alert" || !this.kapInside(x, z)) return false;
+    // heard from the next frame on (stepKapitan)
+    this.kap.orders.set(g, { x, z, until: this.run.time + KAPITAN.orderTime, hold: false });
+    return true;
+  }
+  /** The kentung: every free guard turns suspicious for a while, toward where the pendekar was last seen if that is near him. Returns how many heard it. */
+  soundAlarm(): number {
+    if (this.phase !== "playing") return 0;
+    const at = this.kap.seen;
+    let n = 0;
+    for (const g of this.guards) {
+      if (g.dead || g.carried || g.stun > 0 || g.brain.state === "alert") continue;
+      const pt = at && dist2D(g, at) < 40 ? { x: at.x, z: at.z } : { x: g.x, z: g.z };
+      this.kap.orders.set(g, { ...pt, until: this.run.time + KAPITAN.alarmHold, hold: true });
+      n++;
+    }
+    if (n) this.toast("Kentung! The Kapitan beats the alarm drum: every guard is on edge");
+    return n;
+  }
+  /** Runs after footsteps and thrown tools are heard: a real noise this frame (noiseFlag) wins over the Kapitan's order. */
+  private stepKapitan() {
+    for (const [g, o] of this.kap.orders) {
+      if (g.dead || g.stun > 0 || g.noiseFlag || g.brain.state === "alert" || this.run.time > o.until || (!o.hold && dist2D(g, o) < 2)) this.kap.orders.delete(g);
+      else this.hear(g, { x: o.x, z: o.z, y: 0 });
+    }
+  }
+  /** detection multiplier: inside a pelita's glow the pendekar is spotted faster */
+  private kapitanLight() {
+    return this.kap.lanterns.some((l) => Math.hypot(l.x - this.p.x, l.z - this.p.z) < KAPITAN.lanternR) ? KAPITAN.lanternBoost : 1;
+  }
+  /** Put out the pelita and forget orders; a new attempt (newEpoch) gives the Kapitan his powers back. */
+  private clearKapitan(newEpoch: boolean) {
+    for (const l of this.kap.lanterns) {
+      this.scene.remove(l.obj);
+      l.obj.traverse((m) => {
+        const mesh = m as THREE.Mesh;
+        mesh.geometry?.dispose();
+        (mesh.material as THREE.Material | undefined)?.dispose?.();
+      });
+    }
+    this.kap.lanterns = [];
+    this.kap.orders.clear();
+    this.kap.seen = null;
+    if (newEpoch) this.kap.epoch++;
   }
   private get maxHp() {
     return MAX_HP + this.mods.maxHp;
@@ -1433,6 +1551,7 @@ export class Game {
       this.scene.remove(g.group);
     }
     this.guards = [];
+    this.clearKapitan(true);
     this.def = def;
     this.fog = { cols: 0, rows: 0, seen: new Uint8Array(0), at: -1 };
     this.fogSaved = null;
@@ -1534,6 +1653,7 @@ export class Game {
   }
   dispose() {
     this.disposed = true;
+    this.clearKapitan(false);
     this.playerRig?.dispose();
     for (const g of this.guards) g.rig?.dispose();
     cancelAnimationFrame(this.raf);
@@ -1751,6 +1871,7 @@ export class Game {
     if (nr > 0) for (const g of this.guards) if (!g.dead && dist2D(g, p) < nr * (Math.abs(g.y - p.y) > 2 ? 0.5 : 1)) this.hear(g, p);
 
     // ---- guards
+    this.stepKapitan();
     for (const g of this.guards) this.updateGuard(g, dt, stance);
 
     // ---- fighting
@@ -2004,7 +2125,7 @@ export class Game {
     if (seen) {
       g.lastKnown = { x: p.x, z: p.z };
       g.lastKnownY = p.y;
-      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), VIS.range, stance) * this.mods.detect, dt);
+      g.meter = alertNow ? 1 : stepMeter(g.meter, true, detectionRate(dist2D(g, p), VIS.range, stance) * this.mods.detect * this.kapitanLight(), dt);
     } else {
       g.meter = stepMeter(g.meter, false, 0, dt, alertNow || g.brain.state === "search" ? 0.1 : 0.25);
     }

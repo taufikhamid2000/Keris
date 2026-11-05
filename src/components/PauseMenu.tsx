@@ -48,7 +48,8 @@ function Fog({ f, vx, vy, vw, vh }: { f: MapState["fog"]; vx: number; vy: number
   );
 }
 
-function MapView({ def, s }: { def: LevelDef; s: MapState | null }) {
+/** The level map; `children` are drawn on top in the same coordinates (screen x = -world x, y = -world z). */
+export function MapView({ def, s, children }: { def: LevelDef; s: MapState | null; children?: ReactNode }) {
   const b = def.bounds;
   const pad = 6;
   const vx = sx(b.maxX) - pad;
@@ -93,6 +94,7 @@ function MapView({ def, s }: { def: LevelDef; s: MapState | null }) {
           </g>
         </>
       )}
+      {children}
     </svg>
   );
 }

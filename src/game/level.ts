@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Box, Vec2 } from "./logic";
 import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { spreadIndices } from "./touch";
+import { addTideScene, type TideScene } from "./tideScene";
 
 // Fully procedural kit for a Malacca-1511 kampung: timber stilt houses with atap roofs,
 // pasar stalls, tiered istana, watch towers, a harbour with a jetty and prahu boats.
@@ -44,6 +45,8 @@ export interface Level {
   foliage: { trees: Placed[]; treeGroup: THREE.Group; ferns: Placed[]; fernGroup: THREE.Group; rocks: (Placed & { kind: number })[]; rockGroup: THREE.Group };
   /** the waterfall's texture, scrolled each frame (null when the map has no falls) */
   flow: THREE.Texture | null;
+  /** the tide's water sheets and mudflats (tideScene.ts) */
+  tide: TideScene;
 }
 
 /** One InstancedMesh per geometry, placed at each spot (turned by r, scaled by s). */
@@ -242,14 +245,18 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   // wet shore line
   root.add(mesh(new THREE.BoxGeometry(70, 0.12, 1.2), mat(0x5b4a35), 0, 0.02, def.shoreZ - 0.2, false));
   // rivers: a water sheet just above the ground, with muddy banks
+  const sheets: THREE.Mesh[] = [];
   for (const r of def.water) {
     const w = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), new THREE.MeshStandardMaterial({ color: 0x1c5560, roughness: 0.25, metalness: 0.35 }));
     w.rotation.x = -Math.PI / 2;
     w.position.set(r.x, 0.06, r.z);
     w.receiveShadow = true;
     root.add(w);
+    sheets.push(w);
     for (const s of [-1, 1]) root.add(mesh(new THREE.BoxGeometry(r.w, 0.1, 1.0), mat(0x5b4a35), r.x, 0.03, r.z + s * (r.d / 2 + 0.3), false));
   }
+  // pasang surut: mudflats under the shore and the river beds, and the water sheets the tide moves
+  const tide = addTideScene(root, def.shoreZ, water, def.water, sheets);
 
   // ---------------------------------------------------------------- jungle: forest floor, trails, clearings
   for (const r of def.forestFloor ?? []) {
@@ -671,5 +678,6 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     boats,
     foliage: { trees, treeGroup, ferns, fernGroup, rocks, rockGroup },
     flow,
+    tide,
   };
 }

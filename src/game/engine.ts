@@ -43,6 +43,8 @@ import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./ba
 import { TOOLS, type ToolId } from "./tools";
 import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
+import { TIDE, TIDE_NAMES, floodShare, inFlood, isTidal, onMudflat, seaMudY, tideAt, tidePhase, type TideMap, type TideReading, type TideState } from "./tide";
+import { applyTide, seaSurface } from "./tideScene";
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
@@ -79,6 +81,8 @@ export interface HudState {
   combat: boolean;
   /** a guard is winding up a strike at the player: parry or roll now */
   incoming: boolean;
+  /** pasang surut: the tide now (tide.ts) */
+  tide?: TideReading;
 }
 
 export interface RunStats {
@@ -409,6 +413,9 @@ export class Game {
   private ripple: THREE.Mesh | null = null;
   /** a floor overhead is too low to stand under (stilt houses) */
   private lowCeiling = false;
+  /** pasang surut: the tide this frame, and the state last announced */
+  private tide: TideReading = tideAt(0, 0.75);
+  private tideSaid: TideState | null = null;
   private camYaw = (3 * Math.PI) / 4;
   private camPitch = 0.35;
   private camPos = new THREE.Vector3();
@@ -929,6 +936,7 @@ export class Game {
   start(from: Checkpoint = "start") {
     this.resetWorld();
     this.run = { time: 0, alerts: 0, fromStart: from === "start" };
+    this.tideSaid = null;
     if (from === "start" || this.fog.seen.length === 0) this.clearFog();
     if (from === "target") this.applyTargetCheckpoint();
     this.cb.onCheckpoint?.(from);
@@ -1614,6 +1622,7 @@ export class Game {
 
   private update(dt: number) {
     this.run.time += dt;
+    this.tideTick();
     this.toastT = Math.max(0, this.toastT - dt);
     this.knifeCd = Math.max(0, this.knifeCd - dt);
     if (this.roll) {
@@ -1698,7 +1707,7 @@ export class Game {
       p.moving = false;
     } else {
       const from = { x: p.x, z: p.z };
-      const speed = this.swing || this.charge !== null ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4;
+      const speed = (this.swing || this.charge !== null ? 1.0 : this.carrying ? 2.2 : crouched ? 1.7 : p.running ? 6.2 : 3.4) * (this.mudUnderfoot ? TIDE.mudSpeed : 1);
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       const rx = -Math.cos(this.camYaw);
@@ -1729,7 +1738,7 @@ export class Game {
       // vertical
       p.vy -= 20 * dt;
       p.y += p.vy * dt;
-      const g = groundHeight(p.x, p.z, p.y, L.colliders);
+      const g = this.mudGround(p.x, p.z, groundHeight(p.x, p.z, p.y, L.colliders));
       if (p.y <= g) {
         p.y = g;
         p.vy = 0;
@@ -1747,7 +1756,7 @@ export class Game {
 
     // ---- noise
     const stance = { crouched, running: p.running };
-    const nr = this.hidden ? 0 : noiseRadius(stance, p.moving && p.grounded) * this.mods.noise;
+    const nr = this.hidden ? 0 : noiseRadius(stance, p.moving && p.grounded) * this.mods.noise * (this.mudUnderfoot ? TIDE.mudNoise : 1);
     if (nr > 0) for (const g of this.guards) if (!g.dead && dist2D(g, p) < nr * (Math.abs(g.y - p.y) > 2 ? 0.5 : 1)) this.hear(g, p);
 
     // ---- guards
@@ -1819,7 +1828,7 @@ export class Game {
       const q = { x: p.x + mx * speed * dt, z: p.z + mz * speed * dt };
       // jetties, decks and hulls stop a swimmer at the surface (Space climbs aboard); a diver passes under decks
       pushOut(q, PLAYER_R, this.level.colliders, p.y);
-      if (!this.waterAt(q.x, q.z)) {
+      if (!this.tideWet(q.x, q.z)) {
         // ashore (a bank, or up onto a jetty) unless something tall is in the way; surface first when diving
         const g = groundHeight(q.x, q.z, 0, this.level.colliders);
         if (!s.under && g <= STEP_H) {
@@ -1834,7 +1843,8 @@ export class Game {
       }
     }
     this.applyBounds();
-    const ty = s.under ? SWIM.diveY : SWIM.surfaceY;
+    // in the sea a swimmer rides up with the tide (never lower than at mean water)
+    const ty = (s.under ? SWIM.diveY : SWIM.surfaceY) + (this.inSea(p.x, p.z) ? Math.max(0, seaSurface(this.level.tide) + 0.3) : 0);
     p.y += clamp(ty - p.y, -SWIM.sink * dt, SWIM.sink * dt);
     p.vy = 0;
     p.grounded = true;
@@ -1879,7 +1889,41 @@ export class Game {
 
   /** a step here lands in the water: water below, and no jetty, deck or hull underfoot */
   private intoWater(x: number, z: number) {
-    return this.waterAt(x, z) && groundHeight(x, z, this.p.y, this.level.colliders) < 0.05;
+    return this.tideWet(x, z) && groundHeight(x, z, this.p.y, this.level.colliders) < 0.05;
+  }
+
+  // ---- pasang surut (tide.ts). Only the player feels the mud and the flood: guards keep to the nav grid and waterAt.
+  private tideTick() {
+    this.tide = tideAt(this.run.time, tidePhase(this.def.id));
+    const st = this.tide.state;
+    if (st === this.tideSaid) return;
+    const first = this.tideSaid === null;
+    this.tideSaid = st;
+    if (first || this.toastT > 0 || (st !== "surut" && st !== "pasang")) return;
+    this.toast(st === "surut" ? `${TIDE_NAMES.surut.name}: the mud is bare along the shore and the river banks.` : `${TIDE_NAMES.pasang.name}: the river is over its banks.`);
+  }
+  private tideMap(): TideMap {
+    const b = this.level.bounds;
+    return { shoreZ: this.def.shoreZ, minX: b.minX, maxX: b.maxX, rivers: b.water.filter((a) => isTidal({ w: a.maxX - a.minX })) };
+  }
+  private onMud(x: number, z: number) {
+    return onMudflat(this.tideMap(), this.tide.k, x, z);
+  }
+  /** the player's feet are in the mud (not on a deck or a roof above it) */
+  private get mudUnderfoot() {
+    return this.p.y < 0.1 && !this.swim && this.onMud(this.p.x, this.p.z);
+  }
+  /** water for the player: the map's water and the tide's flood, less the bared mud */
+  private tideWet(x: number, z: number) {
+    return (this.waterAt(x, z) || inFlood(this.tideMap(), this.tide.k, x, z)) && !this.onMud(x, z);
+  }
+  /** on the shore mud the ground slopes down under the sea (off decks and hulls, which stand above it) */
+  private mudGround(x: number, z: number, g: number) {
+    return g < 0.05 && z < this.def.shoreZ && this.onMud(x, z) ? seaMudY(this.def.shoreZ - z) + 0.02 : g;
+  }
+  /** climbing out of the water: a little higher at the top of the tide */
+  private get swimReach() {
+    return SWIM.climbRise + TIDE.reach * floodShare(this.tide.k);
   }
 
   /** over a river and off every bridge or jetty */
@@ -1890,7 +1934,7 @@ export class Game {
   private tryJumpOrClimb() {
     if (this.swim) {
       // from the water: up onto a jetty, deck, prahu or the ship's side
-      if (!this.climb && !this.swim.under && this.tryClimb(SWIM.climbRise)) this.swim = null;
+      if (!this.climb && !this.swim.under && this.tryClimb(this.swimReach)) this.swim = null;
       return;
     }
     if (this.climb || this.leap || this.mounted) return;
@@ -2838,7 +2882,7 @@ export class Game {
     else if (this.swim)
       prompt = this.nearBoat()
         ? "E  Climb into the sampan"
-        : !this.swim.under && this.findClimb(SWIM.climbRise)
+        : !this.swim.under && this.findClimb(this.swimReach)
           ? "Space  Climb up"
           : this.swim.under ? "Diving: unseen" : this.swim.gasp > 0 ? "Catching your breath" : "Ctrl / C  Dive";
     else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
@@ -2884,6 +2928,7 @@ export class Game {
       maxHp: this.maxHp,
       combat: this.hp < this.maxHp || !!this.hostileNear(8),
       incoming,
+      tide: this.tide,
     };
   }
 
@@ -2930,6 +2975,7 @@ export class Game {
   private render(dt: number) {
     const p = this.p;
     this.followLights(dt);
+    applyTide(this.level.tide, this.tide.k);
     this.syncMeshes();
     this.navDbg?.updatePaths(this.guards);
 
@@ -2953,7 +2999,7 @@ export class Game {
     if (this.ripple) {
       this.ripple.visible = !!this.swim && this.player.group.visible;
       if (this.swim) {
-        this.ripple.position.set(p.x, this.inSea(p.x, p.z) ? SWIM.seaY : 0.09, p.z);
+        this.ripple.position.set(p.x, this.inSea(p.x, p.z) ? seaSurface(this.level.tide) + SWIM.seaY + 0.3 : 0.09 + 0.05 * floodShare(this.tide.k), p.z);
         this.ripple.scale.setScalar(1 + 0.12 * Math.sin(this.time * 4));
         (this.ripple.material as THREE.MeshBasicMaterial).opacity = this.swim.under ? 0.15 : 0.45;
       }

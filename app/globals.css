@@ -281,3 +281,11 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
   .splash-inner h1 { font-size: 2.6rem; }
   .press { margin-top: 16px; }
 }
+
+/* hikayat: the tale of the attempt on a small paper scroll (win and lose screens, pause menu) */
+.hikayat-scroll { margin: 14px 0 0; padding: 12px 16px 10px; text-align: left; color: #3a2414; background: linear-gradient(180deg, #e9d3a6, #f3e3bf 12%, #f3e3bf 88%, #dcc08c); border-radius: 3px; border-top: 5px solid #7a4b24; border-bottom: 5px solid #7a4b24; box-shadow: 0 4px 16px rgba(0,0,0,.45); }
+.hikayat-scroll figcaption { font-variant: small-caps; letter-spacing: .12em; font-size: .8rem; color: #7a2e12; margin-bottom: 4px; }
+.hikayat-scroll blockquote { margin: 0; max-height: 32vh; overflow-y: auto; font-family: Georgia, "Times New Roman", serif; font-size: .88rem; line-height: 1.55; }
+.hikayat-scroll .btn.sm { color: #3a2414; border-color: rgba(58,36,20,.45); }
+.pause-pane .hikayat-scroll blockquote { max-height: none; }
+@media (max-height: 500px) { .hikayat-scroll blockquote { max-height: 26vh; font-size: .74rem; line-height: 1.4; } }

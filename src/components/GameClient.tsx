@@ -30,6 +30,9 @@ import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
 import { amuletForLevel, withAmulet } from "@/game/amulets";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
+import HikayatScroll from "./HikayatScroll";
+import { tellHikayat } from "@/game/hikayat";
+import { setTale } from "@/game/save";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -210,6 +213,8 @@ export default function GameClient() {
   const [failed, setFailed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [win, setWin] = useState<WinResult | null>(null);
+  /** the hikayat of the attempt that just ended (win or loss) */
+  const [tale, setTaleText] = useState("");
   const [introView, setIntroView] = useState<IntroView | null>(null);
   /** what to do when the cutscene ends: go on into the mission, or back to the title (replay) */
   const introMode = useRef<"mission" | "replay">("mission");
@@ -258,6 +263,11 @@ export default function GameClient() {
                   newBestRating: out.newBestRating,
                   points: earnedPoints(out.data) - earnedPoints(before),
                 });
+              }
+              if ((p === "won" || p === "lost") && inst) {
+                const text = tellHikayat(inst.chronicle(), levelRef.current ?? lv, inst.stats());
+                setTaleText(text);
+                store.update((d) => setTale(d, missionId(), text));
               }
               if (p === "paused" && inst) setMapState(inst.mapState());
               setPhase(p);
@@ -632,6 +642,7 @@ export default function GameClient() {
           skills={skillTree}
           kitab={<Kitab save={save} />}
           charms={{ found: save.amulets, worn: save.amulet, wear: (id) => store.update((d) => wearAmulet(d, id)) }}
+          lastTale={save.tales[level.missionId] ? <HikayatScroll text={save.tales[level.missionId]} title="Your last tale" /> : null}
           actions={
             <>
               <button className="btn" onClick={resume}>
@@ -664,6 +675,7 @@ export default function GameClient() {
               </p>
             )}
             <Best m={mission} />
+            {tale && <HikayatScroll text={tale} />}
             <button className="btn" onClick={() => begin("start")}>
               Play again
             </button>
@@ -691,6 +703,7 @@ export default function GameClient() {
             </button>
             {menuBtn}
             <Best m={mission} />
+            {tale && <HikayatScroll text={tale} />}
           </div>
         </div>
       )}

@@ -30,6 +30,8 @@ import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
 import { amuletForLevel, withAmulet } from "@/game/amulets";
 import TouchControls, { enterFullscreenLandscape } from "./TouchControls";
+import { PantunChoice, PantunLine } from "./PantunChoice";
+import { addPantun } from "@/game/pantun";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -285,6 +287,7 @@ export default function GameClient() {
             onAmulet: (id) => store.update((d) => addAmulet(d, id)),
             onExplored: (lvl, packed) => store.update((d) => setExplored(d, lvl, packed)),
             onKitab: (id) => store.update((d) => addKitab(d, id)),
+            onPantun: (id) => store.update((d) => addPantun(d, id)),
             onCheckpoint: (cp) => store.update((d) => (cp === "start" ? recordStart(d, missionId()) : withCheckpoint(d, cp))),
           },
           { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
@@ -314,6 +317,10 @@ export default function GameClient() {
   useEffect(() => {
     game?.setKitab(save.kitab);
   }, [game, save.kitab]);
+
+  useEffect(() => {
+    game?.setPantun(save.pantun);
+  }, [game, save.pantun]);
 
   // the pause map remembers explored ground between attempts
   const explored = save.explored[level.id] ?? null;
@@ -448,6 +455,7 @@ export default function GameClient() {
               {hud.hidden && <em>Hidden</em>}
               {hud.crouched && <em>Crouched</em>}
               {hud.eagle && <em className="gold">Mata Helang</em>}
+              {!!hud.pantun?.disguise && <em className="gold">Menyamar {hud.pantun.disguise}s</em>}
               <em className="tool-chip">
                 {TOOLS.find((t) => t.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
               </em>
@@ -471,6 +479,7 @@ export default function GameClient() {
           {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : hud.prompt}</div>}
           {hud.toast && <div className="toast">{hud.toast}</div>}
           {hud.talk && <div className="talk">&ldquo;{hud.talk}&rdquo;</div>}
+          {hud.pantun?.line && !hud.pantun.choice && <PantunLine line={hud.pantun.line} />}
           {hud.wheel && (
             <div className="wheel" aria-label="Tool wheel">
               {TOOLS.map((t, i) => {
@@ -516,6 +525,7 @@ export default function GameClient() {
       )}
 
       {phase === "playing" && touch && <TouchControls game={game} hud={hud} />}
+      {phase === "playing" && hud.pantun?.choice && <PantunChoice view={hud.pantun.choice} game={game} />}
 
       {splash && (
         <div className="overlay splash" onPointerDown={dismissSplash} role="button" tabIndex={-1} aria-label="Start">

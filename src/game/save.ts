@@ -7,6 +7,7 @@ import { cleanExplored } from "./fog";
 import { cleanKitab } from "./kitab";
 import { cleanTales } from "./hikayat";
 import { cleanPantun } from "./pantun";
+import { cleanPuteri, defaultPuteri, type PuteriSave } from "./ghaib";
 
 export const SAVE_KEY = "keris:save";
 export const SAVE_VERSION = 3;
@@ -55,6 +56,8 @@ export interface SaveData {
   tales: Record<string, string>;
   /** pantun passwords overheard, by id (pantun.ts); the right answer is marked at the gates */
   pantun: string[];
+  /** the puteri of Gunung Ledang's cumulative restu (mercy less blood) and how many missions she has judged (ghaib.ts) */
+  puteri: PuteriSave;
 }
 
 export const LOOK_SENS_MIN = 0.4;
@@ -69,7 +72,7 @@ export function defaultSettings(): SaveSettings {
 }
 
 export function defaultSave(): SaveData {
-  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [], tales: {}, pantun: [] };
+  return { version: SAVE_VERSION, checkpoint: null, checkpointMission: null, missions: {}, settings: defaultSettings(), seenIntro: false, skills: [], amulets: [], amulet: null, explored: {}, kitab: [], tales: {}, pantun: [], puteri: defaultPuteri() };
 }
 
 // ---------------------------------------------------------------- rating and formatting
@@ -177,6 +180,7 @@ export function sanitize(v: unknown): SaveData {
     kitab: cleanKitab(v.kitab),
     tales: cleanTales(v.tales),
     pantun: cleanPantun(v.pantun),
+    puteri: cleanPuteri(v.puteri),
   };
 }
 

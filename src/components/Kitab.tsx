@@ -3,6 +3,7 @@
 import { AMULETS } from "@/game/amulets";
 import { CHARM_LORE, MISSION_LORE, PLACES } from "@/game/kitab";
 import { LEVELS } from "@/game/levels";
+import { ghaibPages } from "@/game/ghaib";
 import type { SaveData } from "@/game/save";
 import { pantunPages } from "@/game/pantun";
 
@@ -48,7 +49,8 @@ export default function Kitab({ save }: { save: SaveData }) {
     return { key: l.id, open: !!save.missions[l.missionId]?.completed, title: lore?.title ?? l.name, text: lore?.text ?? l.win.body, hint: `Complete ${l.name}` };
   });
   const pantun: Page[] = pantunPages(save.pantun);
-  const all = [...places, ...charms, ...tales, ...pantun];
+  const ghaib: Page[] = ghaibPages(save);
+  const all = [...places, ...charms, ...tales, ...pantun, ...ghaib];
   return (
     <div className="kitab">
       <p className="points">
@@ -58,6 +60,7 @@ export default function Kitab({ save }: { save: SaveData }) {
       <Section name="Tangkal" sub="Amulets found" pages={charms} />
       <Section name="Hikayat" sub="Missions completed" pages={tales} />
       <Section name="Pantun" sub="Passwords overheard" pages={pantun} />
+      <Section name="Ghaib" sub="The unseen" pages={ghaib} />
     </div>
   );
 }

@@ -38,6 +38,7 @@ import { PantunChoice, PantunLine } from "./PantunChoice";
 import { addPantun } from "@/game/pantun";
 import { TideBadge } from "./Tide";
 import { DuaPemainButton, KapitanHostPanel } from "./KapitanHost";
+import { CHANGE_NOTE, judge, recordJudgement, type Whisper } from "@/game/ghaib";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -222,6 +223,8 @@ export default function GameClient() {
   const [win, setWin] = useState<WinResult | null>(null);
   /** the hikayat of the attempt that just ended (win or loss) */
   const [tale, setTaleText] = useState("");
+  /** the puteri's whisper on the last win (ghaib.ts) */
+  const [whisper, setWhisper] = useState<Whisper | null>(null);
   const [introView, setIntroView] = useState<IntroView | null>(null);
   /** what to do when the cutscene ends: go on into the mission, or back to the title (replay) */
   const introMode = useRef<"mission" | "replay">("mission");
@@ -275,7 +278,15 @@ export default function GameClient() {
               if ((p === "won" || p === "lost") && inst) {
                 const text = tellHikayat(inst.chronicle(), levelRef.current ?? lv, inst.stats());
                 setTaleText(text);
-                store.update((d) => setTale(d, missionId(), text));
+                // a loss is only kept when the mission has no tale yet, so it never replaces a winning one
+                if (p === "won" || !store.get().tales[missionId()]) store.update((d) => setTale(d, missionId(), text));
+              }
+              if (p === "won" && inst) {
+                // Bisikan puteri: her verdict on how this mission was played, added to the save's restu
+                const d = store.get();
+                const w = judge(inst.ghaibTally(), d.puteri.restu, inst.levelDef.id, d.puteri.judged);
+                store.set(recordJudgement(d, w));
+                setWhisper(w);
               }
               if (p === "paused" && inst) setMapState(inst.mapState());
               setPhase(p);
@@ -337,6 +348,10 @@ export default function GameClient() {
   useEffect(() => {
     game?.setPantun(save.pantun);
   }, [game, save.pantun]);
+
+  useEffect(() => {
+    game?.setRestu(save.puteri.restu);
+  }, [game, save.puteri.restu]);
 
   // the pause map remembers explored ground between attempts
   const explored = save.explored[level.id] ?? null;
@@ -477,7 +492,14 @@ export default function GameClient() {
                 {TOOLS.find((t) => t.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
               </em>
             </div>
+            {hud.semangat !== undefined && (hud.eagle || hud.semangat < 0.999) && (
+              <div className={`semangat${hud.eagle ? " on" : ""}`} aria-label={`Semangat ${Math.round(hud.semangat * 100)}%`}>
+                <div style={{ width: `${Math.round(hud.semangat * 100)}%` }} />
+                <span>Semangat</span>
+              </div>
+            )}
           </div>
+          {hud.eagle && <div className="ghaib-veil" aria-hidden="true" />}
           <Compass north={hud.northDeg} obj={hud.objDeg} />
           <TideBadge t={hud.tide} />
           {hud.combat && (
@@ -692,6 +714,13 @@ export default function GameClient() {
               <p className="best new">
                 +{win.points} skill point{win.points === 1 ? "" : "s"}. Learn new Ilmu from the main menu or the pause menu.
               </p>
+            )}
+            {whisper && (
+              <blockquote className={`bisikan ${whisper.mood}`}>
+                <span className="small">Bisikan puteri</span>
+                <p>&ldquo;{whisper.line}&rdquo;</p>
+                {whisper.change && <p className="small">{CHANGE_NOTE[whisper.change]}</p>}
+              </blockquote>
             )}
             <Best m={mission} />
             {tale && <HikayatScroll text={tale} />}

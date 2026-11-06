@@ -6,6 +6,7 @@ import { AMULETS, amuletById, amuletForLevel } from "@/game/amulets";
 import type { LevelDef, Rect } from "@/game/levels";
 import { formatTime } from "@/game/save";
 import { TideNote } from "./Tide";
+import PetaMap from "./PetaMap";
 
 export const PAUSE_TABS = [
   { id: "peta", name: "Peta", sub: "Map" },
@@ -50,7 +51,24 @@ function Fog({ f, vx, vy, vw, vh }: { f: MapState["fog"]; vx: number; vy: number
 }
 
 /** The level map; `children` are drawn on top in the same coordinates (screen x = -world x, y = -world z). */
-export function MapView({ def, s, children }: { def: LevelDef; s: MapState | null; children?: ReactNode }) {
+export function MapView({
+  def,
+  s,
+  children,
+  view,
+  labels,
+  labelSize,
+}: {
+  def: LevelDef;
+  s: MapState | null;
+  children?: ReactNode;
+  /** optional zoomed window in map units (default: the whole map) */
+  view?: { x: number; y: number; w: number; h: number };
+  /** place names, in world coordinates, drawn over the map */
+  labels?: { text: string; x: number; z: number }[];
+  /** label font size in map units */
+  labelSize?: number;
+}) {
   const b = def.bounds;
   const pad = 6;
   const vx = sx(b.maxX) - pad;
@@ -59,8 +77,10 @@ export function MapView({ def, s, children }: { def: LevelDef; s: MapState | nul
   const vh = b.maxZ - b.minZ + pad * 2;
   const pal = def.palisade;
   const mark = Math.max(vw, vh) / 60;
+  const fs = labelSize ?? mark * 1.1;
+  const vb = view ?? { x: vx, y: vy, w: vw, h: vh };
   return (
-    <svg className="map" viewBox={`${vx} ${vy} ${vw} ${vh}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`Map of ${def.name}`}>
+    <svg className="map" viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`Map of ${def.name}`}>
       <rect className="m-land" x={vx} y={vy} width={vw} height={vh} />
       {def.forestFloor?.map((r, i) => box(r, i, "m-forest"))}
       {def.clearings?.map((c, i) => <circle key={i} className="m-clear" cx={sx(c.x)} cy={sy(c.z)} r={c.r} />)}
@@ -95,6 +115,18 @@ export function MapView({ def, s, children }: { def: LevelDef; s: MapState | nul
           </g>
         </>
       )}
+      {labels?.map((l) => {
+        // keep clear of the player marker: nudge the name above it when they would collide
+        const lx = sx(l.x);
+        let ly = sy(l.z);
+        const halfW = l.text.length * fs * 0.3;
+        if (s && Math.abs(lx - sx(s.player.x)) < halfW + mark && Math.abs(ly - sy(s.player.z)) < fs + mark * 1.4) ly = sy(s.player.z) - mark * 1.6 - fs * 0.5;
+        return (
+          <text key={l.text} className="m-place" x={lx} y={ly} fontSize={fs} textAnchor="middle" dominantBaseline="middle">
+            {l.text}
+          </text>
+        );
+      })}
       {children}
     </svg>
   );
@@ -123,6 +155,7 @@ export default function PauseMenu({
   kitab,
   charms,
   lastTale,
+  visited = [],
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -138,6 +171,8 @@ export default function PauseMenu({
   charms: { found: string[]; worn: string | null; wear: (id: string | null) => void };
   /** the hikayat told at the end of this mission's last attempt, if any */
   lastTale?: ReactNode;
+  /** Kitab place ids the player has reached; their names are drawn on the map */
+  visited?: string[];
 }) {
   const cur = PAUSE_TABS[tab]?.id ?? "peta";
   const worn = amuletById(charms.found.includes(charms.worn ?? "") ? charms.worn : null);
@@ -163,14 +198,14 @@ export default function PauseMenu({
         </div>
         <div role="tabpanel">
           {cur === "peta" && (
-            <>
-              <MapView def={def} s={s} />
+            <div className="peta-tab">
+              <PetaMap def={def} s={s} visited={visited} />
               <p className="legend small dim">
                 <i className="k-you" /> You <i className="k-obj" /> {def.objective.kind === "steal" ? "Item" : "Target"} <i className="k-exit" /> Escape{" "}
                 <i className="k-hide" /> Hiding spot <i className="k-fog" /> Not explored yet
               </p>
               {s && <TideNote levelId={def.id} time={s.time} />}
-            </>
+            </div>
           )}
           {cur === "kelengkapan" && (
             <div className="slots">

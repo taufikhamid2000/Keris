@@ -33,6 +33,18 @@ const IDLE_LEVEL: Record<string, string[]> = {
   plans: ["Something was hidden under the hall, they say.", "Guard the hall. Nobody goes underneath.", "If the plans go missing, it's our heads."],
   jungle: ["These trails all look the same.", "Stay on the path. The jungle eats men.", "Something's watching us from the trees.", "The captain's map had better be right."],
   ledang: ["They say a princess lives on this mountain.", "Mist again. I can't see my own hand.", "Who leaves gold on a mountain top?", "Mind the ledges. Long way down."],
+  penjara: [
+    "The damp gets into my bones down here.",
+    "Every night the prisoners sing. Every single night.",
+    "Keep the keys on your belt. Never on a nail.",
+    "That old boatwright still won't talk.",
+    "Water drips all night. It will drive me mad.",
+    "Rats bigger than cats in these cells.",
+    "Lantern oil rationed again. Rationed!",
+    "The drain stinks worse than the harbour.",
+    "Three days without sun. I forget what day it is.",
+    "If one of them gets loose, the captain will have our hides.",
+  ],
 };
 
 export const idleLines = (levelId: string) => [...IDLE_ALL, ...(IDLE_LEVEL[levelId] ?? [])];

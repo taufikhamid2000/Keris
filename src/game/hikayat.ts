@@ -31,6 +31,7 @@ const CAST: Record<string, Cast> = {
   plans: { who: "the chest of plans", deed: "take back the battery plans from under the penghulu's hall", region: "Kampung Hulu", exit: "the river jetty" },
   jungle: { who: "the scout captain", deed: "find the captain of the scouts in his jungle camp", region: "the hutan", exit: "the river jetty" },
   ledang: { who: "the golden tepak sireh", deed: "bring the golden tepak sireh out of the soldiers' hands", region: "Gunung Ledang", exit: "the pool below the falls" },
+  penjara: { who: "Pak Long Hasan", deed: "free Pak Long Hasan, the old boatwright, from the cells under the fort", region: "the penjara", exit: "the old drain to the river" },
 };
 
 function castFor(def: LevelDef): Cast {
@@ -51,6 +52,8 @@ const PLACE_WORDS: Record<string, string> = {
   ledang: "the slopes of Gunung Ledang",
   kolam: "the pool below the falls",
   puncak: "the summit shrine",
+  "halaman-penjara": "the yard of the penjara",
+  sel: "the dripping cells",
 };
 
 // ---------------------------------------------------------------- small helpers

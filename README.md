@@ -152,6 +152,11 @@ They run 3 at a time (`CHECK_JOBS=n` to change) on the real GPU through ANGLE/D3
 
 Inspired by the stealth genre. Not affiliated with Ubisoft. Setting and story draw on my earlier Malacca 1511 prototype.
 
+## Chapters
+
+The game is growing into six chapters of Malaysian history (prehistory, Melaka 1511, Merdeka 1957, Malaysia 1963, 1969, 2020); see `docs/STORYLINE-DRAFT.md`.
+Only chapter 2 (Melaka 1511, all current missions) is playable; the chapter list is in `src/game/chapters.ts` and progress is derived from the save.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).

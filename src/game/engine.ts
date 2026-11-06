@@ -39,6 +39,7 @@ import { harbourDrift } from "./menuCamera";
 import { BASE_MODS, type SkillMods } from "./skills";
 import { amuletForLevel, amuletSpot } from "./amulets";
 import { packFog, unpackFog } from "./fog";
+import { FEEL, Feel, KICK, type Kick, charmPop, landDip, landTrauma, markerPopScale } from "./feel";
 import { placesAt } from "./kitab";
 import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./barks";
 import { TOOLS, type ToolId } from "./tools";
@@ -285,6 +286,8 @@ interface Guard {
   lastFlinch: number;
   /** a one-shot clip to restart on the next animation frame */
   animKick: Anim | null;
+  /** marker pop after a state change (feel.ts): seconds in, and whether he noticed (true) or gave up */
+  pop?: { t: number; gain: boolean };
   bodyTarget: Guard | null;
   carried: boolean;
   discovered: boolean;
@@ -522,6 +525,12 @@ export class Game {
   private padPrev: boolean[] = [];
   private lookSens = 1;
   private invertY = false;
+  /** camera shake, hit-stop and dip (feel.ts) */
+  private feel = new Feel();
+  /** seconds into the charm pickup pop, or null */
+  private charmPopT: number | null = null;
+  /** eased camera look height, so crouching does not snap the view */
+  private camLookY: number | null = null;
   private run: RunStats = { time: 0, alerts: 0, fromStart: true };
   /** what happened this attempt, for the hikayat told at the end (chronicle.ts) */
   private chron = new Chronicle();
@@ -800,6 +809,9 @@ export class Game {
     this.detected = false;
     if (this.loot) this.loot.visible = true;
     if (this.charm) this.charm.group.visible = !this.charmFound;
+    this.charmPopT = null;
+    this.feel.reset();
+    this.camLookY = null;
     this.hidden = false;
     this.carrying = null;
     this.boat = null;
@@ -821,6 +833,7 @@ export class Game {
       g.brain = newBrain();
       g.meter = 0;
       g.stun = 0;
+      g.pop = undefined;
       g.hp = GUARD_HP;
       g.atk = null;
       g.atkCd = 0;
@@ -1036,7 +1049,8 @@ export class Game {
   /** Whether the player already owns this mission's tangkal (then it is not on the map). */
   setAmuletFound(found: boolean) {
     this.charmFound = found;
-    if (this.charm) this.charm.group.visible = !found;
+    // a pickup pop still playing hides the charm itself when it ends
+    if (this.charm && this.charmPopT === null) this.charm.group.visible = !found;
   }
   private nearCharm() {
     const c = this.charm;
@@ -1307,6 +1321,10 @@ export class Game {
   setLookSettings(sens: number, invertY: boolean) {
     this.lookSens = Number.isFinite(sens) && sens > 0 ? sens : 1;
     this.invertY = invertY;
+  }
+  /** "Kurangkan gegaran": no camera shake or dip (also on when the system asks for reduced motion) */
+  setReduceShake(on: boolean) {
+    this.feel.reduce = on;
   }
   resume() {
     if (this.phase === "paused") {
@@ -1767,7 +1785,9 @@ export class Game {
     this.last = now;
     this.time += dt;
     this.pollPad(dt);
-    if (this.phase === "playing") this.update(this.wheel ? dt * TOOL.slow : dt);
+    // hit-stop slows the world for a beat; input still lands (keys are events)
+    const ts = this.phase === "playing" ? this.feel.step(dt) : 1;
+    if (this.phase === "playing") this.update((this.wheel ? dt * TOOL.slow : dt) * ts);
     if (this.phase === "title") this.attractCamera();
     if (this.phase === "intro") this.stepIntro(dt);
     this.render(dt);
@@ -1896,7 +1916,7 @@ export class Game {
         p.y = g.y;
         p.vy = 0;
         p.grounded = true;
-        if (!g.dead) this.killGuard(g, "Air assassination.");
+        if (!g.dead) this.killGuard(g, "Air assassination.", KICK.air);
       }
       p.moving = false;
     } else if (this.climb) {
@@ -1950,6 +1970,8 @@ export class Game {
       p.y += p.vy * dt;
       const g = this.mudGround(p.x, p.z, groundHeight(p.x, p.z, p.y, L.colliders));
       if (p.y <= g) {
+        // landing weight: a hop barely dips the view, a drop off a roof settles hard
+        if (!p.grounded && p.vy < -4) this.feel.kick({ dip: landDip(-p.vy), trauma: landTrauma(-p.vy) });
         p.y = g;
         p.vy = 0;
         p.grounded = true;
@@ -2281,6 +2303,9 @@ export class Game {
     const now = g.brain.state;
     if (now !== "alert") g.atk = null;
     if (now !== prev) {
+      // the marker pops when he notices (suspicious or alert) and shrinks away when he gives up
+      if (now === "suspicious" || now === "alert" || now === "patrol") g.pop = { t: 0, gain: now !== "patrol" };
+      if (now === "alert") this.feel.kick(KICK.spotted);
       if (now === "alert") this.say(g, found ? "body" : "alert");
       else if (now === "suspicious") this.say(g, "suspicious");
       else if (now === "search") this.say(g, "search");
@@ -2994,8 +3019,9 @@ export class Game {
     if (this.hp > 0) this.toast(this.hp < 1.5 ? "Badly hurt. Break away!" : "Cut!");
   }
 
-  private killGuard(guard: Guard, msg: string) {
+  private killGuard(guard: Guard, msg: string, kick: Kick = KICK.takedown) {
     this.stabT = 0.7;
+    this.feel.kick(kick);
     guard.dead = true;
     guard.meter = 0;
     guard.climb = null;

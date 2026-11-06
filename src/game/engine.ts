@@ -41,7 +41,7 @@ import { amuletForLevel, amuletSpot } from "./amulets";
 import { packFog, unpackFog } from "./fog";
 import { FEEL, Feel, KICK, type Kick, charmPop, landDip, landTrauma, markerPopScale } from "./feel";
 import { placesAt } from "./kitab";
-import { BARKS, BARK_PRIORITY, BARK_RANGE, idleLines, type BarkKind } from "./barks";
+import { BARK_PRIORITY, BARK_RANGE, barkLines, type BarkKind } from "./barks";
 import { TOOLS, type ToolId } from "./tools";
 import { Chronicle, type ChronicleData } from "./chronicle";
 import { Dalang, shadowOnScreen, shadowVision } from "./wayang";
@@ -175,6 +175,8 @@ const FOG_EAGLE = 0x4a5878;
 /** the mountain mist on Gunung Ledang: pale, and closer the further north and higher you go */
 const FOG_MIST = new THREE.Color(0xb7b9b4);
 const MIST = { ramp: 22, near: 0.65, far: 0.6 };
+/** the fog colour a gloomy level (a cave) fades to */
+const FOG_GLOOM = new THREE.Color(0x14110e);
 /** boulder models are fitted to this height (each spot scales it) and recoloured to the mountain's grey stone */
 const ROCK = { h: 1, color: 0x8a877d };
 /**
@@ -1076,7 +1078,7 @@ export class Game {
     if (dist2D(g, this.p) > BARK_RANGE[kind]) return;
     const pri = BARK_PRIORITY[kind];
     if (this.talk.t > 0 && pri < this.talk.pri) return;
-    const pool = (kind === "idle" ? idleLines(this.def.id) : BARKS[kind]).filter((l) => l !== this.lastLine);
+    const pool = barkLines(this.def.id, kind).filter((l) => l !== this.lastLine);
     const line = pool[Math.floor(Math.random() * pool.length)];
     if (!line) return;
     this.lastLine = line;
@@ -3354,6 +3356,16 @@ export class Game {
     fog.near = Q.fogNear * (1 - MIST.near * mist);
     fog.far = Q.fogFar * (1 - MIST.far * mist);
     if (!e && mist > 0) fog.color.lerp(FOG_MIST, mist * 0.75);
+    // gloom (a cave, a night level): dim the sun and sky fill, shorten the fog and darken it
+    const gloom = this.def.gloom ?? 0;
+    if (gloom > 0) {
+      this.hemi.intensity *= 1 - 0.55 * gloom;
+      this.ambient.intensity *= 1 - 0.4 * gloom;
+      this.sun.intensity *= 1 - 0.6 * gloom;
+      fog.near *= 1 - 0.5 * gloom;
+      fog.far *= 1 - 0.45 * gloom;
+      if (!e) fog.color.lerp(FOG_GLOOM, gloom);
+    }
     // wayang kulit: the lit kelir's colour and depth, and the player's shadow thrown from the nearest blencong
     this.wayangLook?.frame(dt, fog, p, this.def.wayang, this.shade, this.player.group.visible && !this.swim);
     this.ghaib.render(dt, this.time, e, p, fog);

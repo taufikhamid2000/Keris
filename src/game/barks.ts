@@ -39,3 +39,37 @@ export const idleLines = (levelId: string) => [...IDLE_ALL, ...(IDLE_LEVEL[level
 
 /** Overhearing range in metres: idle talk is quiet, shouting carries. */
 export const BARK_RANGE: Record<BarkKind, number> = { idle: 11, giveup: 14, search: 18, suspicious: 16, stunned: 10, blind: 12, body: 26, alert: 30 };
+
+// ---------------------------------------------------------------- Gua Lanun: pirates, not soldiers
+/** Levels guarded by someone other than Portuguese soldiers: their own chatter replaces the shared lines. */
+const OWN_BARKS: Record<string, Record<"idle", string[]> & Partial<Record<Exclude<BarkKind, "idle">, string[]>>> = {
+  gualanun: {
+    idle: [
+      "Aduh, the damp gets into my bones.",
+      "Count the casks again, lah.",
+      "The chief says we sail on the next tide.",
+      "Keep the torch away from the powder, bodoh.",
+      "Cold in here, hot outside. Who chose this cave?",
+      "Tuan Laut will skin us if one cask is missing.",
+      "All I smell is fish and smoke.",
+      "My arm still aches from that last prahu.",
+      "Hush. Even the water listens in here.",
+      "Nobody finds Gua Lanun. Nobody.",
+      "Pahang silver is heavy, but not heavy enough.",
+    ],
+    suspicious: ["Siapa tu?", "Eh, who's there?", "Did the water move?", "Something stepped on a stone.", "Tikus again, I hope.", "Show yourself, lah."],
+    alert: ["Musuh! Intruder!", "Ambush! Swords out!", "Lanun, awas!", "Don't let him reach the water!", "Orang asing! Here!"],
+    search: ["He's still in the cave!", "Check behind the crates, lah.", "Torches high! Look in the corners.", "Spread out, cari dia.", "He can't swim past the dock."],
+    giveup: ["Nothing. Back to your posts.", "Only the cave echoing.", "Hantu laut, maybe. Back to work.", "Aiyo, my eyes. Nothing there.", "Tak ada apa-apa."],
+    body: ["Mati! A man dead here!", "Tuan! Someone has killed Rahim!", "He's cold. Sound the conch!"],
+    blind: ["Mata aku! Pepper!", "I can't see, aduh!", "It burns!"],
+    stunned: ["Aduh, my head...", "Apa tu?"],
+  },
+};
+
+/** The lines a guard of this level can say for a kind of bark. */
+export const barkLines = (levelId: string, kind: BarkKind): string[] => {
+  const own = OWN_BARKS[levelId];
+  if (own) return (kind === "idle" ? own.idle : own[kind]) ?? BARKS[kind as Exclude<BarkKind, "idle">];
+  return kind === "idle" ? idleLines(levelId) : BARKS[kind];
+};

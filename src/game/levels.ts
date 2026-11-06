@@ -3,6 +3,7 @@
 import type { Vec2 } from "./logic";
 import type { WayangDef } from "./wayang";
 import { TIDE_HOUSES } from "./tide";
+import { GUA_LANUN } from "./guaLanun";
 
 export interface HouseDef {
   x: number;
@@ -99,6 +100,10 @@ export interface LevelDef {
   shrine?: { x: number; z: number; y: number };
   /** mountain mist: the fog thickens north of this z */
   mistZ?: number;
+  /** underground or night mood, 0..1: darker, closer fog and dimmer sun (engine.ts) */
+  gloom?: number;
+  /** colour of the forestFloor rects (default: jungle green) */
+  floorColor?: number;
   /** played as wayang kulit: ink silhouettes on a lit screen, and guards see the player's shadow near these lamps (wayang.ts) */
   wayang?: WayangDef;
   /** market stalls */
@@ -782,7 +787,7 @@ export const WAYANG: LevelDef = {
 };
 
 /** Every mission, in play order. */
-export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG, WAYANG];
+export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG, WAYANG, GUA_LANUN];
 /** The level named by ?level=<id> in a query string, else the first mission. */
 export function levelFromSearch(search: string): LevelDef {
   const id = new URLSearchParams(search).get("level");

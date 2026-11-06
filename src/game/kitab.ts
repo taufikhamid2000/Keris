@@ -6,6 +6,7 @@
 
 import { CAMP, JUNGLE_Z0, JUNGLE_Z1, POOL, RIVER, SUMMIT } from "./levels";
 import type { LevelDef } from "./levels";
+import { GUA_LANUN, GUA_LANUN_LORE, GUA_LANUN_PLACES } from "./guaLanun";
 
 export interface PlaceDef {
   id: string;
@@ -14,7 +15,12 @@ export interface PlaceDef {
   /** shown while locked */
   hint: string;
   at: (x: number, y: number, z: number) => boolean;
+  /** x range the place lies in; places without one belong to the Malacca map (|x| <= MALACCA_X), whose tests look at z alone */
+  xr?: [number, number];
 }
+
+const MALACCA_X = 36;
+const inPlace = (p: PlaceDef, x: number, y: number, z: number) => (p.xr ? x >= p.xr[0] && x <= p.xr[1] : Math.abs(x) <= MALACCA_X) && p.at(x, y, z);
 
 const near = (c: { x: number; z: number }, r: number) => (x: number, _y: number, z: number) => Math.hypot(x - c.x, z - c.z) <= r;
 const riverZ0 = RIVER.z - RIVER.d / 2 - 1;
@@ -85,6 +91,7 @@ export const PLACES: PlaceDef[] = [
     at: (x, y, z) => y >= SUMMIT.y - 1 && Math.hypot(x - SUMMIT.x, z - SUMMIT.z) <= 10,
   },
 ];
+PLACES.push(...GUA_LANUN_PLACES);
 
 /** Lore for each tangkal, by amulet id (names and effects stay in amulets.ts). */
 export const CHARM_LORE: Record<string, string> = {
@@ -105,6 +112,8 @@ export const MISSION_LORE: Record<string, { title: string; text: string }> = {
   wayang: { title: "The shadow play", text: "The dalang keeps the Pendekar's puppet in a box of its own. He says it moves on the kelir before he touches the rods." },
 };
 
+MISSION_LORE[GUA_LANUN.id] = GUA_LANUN_LORE;
+
 const placeIds = new Set(PLACES.map((p) => p.id));
 export const placeById = (id: string) => PLACES.find((p) => p.id === id) ?? null;
 
@@ -121,7 +130,7 @@ export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: 
   let n = 0;
   for (let x = b.minX; x <= b.maxX; x += 2)
     for (let z = b.minZ; z <= b.maxZ; z += 2)
-      if (p.at(x, 0, z) || p.at(x, SUMMIT.y, z)) {
+      if (inPlace(p, x, 0, z) || inPlace(p, x, SUMMIT.y, z)) {
         sx += x;
         sz += z;
         n++;
@@ -130,7 +139,7 @@ export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: 
 }
 
 /** Places the player is standing in right now. */
-export const placesAt = (x: number, y: number, z: number) => PLACES.filter((p) => p.at(x, y, z));
+export const placesAt = (x: number, y: number, z: number) => PLACES.filter((p) => inPlace(p, x, y, z));
 
 /** Places that lie inside a level's bounds (ground level and summit height sampled every 2 m), in list order. */
 export function placesInBounds(b: LevelDef["bounds"]): PlaceDef[] {

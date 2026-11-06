@@ -5,6 +5,8 @@ import type { MapState } from "@/game/engine";
 import { exploredFraction } from "@/game/fog";
 import { placesInBounds } from "@/game/kitab";
 import type { LevelDef } from "@/game/levels";
+import { DEFAULT_LANG, t as tr, type Lang } from "@/game/i18n";
+import { useT } from "./useT";
 
 /** A walkable gate to another map, as the engine reports it in MapState.exits. */
 export interface MapExit {
@@ -21,33 +23,34 @@ export function mapExits(s: MapState | null): MapExit[] {
 }
 
 /** Where a gate leads: the map's name once the player has been there, a vague hint before. */
-export function gateText(e: MapExit, known: Record<string, string>): string {
-  return known[e.to] ? `Ke ${known[e.to]}` : "Jalan ke ...?";
+export function gateText(e: MapExit, known: Record<string, string>, lang: Lang = DEFAULT_LANG): string {
+  return known[e.to] ? tr(lang, "map.gateTo", { name: known[e.to] }) : tr(lang, "map.gateUnknown");
 }
 
 /** Left of the Peta map: what the markers mean. */
-export function MapLegend({ def }: { def: LevelDef }) {
+export function MapLegend({ def, lang = DEFAULT_LANG }: { def: LevelDef; lang?: Lang }) {
+  const t = useT(lang);
   return (
-    <aside className="map-side" aria-label="Legend">
-      <h4>Petunjuk</h4>
+    <aside className="map-side" aria-label={t("map.legend")}>
+      <h4>{t("map.legend")}</h4>
       <p className="legend small dim">
         <span>
-          <i className="k-you" /> You
+          <i className="k-you" /> {t("map.legend.you")}
         </span>
         <span>
-          <i className="k-obj" /> {def.objective.kind === "steal" ? "Item" : "Target"}
+          <i className="k-obj" /> {def.objective.kind === "steal" ? t("map.legend.item") : t("map.legend.target")}
         </span>
         <span>
-          <i className="k-exit" /> Escape
+          <i className="k-exit" /> {t("map.legend.escape")}
         </span>
         <span>
-          <i className="k-gate" /> Pintu ke peta lain
+          <i className="k-gate" /> {t("map.legend.gate")}
         </span>
         <span>
-          <i className="k-hide" /> Hiding spot
+          <i className="k-hide" /> {t("map.legend.hide")}
         </span>
         <span>
-          <i className="k-fog" /> Not explored yet
+          <i className="k-fog" /> {t("map.legend.fog")}
         </span>
       </p>
     </aside>
@@ -55,7 +58,8 @@ export function MapLegend({ def }: { def: LevelDef }) {
 }
 
 /** Right of the Peta map: mission objectives, Kitab places on this level and how much of it is explored. */
-export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s: MapState | null; places: string[]; known?: Record<string, string> }) {
+export function MapObjectives({ def, s, places, known = {}, lang = DEFAULT_LANG }: { def: LevelDef; s: MapState | null; places: string[]; known?: Record<string, string>; lang?: Lang }) {
+  const t = useT(lang);
   const exits = mapExits(s);
   const here = useMemo(() => placesInBounds(def.bounds, def.id), [def.bounds, def.id]);
   const mainDone = !!s && !s.escape && s.objective === null;
@@ -85,9 +89,9 @@ export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s
   ];
   const open = here.filter((p) => places.includes(p.id)).length;
   return (
-    <aside className="map-side" aria-label="Mission">
+    <aside className="map-side" aria-label={t("map.mission")}>
       <div>
-        <h4>Misi</h4>
+        <h4>{t("map.mission")}</h4>
         <ul>
           {goals.map((g) => (
             <li key={g.key} className={g.done ? "done" : ""}>
@@ -96,19 +100,19 @@ export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s
           ))}
           {def.undetected && (
             <li>
-              <span>Stay unseen: any alarm fails the mission</span>
+              <span>{t("map.unseen")}</span>
             </li>
           )}
         </ul>
       </div>
       {exits.length > 0 && (
         <div>
-          <h4>Laluan</h4>
+          <h4>{t("map.routes")}</h4>
           <ul>
             {exits.map((e) => (
               <li key={e.id}>
                 <b>{e.label}</b>
-                <span className="small dim">{gateText(e, known)}</span>
+                <span className="small dim">{gateText(e, known, lang)}</span>
               </li>
             ))}
           </ul>
@@ -116,7 +120,7 @@ export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s
       )}
       <div>
         <h4>
-          Diterokai <span className="dim small">{s ? `${pct}% explored` : "-"}</span>
+          {t("map.explored")} <span className="dim small">{s ? t("map.exploredPct", { pct }) : "-"}</span>
         </h4>
         <span className="map-pct" aria-hidden="true">
           <i style={{ width: `${pct}%` }} />
@@ -124,9 +128,9 @@ export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s
       </div>
       <div>
         <h4>
-          Tempat{" "}
+          {t("map.places")}{" "}
           <span className="dim small">
-            {open} of {here.length}
+            {t("map.placesCount", { open, total: here.length })}
           </span>
         </h4>
         <ul>
@@ -134,7 +138,7 @@ export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s
             const have = places.includes(p.id);
             return (
               <li key={p.id} className={have ? "" : "missing"}>
-                <b>{have ? p.title : "Not written yet"}</b>
+                <b>{have ? p.title : t("map.placeMissing")}</b>
                 <span className="small dim">{have ? p.text : p.hint}</span>
               </li>
             );

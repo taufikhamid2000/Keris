@@ -608,12 +608,12 @@ export default function GameClient() {
       {phase === "playing" && hud.pantun?.choice && <PantunChoice view={hud.pantun.choice} game={game} />}
 
       {splash && (
-        <div className="overlay splash" onPointerDown={dismissSplash} role="button" tabIndex={-1} aria-label="Start">
+        <div className="overlay splash" onPointerDown={dismissSplash} role="button" tabIndex={-1} aria-label={t("title.splash.aria")}>
           <div className="splash-inner">
             <KerisEmblem />
             <h1>Keris</h1>
-            <p className="kicker">Malacca, July 1511</p>
-            <p className="press">{touch ? "Tap to start" : "Press any button"}</p>
+            <p className="kicker">{t("title.kicker")}</p>
+            <p className="press">{touch ? t("title.splash.touch") : t("title.splash.key")}</p>
           </div>
         </div>
       )}
@@ -624,7 +624,7 @@ export default function GameClient() {
             <div className="brand">
               <KerisEmblem />
               <div>
-                <p className="kicker">Malacca, July 1511</p>
+                <p className="kicker">{t("title.kicker")}</p>
                 <h1>Keris</h1>
               </div>
             </div>
@@ -651,7 +651,7 @@ export default function GameClient() {
               {t("title.credits")}
             </button>
             <p className="dim small">
-              {touch ? "Best in landscape. Fullscreen is requested where your browser allows it." : "Starting captures the mouse."}
+              {touch ? t("title.hint.touch") : t("title.hint.mouse")}
             </p>
           </nav>
           <section className="songket menu-pane" aria-live="polite">
@@ -670,42 +670,42 @@ export default function GameClient() {
                 <h3>{level.name}</h3>
                 <p className="story">{level.story}</p>
                 {savedHere && (
-                  <p className="dim small">{checkpointHere === "target" ? `Checkpoint: ${level.checkpointLabel}` : "Checkpoint: mission start"}</p>
+                  <p className="dim small">{checkpointHere === "target" ? t("title.checkpoint", { label: level.checkpointLabel }) : t("title.checkpointStart")}</p>
                 )}
                 <Best m={mission} />
               </>
             )}
             {view === "ilmu" && (
               <>
-                <h2>Ilmu</h2>
+                <h2>{t("title.ilmu")}</h2>
                 {skillTree}
               </>
             )}
             {view === "kitab" && (
               <>
-                <h2>Kitab</h2>
+                <h2>{t("title.kitab")}</h2>
                 <Kitab save={save} />
               </>
             )}
             {view === "controls" && (
               <>
-                <h2>Controls</h2>
+                <h2>{t("title.controls")}</h2>
                 <Controls touch={touch} />
               </>
             )}
             {view === "credits" && (
               <>
-                <h2>Credits</h2>
-                <p>Design by Taufik Hamid. Code written with Claude Code from the designer&apos;s spec.</p>
-                <p>Built with three.js, Next.js and React. Procedural world, no audio.</p>
-                <p>Character models and animations by Quaternius (CC0).</p>
-                <p>Hang Tuah is a figure of Malay legend. The story here is fiction.</p>
-                <p className="dim small">Inspired by the stealth genre. Not affiliated with Ubisoft.</p>
+                <h2>{t("title.credits")}</h2>
+                <p>{t("title.credits.1")}</p>
+                <p>{t("title.credits.2")}</p>
+                <p>{t("title.credits.3")}</p>
+                <p>{t("title.credits.4")}</p>
+                <p className="dim small">{t("title.credits.5")}</p>
               </>
             )}
             {view !== "main" && (
               <button className="btn ghost back" onClick={() => setView("main")}>
-                Back
+                {t("common.back")}
               </button>
             )}
           </section>
@@ -728,7 +728,7 @@ export default function GameClient() {
           known={knownMaps}
           places={save.kitab}
           charms={{ found: save.amulets, worn: save.amulet, wear: (id) => store.update((d) => wearAmulet(d, id)) }}
-          lastTale={save.tales[level.missionId] ? <HikayatScroll text={save.tales[level.missionId]} title="Your last tale" /> : null}
+          lastTale={save.tales[level.missionId] ? <HikayatScroll text={save.tales[level.missionId]} title={t("menu.hikayat.last")} lang={save.settings.lang} /> : null}
           actions={
             <>
               <button className="btn" onClick={resume}>
@@ -768,7 +768,7 @@ export default function GameClient() {
               </blockquote>
             )}
             <Best m={mission} />
-            {tale && <HikayatScroll text={tale} />}
+            {tale && <HikayatScroll text={tale} lang={save.settings.lang} />}
             <button className="btn" onClick={() => begin("start")}>
               Play again
             </button>
@@ -796,7 +796,7 @@ export default function GameClient() {
             </button>
             {menuBtn}
             <Best m={mission} />
-            {tale && <HikayatScroll text={tale} />}
+            {tale && <HikayatScroll text={tale} lang={save.settings.lang} />}
           </div>
         </div>
       )}

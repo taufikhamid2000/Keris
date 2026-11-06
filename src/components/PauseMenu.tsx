@@ -62,6 +62,7 @@ export function MapView({
   labels,
   labelSize,
   gates,
+  lang = DEFAULT_LANG,
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -74,7 +75,9 @@ export function MapView({
   labelSize?: number;
   /** gates to other maps, in world coordinates, with their label text */
   gates?: { id: string; x: number; z: number; text: string }[];
+  lang?: Lang;
 }) {
+  const t = useT(lang);
   const b = def.bounds;
   const pad = 6;
   const vx = sx(b.maxX) - pad;
@@ -86,7 +89,7 @@ export function MapView({
   const fs = labelSize ?? mark * 1.1;
   const vb = view ?? { x: vx, y: vy, w: vw, h: vh };
   return (
-    <svg className="map" viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`Map of ${def.name}`}>
+    <svg className="map" viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("map.aria", { name: def.name })}>
       <rect className="m-land" x={vx} y={vy} width={vw} height={vh} />
       {def.forestFloor?.map((r, i) => box(r, i, "m-forest"))}
       {def.clearings?.map((c, i) => <circle key={i} className="m-clear" cx={sx(c.x)} cy={sy(c.z)} r={c.r} />)}
@@ -227,30 +230,30 @@ export default function PauseMenu({
           {cur === "peta" && (
             <div className="peta-tab">
               <div className="map-tab">
-                <MapLegend def={def} />
+                <MapLegend def={def} lang={lang} />
                 <div className="map-mid">
-                  <PetaMap def={def} s={s} visited={visited} known={known} />
+                  <PetaMap def={def} s={s} visited={visited} known={known} lang={lang} />
                 </div>
-                <MapObjectives def={def} s={s} places={places} known={known} />
+                <MapObjectives def={def} s={s} places={places} known={known} lang={lang} />
               </div>
               {s && <TideNote levelId={def.id} time={s.time} />}
             </div>
           )}
           {cur === "kelengkapan" && (
             <div className="slots">
-              <Slot sub="Senjata" name="Keris" value="Takedowns and close fighting" />
-              <Slot sub="Alat 1" name="Pisau lempar" value={s ? `${s.knives} of ${s.maxKnives} left` : "-"} />
-              <Slot sub="Alat 2" name="Batu" value={s ? `${s.stones} stones left` : "-"} />
-              <Slot sub="Alat 3" name="Serbuk lada" value={s ? `${s.pepper} handfuls left` : "-"} />
-              <Slot sub="Pakaian" name="Baju pendekar" value="Dark cloth for the dusk" />
-              {worn ? <Slot sub="Tangkal" name={worn.name} value={worn.desc} /> : <Slot sub="Tangkal" name="Empty" value={charms.found.length ? "None worn" : "No amulet found yet"} empty />}
-              <Slot sub="Nyawa" name="Health" value={s ? `${Math.ceil(s.hp)} of ${s.maxHp}` : "-"} />
+              <Slot sub={t("menu.slot.weapon")} name="Keris" value={t("menu.gear.keris")} />
+              <Slot sub={t("menu.slot.tool1")} name="Pisau lempar" value={s ? t("menu.gear.knives", { n: s.knives, max: s.maxKnives }) : "-"} />
+              <Slot sub={t("menu.slot.tool2")} name="Batu" value={s ? t("menu.gear.stones", { n: s.stones }) : "-"} />
+              <Slot sub={t("menu.slot.tool3")} name="Serbuk lada" value={s ? t("menu.gear.pepper", { n: s.pepper }) : "-"} />
+              <Slot sub={t("menu.slot.clothing")} name="Baju pendekar" value={t("menu.gear.clothing")} />
+              {worn ? <Slot sub={t("menu.slot.charm")} name={worn.name} value={worn.desc} /> : <Slot sub={t("menu.slot.charm")} name={t("menu.gear.empty")} value={charms.found.length ? t("menu.gear.noneWorn") : t("menu.gear.noneFound")} empty />}
+              <Slot sub={t("menu.slot.health")} name={t("menu.gear.healthName")} value={s ? t("menu.gear.healthValue", { n: Math.ceil(s.hp), max: s.maxHp }) : "-"} />
             </div>
           )}
           {cur === "kelengkapan" && (
             <div className="charms">
               <h3>
-                Tangkal <span className="dim small">{charms.found.length} of {AMULETS.length} found · one hidden in a haystack or bush on each mission</span>
+                Tangkal <span className="dim small">{t("menu.charms.count", { n: charms.found.length, total: AMULETS.length })}</span>
               </h3>
               <ul>
                 {AMULETS.map((a) => {
@@ -258,11 +261,11 @@ export default function PauseMenu({
                   const on = charms.worn === a.id;
                   return (
                     <li key={a.id} className={`charm${have ? "" : " missing"}${on ? " on" : ""}`}>
-                      <b>{have ? a.name : "Not found yet"}</b>
-                      <span className="small dim">{have ? a.desc : a.level === def.id ? "Hidden somewhere on this mission" : "On another mission"}</span>
+                      <b>{have ? a.name : t("menu.charms.missing")}</b>
+                      <span className="small dim">{have ? a.desc : a.level === def.id ? t("menu.charms.hereHidden") : t("menu.charms.elsewhere")}</span>
                       {have && (
                         <button className="btn ghost sm" onClick={() => charms.wear(on ? null : a.id)}>
-                          {on ? "Take off" : "Wear"}
+                          {on ? t("menu.charms.takeOff") : t("menu.charms.wear")}
                         </button>
                       )}
                     </li>
@@ -279,14 +282,14 @@ export default function PauseMenu({
               <p className="story">{def.story}</p>
               {s && (
                 <p className="small">
-                  Time {formatTime(s.time)} · Guards down {s.guardsDown} of {s.guards} · Times seen {s.alerts}
+                  {t("menu.hikayat.stats", { time: formatTime(s.time), down: s.guardsDown, total: s.guards, alerts: s.alerts })}
                 </p>
               )}
               {s && <TideNote levelId={def.id} time={s.time} />}
               {best}
-              {here && <p className="small">Tangkal: {charms.found.includes(here.id) ? `${here.name} found` : "still hidden on this mission"}</p>}
+              {here && <p className="small">{charms.found.includes(here.id) ? t("menu.hikayat.charmFound", { name: here.name }) : t("menu.hikayat.charmHidden")}</p>}
               {lastTale}
-              <h3>Controls</h3>
+              <h3>{t("title.controls")}</h3>
               {controls}
             </>
           )}

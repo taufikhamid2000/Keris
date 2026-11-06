@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { DEFAULT_LANG, type Lang } from "@/game/i18n";
+import { useT } from "./useT";
 
 /** The tale of an attempt on a small scroll, with a button to copy it. */
-export default function HikayatScroll({ text, title = "Hikayat" }: { text: string; title?: string }) {
+export default function HikayatScroll({ text, title, lang = DEFAULT_LANG }: { text: string; title?: string; lang?: Lang }) {
+  const t = useT(lang);
   const [copied, setCopied] = useState<"" | "ok" | "fail">("");
   const copy = async () => {
     try {
@@ -15,10 +18,10 @@ export default function HikayatScroll({ text, title = "Hikayat" }: { text: strin
   };
   return (
     <figure className="hikayat-scroll">
-      <figcaption>{title}</figcaption>
+      <figcaption>{title ?? t("menu.hikayat.title")}</figcaption>
       <blockquote>{text}</blockquote>
       <button className="btn ghost sm" onClick={copy}>
-        {copied === "ok" ? "Copied" : copied === "fail" ? "Could not copy" : "Copy tale"}
+        {copied === "ok" ? t("menu.hikayat.copied") : copied === "fail" ? t("menu.hikayat.copyFail") : t("menu.hikayat.copy")}
       </button>
     </figure>
   );

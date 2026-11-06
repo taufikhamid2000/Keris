@@ -14,7 +14,7 @@ describe("i18n", () => {
   });
   it("interpolates {vars}, leaving unknown ones alone", () => {
     expect(t("en", "title.continueNamed", { name: "Melaka" })).toBe("Continue: Melaka");
-    expect(t("ms", "settings.lookSens", { x: "1.5" })).toBe("Look sensitivity 1.5x");
+    expect(t("ms", "settings.lookSens", { x: "1.5" })).toBe("Kepekaan pandangan 1.5x");
     expect(t("en", "title.continueNamed")).toBe("Continue: {name}");
     expect(t("en", "title.continueNamed", {})).toBe("Continue: {name}");
   });
@@ -22,7 +22,7 @@ describe("i18n", () => {
     const saved = DICTS.en["pause.title"];
     delete DICTS.en["pause.title"];
     try {
-      expect(t("en", "pause.title")).toBe("Berhenti");
+      expect(t("en", "pause.title")).toBe("Jeda");
     } finally {
       DICTS.en["pause.title"] = saved;
     }

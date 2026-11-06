@@ -6,6 +6,8 @@ import { PLACES, placeCentre, placeOnLevel } from "@/game/kitab";
 import type { LevelDef } from "@/game/levels";
 import { MapView } from "./PauseMenu";
 import { gateText, mapExits } from "./MapSide";
+import { DEFAULT_LANG, type Lang } from "@/game/i18n";
+import { useT } from "./useT";
 
 const MIN = 1;
 const MAX = 6;
@@ -16,7 +18,8 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
  * drag to pan when zoomed in, and gold names for the Kitab places the player has reached.
  * Fills its parent's height; the parent needs a definite height (the pause tab panel has one).
  */
-export default function PetaMap({ def, s, visited = [], known = {} }: { def: LevelDef; s: MapState | null; visited?: string[]; known?: Record<string, string> }) {
+export default function PetaMap({ def, s, visited = [], known = {}, lang = DEFAULT_LANG }: { def: LevelDef; s: MapState | null; visited?: string[]; known?: Record<string, string>; lang?: Lang }) {
+  const t = useT(lang);
   const frame = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
@@ -101,7 +104,7 @@ export default function PetaMap({ def, s, visited = [], known = {} }: { def: Lev
     return out;
   }, [visited, b, def.id]);
 
-  const gates = mapExits(s).map((e) => ({ id: e.id, x: e.x, z: e.z, text: gateText(e, known) }));
+  const gates = mapExits(s).map((e) => ({ id: e.id, x: e.x, z: e.z, text: gateText(e, known, lang) }));
 
   return (
     <div
@@ -136,16 +139,16 @@ export default function PetaMap({ def, s, visited = [], known = {} }: { def: Lev
         pinch.current = 0;
       }}
     >
-      <MapView def={def} s={s} view={{ x: cx - w / 2, y: cy - h / 2, w, h }} labels={labels} gates={gates} labelSize={11 * upp} />
-      <div className="peta-zoom" role="group" aria-label="Map zoom">
-        <button type="button" aria-label="Zoom in" disabled={zoom >= MAX} onClick={() => zoomTo(zoom * 1.5)}>
+      <MapView def={def} s={s} view={{ x: cx - w / 2, y: cy - h / 2, w, h }} labels={labels} gates={gates} labelSize={11 * upp} lang={lang} />
+      <div className="peta-zoom" role="group" aria-label={t("map.zoom.group")}>
+        <button type="button" aria-label={t("map.zoom.in")} disabled={zoom >= MAX} onClick={() => zoomTo(zoom * 1.5)}>
           +
         </button>
-        <button type="button" aria-label="Zoom out" disabled={zoom <= MIN} onClick={() => zoomTo(zoom / 1.5)}>
+        <button type="button" aria-label={t("map.zoom.out")} disabled={zoom <= MIN} onClick={() => zoomTo(zoom / 1.5)}>
           &minus;
         </button>
-        <button type="button" aria-label="Fit whole map" disabled={zoom === MIN} onClick={() => zoomTo(MIN)}>
-          Fit
+        <button type="button" aria-label={t("map.zoom.fitAria")} disabled={zoom === MIN} onClick={() => zoomTo(MIN)}>
+          {t("map.zoom.fit")}
         </button>
       </div>
     </div>

@@ -311,12 +311,10 @@ export default function GameClient() {
               setReason(r);
             },
             // a gate carried the player to another map: the engine already swapped it, so only adopt it here (no title, no list)
-            ...{
-              onTravel: (def: LevelDef) => {
-                levelRef.current = def; // before onCheckpoint("start"), so missionId() is the new one
-                setLevel(def);
-                inst?.setExplored(store.get().explored[def.id] ?? null); // the swap leaves the fog empty
-              },
+            onTravel: (def: LevelDef) => {
+              levelRef.current = def; // before onCheckpoint("start"), so missionId() is the new one
+              setLevel(def);
+              inst?.setExplored(store.get().explored[def.id] ?? null); // the swap leaves the fog empty
             },
             onIntro: setIntroView,
             onIntroEnd: () => {
@@ -500,7 +498,7 @@ export default function GameClient() {
     <div className={`root${touch ? " touch-ui" : ""}`} onContextMenu={(e) => touch && e.preventDefault()}>
       <div ref={mount} className="stage" />
       {/* gate travel: the screen dips to black while the next map loads (HudState.fade, cast until engine types merge) */}
-      {((hud as { fade?: number }).fade ?? 0) > 0 && <div className="intro-fade" style={{ opacity: (hud as { fade?: number }).fade }} />}
+      {(hud.fade ?? 0) > 0 && <div className="intro-fade" style={{ opacity: hud.fade }} />}
       {level.wayang && game && <WayangOverlay hud={hud} playing={phase === "playing"} />}
       {failed && (
         <div className="overlay">

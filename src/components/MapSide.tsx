@@ -15,9 +15,9 @@ export interface MapExit {
   to: string;
 }
 
-/** The gates on this map. (Cast until MapState.exits is in the engine type everywhere.) */
+/** The gates on this map. */
 export function mapExits(s: MapState | null): MapExit[] {
-  return (s as (MapState & { exits?: MapExit[] }) | null)?.exits ?? [];
+  return s?.exits ?? [];
 }
 
 /** Where a gate leads: the map's name once the player has been there, a vague hint before. */

@@ -263,6 +263,18 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .m-obj { fill: #ffd24a; stroke: #1a1220; stroke-width: .4; }
 .m-you { fill: #fff; stroke: #c0392b; stroke-width: .5; }
 .m-fog { fill: #120d0a; opacity: .88; }
+.m-place { fill: var(--gold); stroke: #120d0a; stroke-width: .28em; paint-order: stroke; stroke-linejoin: round; font-family: inherit; letter-spacing: .02em; pointer-events: none; }
+/* the pause map fills its panel (no scrollbar); the Peta tab panel is the only place it sits in a fixed-height box */
+.peta { position: relative; width: 100%; height: 100%; min-height: 220px; overflow: hidden; touch-action: none; overscroll-behavior: contain; user-select: none; }
+.peta-tab { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.peta-tab > .peta { flex: 1; height: auto; min-height: 0; }
+.peta.zoomed { cursor: grab; }
+.peta.zoomed:active { cursor: grabbing; }
+.peta .map { height: 100%; min-height: 0; }
+.peta-zoom { position: absolute; top: 6px; right: 6px; display: flex; flex-direction: column; gap: 4px; }
+.peta-zoom button { min-width: 32px; height: 32px; padding: 0 6px; border: 1px solid var(--gold); border-radius: 4px; background: rgba(18, 13, 10, .8); color: var(--gold); font: inherit; cursor: pointer; }
+.peta-zoom button:hover:not(:disabled) { background: rgba(255, 207, 138, .15); }
+.peta-zoom button:disabled { opacity: .4; cursor: default; }
 .legend { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .legend i { display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 2px; }
 .k-you { background: #fff; } .k-obj { background: #ffd24a; transform: rotate(45deg); } .k-exit { border: 2px solid #6cc8e8; border-radius: 50% !important; } .k-hide { background: #6f8a3a; border-radius: 50% !important; } .k-fog { background: #120d0a; border: 1px solid #5d4f37; }

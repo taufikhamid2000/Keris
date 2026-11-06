@@ -113,5 +113,20 @@ export function cleanKitab(v: unknown): string[] {
   return PLACES.filter((p) => ids.has(p.id)).map((p) => p.id);
 }
 
+/** Where to label a place on the map: the centre of the part of it inside the bounds (null if it lies outside). */
+export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: number; maxZ: number }): { x: number; z: number } | null {
+  let sx = 0;
+  let sz = 0;
+  let n = 0;
+  for (let x = b.minX; x <= b.maxX; x += 2)
+    for (let z = b.minZ; z <= b.maxZ; z += 2)
+      if (p.at(x, 0, z) || p.at(x, SUMMIT.y, z)) {
+        sx += x;
+        sz += z;
+        n++;
+      }
+  return n ? { x: sx / n, z: sz / n } : null;
+}
+
 /** Places the player is standing in right now. */
 export const placesAt = (x: number, y: number, z: number) => PLACES.filter((p) => p.at(x, y, z));

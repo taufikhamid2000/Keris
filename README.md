@@ -164,3 +164,5 @@ Only chapter 2 (Melaka 1511, all current missions) is playable; the chapter list
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+The Kitab labels every entry Fakta (history, cited), Legenda (tradition) or Rekaan (invented for the game), and lists its Sumber when it has any.

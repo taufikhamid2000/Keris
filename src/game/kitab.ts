@@ -11,8 +11,20 @@ import { PENJARA_BLOCK, PENJARA_YARD } from "./levels/penjara";
 import { GUA_LANUN, GUA_LANUN_LORE, GUA_LANUN_PLACES } from "./guaLanun";
 import { KEEP, KOTA_WALLS, KOTA_Z0 } from "./kota";
 
+/** How reliable an entry is: fakta (cited history), legenda (tradition), rekaan (invented for the game). */
+export type KitabKind = "fakta" | "legenda" | "rekaan";
+export const KITAB_KINDS: readonly KitabKind[] = ["fakta", "legenda", "rekaan"];
+export interface Sumber {
+  label: string;
+  url?: string;
+}
+
 export interface PlaceDef {
   id: string;
+  /** reliability label; filled in below for every place that does not set it */
+  kind?: KitabKind;
+  /** cited sources (none yet for the in-world notes) */
+  sumber?: Sumber[];
   title: string;
   text: string;
   /** shown while locked */
@@ -149,7 +161,7 @@ export const CHARM_LORE: Record<string, string> = {
 };
 
 /** After-the-mission pages, by level id. */
-export const MISSION_LORE: Record<string, { title: string; text: string }> = {
+export const MISSION_LORE: Record<string, { title: string; text: string; kind?: KitabKind; sumber?: Sumber[] }> = {
   harbour: { title: "The Kapitan", text: "With the Kapitan gone the battery sat silent for three nights. Someone, though, had told the Portuguese exactly where to put it." },
   kampung: { title: "The clerk", text: "The clerk was paid in silver for a copy of the battery's plans. Where he kept the copy, he never said." },
   plans: { title: "The plans", text: "The plans came back in a chest from under the penghulu's hall, and nobody in the kampung ever knew they had been gone." },
@@ -198,6 +210,15 @@ MISSION_LORE.kota = {
   title: "The war map",
   text: "The map reached the elder wrapped in wet cloth. They say the Capitão-mor counted the walls twice that night, and never once looked at the sea.",
 };
+
+/** Entries that retell a tradition rather than invent: everything else in the journal is in-world fiction (rekaan). */
+const LEGENDA_PLACES = new Set(["ledang"]);
+for (const p of PLACES) p.kind ??= LEGENDA_PLACES.has(p.id) ? "legenda" : "rekaan";
+for (const l of Object.values(MISSION_LORE)) l.kind ??= "rekaan";
+/** Reliability of each tangkal page (all invented), with its sources. */
+export const CHARM_META: Record<string, { kind: KitabKind; sumber?: Sumber[] }> = Object.fromEntries(
+  Object.keys(CHARM_LORE).map((id) => [id, { kind: "rekaan" as KitabKind }]),
+);
 
 const placeIds = new Set(PLACES.map((p) => p.id));
 export const placeById = (id: string) => PLACES.find((p) => p.id === id) ?? null;

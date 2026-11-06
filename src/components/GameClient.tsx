@@ -657,7 +657,7 @@ export default function GameClient() {
           <section className="songket menu-pane" aria-live="polite">
             {view === "main" && (
               <>
-                <ChapterSelect missions={save.missions}>
+                <ChapterSelect missions={save.missions} lang={save.settings.lang}>
                 <div className="missions">
                   {LEVELS.map((l) => (
                     <button key={l.id} className={`btn ghost${l === level ? " on" : ""}`} aria-pressed={l === level} onClick={() => pickLevel(l)} disabled={!game}>

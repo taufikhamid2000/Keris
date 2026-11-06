@@ -35,7 +35,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: "prasejarah",
     order: 1,
-    era: "c. 9000 SM",
+    era: "Prasejarah",
     title: { ms: "Prasejarah", en: "Prehistory" },
     blurb: {
       ms: "Menjelajah gua dan mengenali kehidupan manusia awal, termasuk Manusia Perak dari Lenggong.",

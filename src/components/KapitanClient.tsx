@@ -16,29 +16,18 @@ import {
 } from "@/game/kapitan";
 import { RoomLink, kapitanConfig, peerId, type LinkStatus } from "@/game/kapitanNet";
 import css from "./kapitan.module.css";
+import { useT } from "./useT";
+import { useLang } from "./useLang";
 
 /** Dua pemain, the Kapitan's side: a phone page with a live map of the mission and three limited powers. No three.js. */
 const CFG = kapitanConfig();
 
-const STATUS: Record<LinkStatus, string> = {
-  connecting: "Menyambung · connecting",
-  waiting: "Menunggu pendekar · waiting for the game",
-  connected: "Bersambung · connected",
-  lost: "Hilang hubungan · connection lost",
-  closed: "Tamat · ended",
-};
-
-const PHASE_TEXT: Record<string, string> = {
-  title: "The pendekar is at the main menu",
-  intro: "The pendekar watches the opening",
-  paused: "Berhenti · the pendekar has paused",
-  won: "The pendekar got away. Misi berjaya",
-  lost: "The pendekar has fallen. Misi gagal",
-};
+const PHASES = ["title", "intro", "paused", "won", "lost"];
 
 type Mode = "look" | "lantern" | "send";
 
 export default function KapitanClient({ room }: { room: string | null }) {
+  const t = useT(useLang());
   const [code, setCode] = useState<string | null>(cleanRoomCode(room));
   const [typed, setTyped] = useState(room ?? "");
   const [status, setStatus] = useState<LinkStatus>("connecting");
@@ -102,7 +91,7 @@ export default function KapitanClient({ room }: { room: string | null }) {
   const join = (v: string) => {
     const c = cleanRoomCode(v);
     if (!c) {
-      setNote("A room code is four letters.");
+      setNote(t("kapitan.badCode"));
       return;
     }
     setEnded(false);
@@ -138,21 +127,22 @@ export default function KapitanClient({ room }: { room: string | null }) {
             join(typed);
           }}
         >
-          <p className="kicker">Keris · Dua pemain</p>
-          <h1>Kapitan</h1>
+          <p className="kicker">{t("kapitan.kicker")}</p>
+          <h1>{t("kapitan.name")}</h1>
           {ended ? (
-            <p>Sesi tamat. The pendekar ended the session.</p>
+            <p>{t("kapitan.ended")}</p>
           ) : (
             <p>
-              Your friend plays the pendekar. You are the Kapitan who holds the town: watch your guards, hang pelita, send men to look, and beat the
-              kentung once. On the game&apos;s title screen they pick <b>Dua pemain</b> and read you a four-letter code.
+              {t("kapitan.intro.before")}
+              <b>{t("kapitan.title")}</b>
+              {t("kapitan.intro.after")}
             </p>
           )}
           <input
             value={typed}
             onChange={(e) => setTyped(e.target.value.toUpperCase().slice(0, 4))}
             placeholder="ABCD"
-            aria-label="Room code"
+            aria-label={t("kapitan.roomCode")}
             autoCapitalize="characters"
             autoComplete="off"
             spellCheck={false}
@@ -160,7 +150,7 @@ export default function KapitanClient({ room }: { room: string | null }) {
             maxLength={4}
           />
           <button className="btn" type="submit">
-            Masuk · join
+            {t("kapitan.join")}
           </button>
           {note && <p className="small">{note}</p>}
         </form>
@@ -175,7 +165,7 @@ export default function KapitanClient({ room }: { room: string | null }) {
   const mark = b ? Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 60 : 1;
 
   const send = (c: KapitanCmd) => {
-    if (!linkRef.current?.send("cmd", { from: meRef.current, c })) setNote("Not connected right now.");
+    if (!linkRef.current?.send("cmd", { from: meRef.current, c })) setNote(t("kapitan.notConnected"));
   };
   const nearestGuard = (x: number, z: number) => {
     let best: number | null = null;
@@ -211,27 +201,27 @@ export default function KapitanClient({ room }: { room: string | null }) {
     } else if (g !== null) {
       setPicked(g);
       setMode("send");
-    } else if (mode === "send") setNote("Tap one of your guards first.");
+    } else if (mode === "send") setNote(t("kapitan.tapGuardFirst"));
   };
 
   const hint = !snap
-    ? "Waiting for the pendekar's game…"
+    ? t("kapitan.waitingGame")
     : !live
       ? ""
       : mode === "lantern"
-        ? `Tap the map to hang a pelita. Guards spot the pendekar faster within ${KAPITAN.lanternR} m of it.`
+        ? t("kapitan.hint.lantern", { r: KAPITAN.lanternR })
         : mode === "send"
           ? picked === null
-            ? "Tap a guard."
-            : "Now tap where he should go and look. Tap another guard to pick him instead."
-          : "Tap a guard to give him an order.";
+            ? t("kapitan.hint.pick")
+            : t("kapitan.hint.send")
+          : t("kapitan.hint.idle");
 
   return (
     <main className={css.page}>
       <header className={css.head}>
-        <h1>Kapitan {code}</h1>
+        <h1>{t("kapitan.name")} {code}</h1>
         <span className={css.status}>
-          <i className={`${css.dot} ${css[status]}`} /> {STATUS[status]}
+          <i className={`${css.dot} ${css[status]}`} /> {t(`kapitan.status.${status}`)}
         </span>
       </header>
       <div className={css.mapWrap} onPointerDown={onTap}>
@@ -274,16 +264,16 @@ export default function KapitanClient({ room }: { room: string | null }) {
                 <g transform={`translate(${-snap.pendekar.x} ${-snap.pendekar.z})`}>
                   <circle className={css.last} r={mark * 0.9} />
                   <text className={css.lastTxt} y={-mark * 1.4} style={{ fontSize: mark * 1.3 }}>
-                    {Math.round(snap.pendekar.age)} s ago
+                    {t("kapitan.ago", { s: Math.round(snap.pendekar.age) })}
                   </text>
                 </g>
               ))}
           </MapView>
         ) : (
-          <p className={css.banner}>{status === "connected" ? "Loading the map…" : "Waiting for the pendekar's game…"}</p>
+          <p className={css.banner}>{status === "connected" ? t("kapitan.loadingMap") : t("kapitan.waitingGame")}</p>
         )}
-        {snap && snap.phase !== "playing" && <p className={css.banner}>{PHASE_TEXT[snap.phase] ?? ""}</p>}
-        {snap && status === "lost" && <p className={css.banner}>Hilang hubungan · trying again…</p>}
+        {snap && snap.phase !== "playing" && <p className={css.banner}>{PHASES.includes(snap.phase) ? t(`kapitan.phase.${snap.phase}`) : ""}</p>}
+        {snap && status === "lost" && <p className={css.banner}>{t("kapitan.retrying")}</p>}
         {note && <p className={css.note}>{note}</p>}
       </div>
       <p className={css.hint}>{hint}</p>
@@ -293,8 +283,8 @@ export default function KapitanClient({ room }: { room: string | null }) {
           disabled={!live || !pw || pw.lanternsLeft <= 0 || pw.lanternCd > 0}
           onClick={() => setMode(mode === "lantern" ? "look" : "lantern")}
         >
-          <b>Pelita</b>
-          <span>{pw ? (pw.lanternCd > 0 && pw.lanternsLeft > 0 ? `${Math.ceil(pw.lanternCd)} s` : `${pw.lanternsLeft} left`) : "-"}</span>
+          <b>{t("kapitan.tool.lantern")}</b>
+          <span>{pw ? (pw.lanternCd > 0 && pw.lanternsLeft > 0 ? t("kapitan.tool.sec", { n: Math.ceil(pw.lanternCd) }) : t("kapitan.tool.left", { n: pw.lanternsLeft })) : "-"}</span>
         </button>
         <button
           className={`${css.tool}${mode === "send" ? ` ${css.on}` : ""}`}
@@ -304,8 +294,8 @@ export default function KapitanClient({ room }: { room: string | null }) {
             setMode(mode === "send" ? "look" : "send");
           }}
         >
-          <b>Hantar</b>
-          <span>{pw ? (pw.sendCd > 0 ? `${Math.ceil(pw.sendCd)} s` : "send a guard") : "-"}</span>
+          <b>{t("kapitan.tool.send")}</b>
+          <span>{pw ? (pw.sendCd > 0 ? t("kapitan.tool.sec", { n: Math.ceil(pw.sendCd) }) : t("kapitan.tool.sendReady")) : "-"}</span>
         </button>
         <button
           className={`${css.tool}${armed ? ` ${css.arm}` : ""}`}
@@ -316,14 +306,14 @@ export default function KapitanClient({ room }: { room: string | null }) {
             send({ k: "alarm" });
           }}
         >
-          <b>Kentung</b>
-          <span>{pw?.alarm ? (armed ? "tap again to beat it" : "once per attempt") : "used"}</span>
+          <b>{t("kapitan.tool.alarm")}</b>
+          <span>{pw?.alarm ? (armed ? t("kapitan.tool.armed") : t("kapitan.tool.once")) : t("kapitan.tool.used")}</span>
         </button>
       </div>
       <p className={css.legend}>
-        White patrol · yellow suspicious · orange searching · red alert · gold ring the target · red dot the pendekar where a guard sees him, dashed where last seen.{" "}
+        {t("kapitan.legend")}{" "}
         <button className="btn ghost sm" onClick={leave}>
-          Leave
+          {t("kapitan.leave")}
         </button>
       </p>
     </main>

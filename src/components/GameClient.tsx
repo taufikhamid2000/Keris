@@ -14,7 +14,6 @@ import {
   hasProgress,
   markIntroSeen,
   shouldShowIntro,
-  ratingLabel,
   recordStart,
   recordWin,
   addAmulet, setExplored, addKitab,
@@ -27,6 +26,8 @@ import KerisEmblem from "./KerisEmblem";
 import PauseMenu, { PAUSE_TABS } from "./PauseMenu";
 import SettingsPanel from "./SettingsPanel";
 import { useT } from "./useT";
+import { trMsg } from "@/game/hudMsg";
+import type { Lang } from "@/game/i18n";
 import SkillTree from "./SkillTree";
 import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
@@ -103,48 +104,50 @@ const touchSnapshot = () =>
 const subscribePortrait = subscribeMQ("(orientation: portrait)");
 const portraitSnapshot = () => mq("(orientation: portrait)");
 
+// [key label, description key]; a label without the "hud." prefix is a literal key name
 const CONTROLS: [string, string][] = [
-  ["W A S D", "Move"],
-  ["Shift", "Run (louder)"],
-  ["C / Ctrl", "Crouch (quieter)"],
-  ["Space", "Jump / climb ledge"],
-  ["Mouse", "Look"],
-  ["E / Left click", "Tikam: keris takedown from behind. In a fight, tap to strike, hold and let go for a heavy strike that breaks his guard"],
-  ["R / Right click", "Parry: just before a guard strikes (his marker flashes white), then strike to finish him"],
-  ["X", "Roll: dodge a strike or break away"],
-  ["Q", "Use the tool in hand: pisau lempar (stun / distract), batu (stone: draws guards), serbuk lada (pepper: blinds guards close by)"],
-  ["Hold Tab", "Tool wheel: move the mouse to pick, let go to take it (1, 2, 3 pick directly)"],
-  ["F", "Carry / drop a body (hide it in hay or bush)"],
-  ["E by a horse", "Mount it; WASD rides, Shift gallops (loud), E gets down"],
-  ["E by a sampan", "Board it; WASD paddles, Shift faster, E by a bank goes ashore"],
-  ["Walk into water (river, pool, sea)", "Swim; Shift faster, Ctrl / C dives out of sight while breath lasts, Space climbs aboard"],
-  ["V", "Mata Helang vision"],
-  ["Esc", "Pause"],
-  ["Controller", "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT use tool, hold d-pad up for the tool wheel (right stick picks), d-pad left / right switch tool, Y carry, R3 crouch, RB vision, LB run, Start pause"],
+  ["W A S D", "hud.ctl.move"],
+  ["Shift", "hud.ctl.run"],
+  ["C / Ctrl", "hud.ctl.crouch"],
+  ["Space", "hud.ctl.jump"],
+  ["hud.ctl.k.look", "hud.ctl.look"],
+  ["hud.ctl.k.stab", "hud.ctl.stab"],
+  ["hud.ctl.k.parry", "hud.ctl.parry"],
+  ["X", "hud.ctl.roll"],
+  ["Q", "hud.ctl.tool"],
+  ["hud.ctl.k.wheel", "hud.ctl.wheel"],
+  ["F", "hud.ctl.carry"],
+  ["hud.ctl.k.horse", "hud.ctl.horse"],
+  ["hud.ctl.k.sampan", "hud.ctl.sampan"],
+  ["hud.ctl.k.swim", "hud.ctl.swim"],
+  ["V", "hud.ctl.eagle"],
+  ["Esc", "hud.ctl.pause"],
+  ["hud.ctl.k.pad", "hud.ctl.pad"],
 ];
 
 const TOUCH_CONTROLS: [string, string][] = [
-  ["Left thumb", "Move (push to the edge to run, louder)"],
-  ["Drag right side", "Look"],
-  ["Jump", "Jump / climb a ledge (hold at a wall)"],
-  ["C", "Crouch toggle (quieter)"],
-  ["E", "Tikam: takedown from behind. In a fight, tap to strike, hold for a heavy strike"],
-  ["R", "Parry: just before a guard strikes (his marker flashes white)"],
-  ["X", "Roll: dodge a strike or break away"],
-  ["Q", "Use the tool in hand (knife, stone or pepper)"],
-  ["Alat", "Switch tool"],
-  ["F", "Carry / drop a body (hide it in hay or bush)"],
-  ["E by a horse", "Mount it; the stick rides, E gets down"],
-  ["E by a sampan", "Board it; the stick paddles, E by a bank goes ashore"],
-  ["Walk into water (river, pool, sea)", "Swim; crouch dives out of sight while breath lasts, jump climbs aboard"],
-  ["V", "Mata Helang vision"],
-  ["II", "Pause"],
+  ["hud.tctl.k.move", "hud.tctl.move"],
+  ["hud.tctl.k.look", "hud.tctl.look"],
+  ["hud.tctl.k.jump", "hud.tctl.jump"],
+  ["C", "hud.tctl.crouch"],
+  ["E", "hud.tctl.stab"],
+  ["R", "hud.tctl.parry"],
+  ["X", "hud.ctl.roll"],
+  ["Q", "hud.tctl.tool"],
+  ["hud.tctl.k.tool", "hud.tctl.toolNext"],
+  ["F", "hud.ctl.carry"],
+  ["hud.ctl.k.horse", "hud.tctl.horse"],
+  ["hud.ctl.k.sampan", "hud.tctl.sampan"],
+  ["hud.ctl.k.swim", "hud.tctl.swim"],
+  ["V", "hud.ctl.eagle"],
+  ["II", "hud.ctl.pause"],
 ];
 
-function Compass({ north, obj }: { north: number; obj: number | null }) {
-  const marks = ["N", "E", "S", "W"];
+function Compass({ north, obj, lang }: { north: number; obj: number | null; lang: Lang }) {
+  const t = useT(lang);
+  const marks = [t("hud.compass.n"), t("hud.compass.e"), t("hud.compass.s"), t("hud.compass.w")];
   return (
-    <div className="compass" aria-label="compass">
+    <div className="compass" aria-label={t("hud.compass.aria")}>
       <div className="compass-ring" style={{ transform: `rotate(${north}deg)` }}>
         {marks.map((m, i) => (
           <span key={m} style={{ transform: `rotate(${i * 90}deg) translateY(-34px)` }}>
@@ -162,25 +165,30 @@ function Compass({ north, obj }: { north: number; obj: number | null }) {
   );
 }
 
-function Best({ m, className = "" }: { m: MissionStats | undefined; className?: string }) {
-  if (!m || (m.bestTime === null && m.bestRating === null)) return null;
-  return (
-    <p className={`best ${className}`}>
-      Best: {formatTime(m.bestTime)} · {ratingLabel(m.bestRating)}
-    </p>
-  );
+/** "*** Hantu": stars and the rating's name in the chosen language */
+function rate(t: (k: string) => string, r: number | null): string {
+  if (r === null) return "-";
+  const n = Math.max(1, Math.min(3, Math.round(r)));
+  return `${"*".repeat(n)} ${t(`hud.rating.${n}`)}`;
 }
 
-function Controls({ touch }: { touch: boolean }) {
+function Best({ m, lang, className = "" }: { m: MissionStats | undefined; lang: Lang; className?: string }) {
+  const t = useT(lang);
+  if (!m || (m.bestTime === null && m.bestRating === null)) return null;
+  return <p className={`best ${className}`}>{t("hud.best", { time: formatTime(m.bestTime), rating: rate(t, m.bestRating) })}</p>;
+}
+
+function Controls({ touch, lang }: { touch: boolean; lang: Lang }) {
+  const t = useT(lang);
   return (
     <table className="controls">
       <tbody>
         {(touch ? TOUCH_CONTROLS : CONTROLS).map(([k, d]) => (
           <tr key={k}>
             <td>
-              <kbd>{k}</kbd>
+              <kbd>{k.startsWith("hud.") ? t(k) : k}</kbd>
             </td>
-            <td>{d}</td>
+            <td>{t(d)}</td>
           </tr>
         ))}
       </tbody>
@@ -477,7 +485,8 @@ export default function GameClient() {
   const canContinue = hasProgress(save) && continueLevel !== null;
   const checkpointHere = checkpointFor(save, level.missionId);
   const savedHere = save.checkpointMission === level.missionId && save.checkpoint !== null;
-  const t = useT(save.settings.lang);
+  const lang = save.settings.lang;
+  const t = useT(lang);
   const settingsBtn = (
     <button className="btn ghost" onClick={() => setShowSettings(true)}>
       {t("pause.settings")}
@@ -502,12 +511,12 @@ export default function GameClient() {
       <div ref={mount} className="stage" />
       {/* gate travel: the screen dips to black while the next map loads (HudState.fade, cast until engine types merge) */}
       {(hud.fade ?? 0) > 0 && <div className="intro-fade" style={{ opacity: hud.fade }} />}
-      {level.wayang && game && <WayangOverlay hud={hud} playing={phase === "playing"} />}
+      {level.wayang && game && <WayangOverlay hud={hud} playing={phase === "playing"} lang={lang} />}
       {failed && (
         <div className="overlay">
           <div className="panel">
-            <h2>WebGL unavailable</h2>
-            <p>The game could not start in this browser.</p>
+            <h2>{t("hud.webgl.title")}</h2>
+            <p>{t("hud.webgl.body")}</p>
           </div>
         </div>
       )}
@@ -516,34 +525,34 @@ export default function GameClient() {
         <div className="hud">
           <div className="topleft">
             <div className="objective">
-              <span className="label">Objective</span>
+              <span className="label">{t("hud.objective")}</span>
               {hud.objective}
             </div>
             <div className={`meter ${alertCls}`}>
               <div className="meter-fill" style={{ width: `${Math.round(hud.meter * 100)}%` }} />
-              <span>{hud.alert === "calm" ? "Unseen" : hud.alert}</span>
+              <span>{t(`hud.alert.${hud.alert}`)}</span>
             </div>
             <div className="chips">
-              {hud.hidden && <em>Hidden</em>}
-              {hud.crouched && <em>Crouched</em>}
-              {hud.eagle && <em className="gold">Mata Helang</em>}
-              {!!hud.pantun?.disguise && <em className="gold">Menyamar {hud.pantun.disguise}s</em>}
+              {hud.hidden && <em>{t("hud.chip.hidden")}</em>}
+              {hud.crouched && <em>{t("hud.chip.crouched")}</em>}
+              {hud.eagle && <em className="gold">{t("hud.chip.eagle")}</em>}
+              {!!hud.pantun?.disguise && <em className="gold">{t("hud.chip.disguise", { s: hud.pantun.disguise })}</em>}
               <em className="tool-chip">
-                {TOOLS.find((t) => t.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
+                {TOOLS.find((tool) => tool.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
               </em>
             </div>
             {hud.semangat !== undefined && (hud.eagle || hud.semangat < 0.999) && (
-              <div className={`semangat${hud.eagle ? " on" : ""}`} aria-label={`Semangat ${Math.round(hud.semangat * 100)}%`}>
+              <div className={`semangat${hud.eagle ? " on" : ""}`} aria-label={t("hud.semangat.aria", { pct: Math.round(hud.semangat * 100) })}>
                 <div style={{ width: `${Math.round(hud.semangat * 100)}%` }} />
-                <span>Semangat</span>
+                <span>{t("hud.semangat")}</span>
               </div>
             )}
           </div>
           {hud.eagle && <div className="ghaib-veil" aria-hidden="true" />}
-          <Compass north={hud.northDeg} obj={hud.objDeg} />
+          <Compass north={hud.northDeg} obj={hud.objDeg} lang={lang} />
           <TideBadge t={hud.tide} />
           {hud.combat && (
-            <div className={`hp ${hud.incoming ? "incoming" : ""}`} aria-label={`Health ${Math.ceil(hud.hp)} of ${hud.maxHp}`}>
+            <div className={`hp ${hud.incoming ? "incoming" : ""}`} aria-label={t("hud.hp.aria", { hp: Math.ceil(hud.hp), max: hud.maxHp })}>
               {Array.from({ length: hud.maxHp }, (_, i) => (
                 <div key={i}>
                   <div style={{ width: `${Math.round(Math.min(1, Math.max(0, hud.hp - i)) * 100)}%` }} />
@@ -552,41 +561,39 @@ export default function GameClient() {
             </div>
           )}
           {hud.breath !== null && hud.breath < 0.999 && (
-            <div className="breath" aria-label={`Breath ${Math.round(hud.breath * 100)}%`}>
+            <div className="breath" aria-label={t("hud.breath.aria", { pct: Math.round(hud.breath * 100) })}>
               <div style={{ width: `${Math.round(hud.breath * 100)}%` }} />
             </div>
           )}
-          {hud.prompt && <div className="prompt">{touch ? hud.prompt.replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : hud.prompt}</div>}
-          {hud.toast && <div className="toast">{hud.toast}</div>}
+          {hud.prompt && <div className="prompt">{touch ? trMsg(lang, hud.prompt).replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : trMsg(lang, hud.prompt)}</div>}
+          {hud.toast && <div className="toast">{trMsg(lang, hud.toast)}</div>}
           {hud.talk && <div className="talk">&ldquo;{hud.talk}&rdquo;</div>}
           {hud.pantun?.line && !hud.pantun.choice && <PantunLine line={hud.pantun.line} />}
           {hud.wheel && (
-            <div className="wheel" aria-label="Tool wheel">
-              {TOOLS.map((t, i) => {
+            <div className="wheel" aria-label={t("hud.wheel.aria")}>
+              {TOOLS.map((tool, i) => {
                 const a = (i * 2 * Math.PI) / TOOLS.length;
                 return (
                   <div
-                    key={t.id}
-                    className={`wheel-slot${hud.wheel === t.id ? " on" : ""}${hud.ammo[t.id] <= 0 ? " out" : ""}`}
+                    key={tool.id}
+                    className={`wheel-slot${hud.wheel === tool.id ? " on" : ""}${hud.ammo[tool.id] <= 0 ? " out" : ""}`}
                     style={{ transform: `translate(${Math.sin(a) * 110}px, ${-Math.cos(a) * 110}px)` }}
                   >
                     <kbd>{i + 1}</kbd>
-                    <b>{t.name}</b>
-                    <span>x{hud.ammo[t.id]}</span>
+                    <b>{tool.name}</b>
+                    <span>x{hud.ammo[tool.id]}</span>
                   </div>
                 );
               })}
-              <p className="wheel-desc">{TOOLS.find((t) => t.id === hud.wheel)?.desc}</p>
+              <p className="wheel-desc">{t(`play.tool.${hud.wheel}.desc`)}</p>
             </div>
           )}
-          <div className="hint">
-            WASD move · Shift run · C crouch · Space climb · E / click tikam · R / right-click parry · X roll · Q tool · Tab wheel · F carry body · V Mata Helang · Esc pause
-          </div>
+          <div className="hint">{t("hud.hint")}</div>
         </div>
       )}
 
       {phase === "intro" && (
-        <div className="intro" onPointerDown={skipIntro} role="region" aria-label="Intro cutscene">
+        <div className="intro" onPointerDown={skipIntro} role="region" aria-label={t("hud.intro.aria")}>
           <div className="intro-bar top" />
           <div className="intro-bar bottom" />
           <div className="intro-fade" style={{ opacity: introView?.fade ?? 1 }} />
@@ -598,13 +605,13 @@ export default function GameClient() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={skipIntro}
           >
-            Skip
+            {t("hud.intro.skip")}
           </button>
-          {!touch && <span className="intro-hint">Space, Enter or Esc to skip</span>}
+          {!touch && <span className="intro-hint">{t("hud.intro.hint")}</span>}
         </div>
       )}
 
-      {phase === "playing" && touch && <TouchControls game={game} hud={hud} />}
+      {phase === "playing" && touch && <TouchControls game={game} hud={hud} lang={lang} />}
       {phase === "playing" && hud.pantun?.choice && <PantunChoice view={hud.pantun.choice} game={game} />}
 
       {splash && (
@@ -672,7 +679,7 @@ export default function GameClient() {
                 {savedHere && (
                   <p className="dim small">{checkpointHere === "target" ? t("title.checkpoint", { label: level.checkpointLabel }) : t("title.checkpointStart")}</p>
                 )}
-                <Best m={mission} />
+                <Best m={mission} lang={lang} />
               </>
             )}
             {view === "ilmu" && (
@@ -690,7 +697,7 @@ export default function GameClient() {
             {view === "controls" && (
               <>
                 <h2>{t("title.controls")}</h2>
-                <Controls touch={touch} />
+                <Controls touch={touch} lang={lang} />
               </>
             )}
             {view === "credits" && (
@@ -720,8 +727,8 @@ export default function GameClient() {
           tab={pauseTab}
           setTab={setPauseTab}
           touch={touch}
-          controls={<Controls touch={touch} />}
-          best={<Best m={mission} />}
+          controls={<Controls touch={touch} lang={lang} />}
+          best={<Best m={mission} lang={lang} />}
           skills={skillTree}
           kitab={<Kitab save={save} />}
           visited={save.kitab}
@@ -751,26 +758,26 @@ export default function GameClient() {
             <p>{(win?.text ?? level.win).body}</p>
             {win && (
               <p className={`best ${win.newBestTime || win.newBestRating ? "new" : ""}`}>
-                Time {formatTime(win.time)} · {ratingLabel(win.rating)}
-                {(win.newBestTime || win.newBestRating) && " · New best!"}
+                {t("hud.win.time", { time: formatTime(win.time), rating: rate(t, win.rating) })}
+                {(win.newBestTime || win.newBestRating) && ` · ${t("hud.win.newBest")}`}
               </p>
             )}
             {win && win.points > 0 && (
               <p className="best new">
-                +{win.points} skill point{win.points === 1 ? "" : "s"}. Learn new Ilmu from the main menu or the pause menu.
+                {t(win.points === 1 ? "hud.win.points.one" : "hud.win.points.many", { n: win.points })}
               </p>
             )}
             {whisper && (
               <blockquote className={`bisikan ${whisper.mood}`}>
-                <span className="small">Bisikan puteri</span>
+                <span className="small">{t("hud.win.whisper")}</span>
                 <p>&ldquo;{whisper.line}&rdquo;</p>
                 {whisper.change && <p className="small">{CHANGE_NOTE[whisper.change]}</p>}
               </blockquote>
             )}
-            <Best m={mission} />
+            <Best m={mission} lang={lang} />
             {tale && <HikayatScroll text={tale} lang={save.settings.lang} />}
             <button className="btn" onClick={() => begin("start")}>
-              Play again
+              {t("hud.win.again")}
             </button>
             {menuBtn}
           </div>
@@ -780,22 +787,18 @@ export default function GameClient() {
       {phase === "lost" && (
         <div className="overlay lost">
           <div className="panel">
-            <h2>{reason === "slain" ? "You were cut down" : reason === "detected" ? "You were seen" : "Mission failed"}</h2>
-            <p>{reason === "detected"
-              ? "This had to be done unseen, and the alarm is up. Try another route."
-              : reason === "slain"
-                ? "Parry as his marker flashes white, roll away from a crowd, and fight one at a time. Or better, stay unseen."
-                : "The alarm spread through the lanes. Try another route."}</p>
+            <h2>{t(`hud.lose.${reason === "slain" ? "slain" : reason === "detected" ? "detected" : "failed"}.title`)}</h2>
+            <p>{t(`hud.lose.${reason === "slain" ? "slain" : reason === "detected" ? "detected" : "failed"}.body`)}</p>
             {checkpointHere === "target" && (
               <button className="btn" onClick={() => begin("target")}>
-                Retry from checkpoint
+                {t("hud.lose.retry")}
               </button>
             )}
             <button className={`btn${checkpointHere === "target" ? " ghost" : ""}`} onClick={() => begin("start")}>
-              {checkpointHere === "target" ? "Restart mission" : "Restart"}
+              {checkpointHere === "target" ? t("hud.lose.restartMission") : t("hud.lose.restart")}
             </button>
             {menuBtn}
-            <Best m={mission} />
+            <Best m={mission} lang={lang} />
             {tale && <HikayatScroll text={tale} lang={save.settings.lang} />}
           </div>
         </div>
@@ -825,8 +828,8 @@ export default function GameClient() {
         <div className="overlay rotate" role="alert">
           <div className="panel">
             <div className="rotate-icon" aria-hidden="true" />
-            <h2>Rotate your phone</h2>
-            <p>Keris plays in landscape.</p>
+            <h2>{t("hud.rotate.title")}</h2>
+            <p>{t("hud.rotate.body")}</p>
           </div>
         </div>
       )}

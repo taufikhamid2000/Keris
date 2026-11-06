@@ -5,6 +5,8 @@ import type { Game, Phase } from "@/game/engine";
 import { kapitanConfig, type LinkStatus } from "@/game/kapitanNet";
 import { HostSession, type HostView } from "@/game/kapitanHost";
 import css from "./kapitan.module.css";
+import { useT } from "./useT";
+import { useLang } from "./useLang";
 
 /** Dua pemain, the pendekar's side: the title-screen button, the room card and the status chip. Hidden without Supabase config. */
 const CFG = kapitanConfig();
@@ -46,27 +48,30 @@ function endSession() {
   set({ session: null, view: null, open: false });
 }
 
-export const STATUS_TEXT: Record<LinkStatus, string> = {
-  connecting: "Menyambung · connecting",
-  waiting: "Menunggu · waiting for the Kapitan",
-  connected: "Kapitan bersama · connected",
-  lost: "Hilang hubungan · connection lost, you play on alone",
-  closed: "Tamat · session ended",
+/** Dictionary key of each link status, as the pendekar sees it */
+export const STATUS_KEY: Record<LinkStatus, string> = {
+  connecting: "kapitan.host.status.connecting",
+  waiting: "kapitan.host.status.waiting",
+  connected: "kapitan.host.status.connected",
+  lost: "kapitan.host.status.lost",
+  closed: "kapitan.host.status.closed",
 };
 
 /** "Dua pemain" on the title menu: hosts a room, or shows its card again. */
 export function DuaPemainButton({ disabled = false }: { disabled?: boolean }) {
+  const t = useT(useLang());
   const s = useSyncExternalStore(subscribe, getStore, () => NONE);
   if (!CFG) return null;
   return (
     <button className={`btn ghost${s.open ? " on" : ""}`} onClick={() => (s.open ? set({ open: false }) : host())} disabled={disabled}>
-      Dua pemain
+      {t("kapitan.title")}
     </button>
   );
 }
 
 /** The room card (title screen) and the small connection chip (in play and on menus). */
 export function KapitanHostPanel({ game, phase }: { game: Game | null; phase: Phase }) {
+  const t = useT(useLang());
   const s = useSyncExternalStore(subscribe, getStore, () => NONE);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -87,24 +92,24 @@ export function KapitanHostPanel({ game, phase }: { game: Game | null; phase: Ph
   };
   if (s.open && phase === "title") {
     return (
-      <div className={css.card} role="dialog" aria-label="Dua pemain">
-        <h3>Dua pemain</h3>
-        <p>A friend plays the Kapitan on a phone: they see the guards live, hang pelita that make you easier to spot, send a guard to look somewhere, and once per attempt beat the kentung. They only see you where a guard does.</p>
-        <p className="small dim">On the phone, open this link or go to /kapitan and type the code:</p>
+      <div className={css.card} role="dialog" aria-label={t("kapitan.title")}>
+        <h3>{t("kapitan.title")}</h3>
+        <p>{t("kapitan.host.desc")}</p>
+        <p className="small dim">{t("kapitan.host.link")}</p>
         <div className={css.code}>{v.code}</div>
         <span className={css.link}>{link}</span>
         <p className={css.status}>
-          <i className={`${css.dot} ${css[v.status]}`} /> {STATUS_TEXT[v.status]}
+          <i className={`${css.dot} ${css[v.status]}`} /> {t(STATUS_KEY[v.status])}
         </p>
         <div className={css.row}>
           <button className="btn ghost sm" onClick={copy}>
-            {copied ? "Disalin" : "Copy link"}
+            {copied ? t("kapitan.host.copied") : t("kapitan.host.copy")}
           </button>
           <button className="btn ghost sm" onClick={() => set({ open: false })}>
-            Hide
+            {t("kapitan.host.hide")}
           </button>
           <button className="btn danger sm" onClick={endSession}>
-            End session
+            {t("kapitan.host.end")}
           </button>
         </div>
       </div>
@@ -116,12 +121,12 @@ export function KapitanHostPanel({ game, phase }: { game: Game | null; phase: Ph
     <div className={`${css.chip}${menu ? ` ${css.menu}` : ""}`} aria-live="polite">
       <i className={`${css.dot} ${css[v.status]}`} />
       <span>
-        Kapitan {v.code}: {STATUS_TEXT[v.status]}
+        {t("kapitan.host.chip", { code: v.code, status: t(STATUS_KEY[v.status]) })}
         {phase === "playing" && v.last ? ` · ${v.last}` : ""}
       </span>
       {menu && (
         <button className="btn danger sm" onClick={endSession}>
-          End
+          {t("kapitan.host.endShort")}
         </button>
       )}
     </div>

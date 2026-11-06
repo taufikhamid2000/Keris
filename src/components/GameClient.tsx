@@ -381,6 +381,11 @@ export default function GameClient() {
     game?.setLookSettings(save.settings.lookSens, save.settings.invertY);
   }, [game, save.settings.lookSens, save.settings.invertY]);
 
+  // camera shake is off when "Kurangkan gegaran" is on, or the system asks for reduced motion
+  useEffect(() => {
+    game?.setReduceShake(save.settings.reduceShake || mq("(prefers-reduced-motion: reduce)"));
+  }, [game, save.settings.reduceShake]);
+
   // a rotated phone must not keep playing under the "rotate" prompt
   useEffect(() => {
     if (portrait) game?.pause();

@@ -60,6 +60,11 @@ export default function SettingsPanel({ store, save, canChangeQuality, urlQualit
           <input type="checkbox" checked={s.invertY} onChange={(e) => set({ invertY: e.target.checked })} aria-label="Invert vertical look" />
         </label>
 
+        <label className="row">
+          <span>Kurangkan gegaran (reduce shake)</span>
+          <input type="checkbox" checked={s.reduceShake} onChange={(e) => set({ reduceShake: e.target.checked })} aria-label="Kurangkan gegaran (reduce camera shake)" />
+        </label>
+
         {onReplayIntro && (
           <button className="btn ghost" onClick={onReplayIntro}>
             Replay intro

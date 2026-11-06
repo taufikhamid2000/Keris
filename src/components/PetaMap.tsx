@@ -22,6 +22,7 @@ export default function PetaMap({ def, s, visited = [] }: { def: LevelDef; s: Ma
   const [centre, setCentre] = useState<{ x: number; y: number } | null>(null);
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef(0);
+  const view = useRef({ wheel: (e: WheelEvent) => void e });
 
   const b = def.bounds;
   const pad = 6;
@@ -56,13 +57,29 @@ export default function PetaMap({ def, s, visited = [] }: { def: LevelDef; s: Ma
     else setCentre({ x: cx, y: cy });
   };
 
+  // the wheel zooms about the cursor: the map point under it stays put (handler is refreshed after every render)
+  useEffect(() => {
+    view.current.wheel = (e: WheelEvent) => {
+      const el = frame.current;
+      const nz = clamp(zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2), MIN, MAX);
+      if (!el || nz === zoom) return;
+      const r = el.getBoundingClientRect();
+      const ox = e.clientX - r.left - r.width / 2;
+      const oy = e.clientY - r.top - r.height / 2;
+      const nupp = (upp * zoom) / nz;
+      setZoom(nz);
+      if (nz === MIN) setCentre(null);
+      else setCentre({ x: cx + ox * upp - ox * nupp, y: cy + oy * upp - oy * nupp });
+    };
+  });
+
   // wheel needs a non-passive listener to stop the page scrolling under it
   useEffect(() => {
     const el = frame.current;
     if (!el) return;
     const on = (e: WheelEvent) => {
       e.preventDefault();
-      setZoom((z) => clamp(z * (e.deltaY < 0 ? 1.2 : 1 / 1.2), MIN, MAX));
+      view.current.wheel(e);
     };
     el.addEventListener("wheel", on, { passive: false });
     return () => el.removeEventListener("wheel", on);

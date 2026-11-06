@@ -37,7 +37,25 @@ export function MapObjectives({ def, s, places }: { def: LevelDef; s: MapState |
   const here = useMemo(() => placesInBounds(def.bounds), [def.bounds]);
   const mainDone = !!s && !s.escape && s.objective === null;
   const escapeNow = !!s && s.escape;
-  const pct = s ? Math.round(exploredFraction(s.fog.seen) * 100) : 0;
+  const cols = s?.fog.cols ?? 0;
+  const rows = s?.fog.rows ?? 0;
+  const walk = useMemo(() => {
+    if (!s || !cols) return undefined;
+    const { minX, minZ, cell } = s.fog;
+    const m = new Uint8Array(cols * rows).fill(1);
+    const inside = (r: { x: number; z: number; w: number; d: number }, x: number, z: number) => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d;
+    for (let j = 0; j < rows; j++)
+      for (let i = 0; i < cols; i++) {
+        const x = minX + (i + 0.5) * cell;
+        const z = minZ + (j + 0.5) * cell;
+        const onDeck = inside(def.jetty, x, z) || def.decks.some((r) => inside(r, x, z));
+        const blocked = (def.water.some((r) => inside(r, x, z)) && !onDeck) || def.houses.some((r) => inside(r, x, z)) || (def.cliffs?.some((r) => inside(r, x, z)) ?? false);
+        if (blocked) m[j * cols + i] = 0;
+      }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [def, cols, rows]);
+  const pct = s ? Math.round(exploredFraction(s.fog.seen, walk) * 100) : 0;
   const goals: { key: string; text: string; done: boolean }[] = [
     { key: "main", text: def.text.objective, done: mainDone || escapeNow },
     { key: "escape", text: def.text.escape, done: false },

@@ -236,7 +236,7 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 /* pause menu: actions on the left, tabbed songket pane (map, gear, skills, mission) on the right */
 .overlay.pause { backdrop-filter: blur(3px); background: linear-gradient(90deg, rgba(20,10,24,.9) 0%, rgba(20,10,24,.6) 50%, rgba(20,10,24,.45) 100%); }
 .pause-title { margin: 2px 0 14px; color: #ffcf8a; font-size: 2rem; letter-spacing: .12em; font-variant: small-caps; }
-.pause-pane { width: min(720px, 58vw); height: min(640px, 88vh); max-height: none; display: flex; flex-direction: column; }
+.pause-pane { width: min(960px, 72vw); height: min(640px, 88vh); max-height: none; display: flex; flex-direction: column; }
 .pause-pane [role="tabpanel"] { flex: 1; min-height: 0; overflow-y: auto; }
 .tabs { display: flex; align-items: center; gap: 4px; margin: 4px 0 14px; border-bottom: 1px solid rgba(255,207,138,.3); }
 .tabs kbd { cursor: pointer; margin: 0 6px; }

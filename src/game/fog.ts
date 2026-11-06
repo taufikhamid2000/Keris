@@ -24,12 +24,19 @@ export function unpackFog(text: string, n: number): Uint8Array | null {
   return seen;
 }
 
-/** Fraction (0..1) of the grid's squares that are explored. The grid is cut to the level bounds, so every square counts. */
-export function exploredFraction(seen: Uint8Array): number {
-  if (!seen.length) return 0;
+/**
+ * Fraction (0..1) of the grid's squares that are explored. With `open` (1 = ground you can stand on), squares that are
+ * walls, water or cliffs are left out, so a player who has walked everywhere reads 100%.
+ */
+export function exploredFraction(seen: Uint8Array, open?: Uint8Array): number {
   let n = 0;
-  for (let i = 0; i < seen.length; i++) if (seen[i]) n++;
-  return n / seen.length;
+  let total = 0;
+  for (let i = 0; i < seen.length; i++) {
+    if (open && !open[i]) continue;
+    total++;
+    if (seen[i]) n++;
+  }
+  return total ? n / total : 0;
 }
 
 /** Saved maps: level id -> packed grid, a handful of short strings at most. */

@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { SaveData } from "@/game/save";
 import { BRANCHES, GHOST_POINTS, MISSION_POINTS, SKILLS, freePoints, skillStatus, type BranchId } from "@/game/skills";
 
@@ -12,7 +13,8 @@ const KNOWN: Record<BranchId, string> = {
 
 const STATUS_TEXT = { learned: "Learned", open: "Learn", short: "Need points", locked: "Learn the one above first" } as const;
 
-export default function SkillTree({ save, onLearn, onReset }: { save: SaveData; onLearn: (id: string) => void; onReset: () => void }) {
+/** Memoized: it only changes with the save, not with the HUD updates that re-render the game screen. */
+export default memo(function SkillTree({ save, onLearn, onReset }: { save: SaveData; onLearn: (id: string) => void; onReset: () => void }) {
   const free = freePoints(save);
   return (
     <div className="skilltree">
@@ -58,4 +60,4 @@ export default function SkillTree({ save, onLearn, onReset }: { save: SaveData; 
       )}
     </div>
   );
-}
+});

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { buildLevel, cullFoliage, instanced, type Level } from "./level";
+import { buildLevel, cullFoliage, disposeLevel, instanced, type Level } from "./level";
 import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
@@ -557,7 +557,8 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(pixelRatioFor(this.quality, window.devicePixelRatio));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = Q.basicShadows ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+    // PCFSoftShadowMap was removed in r182 (three falls back to PCF with a warning), so ask for PCF directly
+    this.renderer.shadowMap.type = Q.basicShadows ? THREE.BasicShadowMap : THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
@@ -1641,8 +1642,8 @@ export class Game {
   setLevel(def: LevelDef) {
     if (def === this.def || (this.phase !== "title" && this.phase !== "won" && this.phase !== "lost")) return;
     this.scene.remove(this.level.root);
-    // geometries are per level; materials come from a shared cache, so they are kept
-    this.level.root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    // geometries and the level's own materials go; materials from the shared cache are kept
+    disposeLevel(this.level);
     for (const g of this.guards) {
       g.rig?.dispose();
       this.scene.remove(g.group);
@@ -1758,6 +1759,7 @@ export class Game {
     for (const g of this.guards) g.rig?.dispose();
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
+    disposeLevel(this.level);
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -3285,7 +3287,8 @@ export class Game {
 
     // camera
     if (this.phase === "playing" || this.phase === "paused" || this.phase === "won" || this.phase === "lost") {
-      const look = new THREE.Vector3(p.x, p.y + (crouch ? 1.1 : 1.55), p.z);
+      // scratch vectors, reused every frame (CAM_LOOK, CAM_OFF, CAM_WANT below the class)
+      const look = CAM_LOOK.set(p.x, p.y + (crouch ? 1.1 : 1.55), p.z);
       // swimming (and diving), keep the view on the water surface
       if (this.swim) look.y = Math.max(look.y, 0.5);
       const rx = -Math.cos(this.camYaw) * 0.45;
@@ -3294,10 +3297,10 @@ export class Game {
       look.z += rz;
       const dist = 5.4;
       const cp = Math.cos(this.camPitch);
-      const off = new THREE.Vector3(-Math.sin(this.camYaw) * cp, Math.sin(this.camPitch), -Math.cos(this.camYaw) * cp);
-      const hit = raycastBoxes({ x: look.x, y: look.y, z: look.z }, off, this.level.colliders, dist);
+      const off = CAM_OFF.set(-Math.sin(this.camYaw) * cp, Math.sin(this.camPitch), -Math.cos(this.camYaw) * cp);
+      const hit = raycastBoxes(look, off, this.level.colliders, dist);
       const d = hit === null ? dist : Math.max(1.0, hit - 0.35);
-      const want = look.clone().addScaledVector(off, d);
+      const want = CAM_WANT.copy(look).addScaledVector(off, d);
       want.y = Math.max(want.y, 0.4);
       if (this.camPos.lengthSq() === 0) this.camPos.copy(want);
       this.camPos.lerp(want, 1 - Math.pow(0.0005, dt));
@@ -3367,6 +3370,10 @@ export class Game {
     this.renderer.render(this.scene, this.camera);
   }
 }
+
+const CAM_LOOK = new THREE.Vector3();
+const CAM_OFF = new THREE.Vector3();
+const CAM_WANT = new THREE.Vector3();
 
 /** A horse of boxes, for when the horse model is not loaded: body, neck, head, legs and tail, facing +z. */
 function blockHorse(): THREE.Group {

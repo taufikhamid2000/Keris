@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Box, Vec2 } from "./logic";
 import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { spreadIndices } from "./touch";
@@ -103,6 +104,92 @@ function mat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> 
     matCache.set(key, m);
   }
   return m;
+}
+/** Unlit glow materials (lantern and shrine flames), shared like mat()'s. */
+const basicCache = new Map<number, THREE.MeshBasicMaterial>();
+function glow(color: number) {
+  let m = basicCache.get(color);
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ color });
+    basicCache.set(color, m);
+  }
+  return m;
+}
+
+/** Materials one level made for itself (ground, water, falls, exit beam), freed with it; the caches above outlive levels. */
+const owned = new WeakSet<THREE.Material>();
+function own<T extends THREE.Material>(m: T): T {
+  owned.add(m);
+  return m;
+}
+
+/** Free a level's GPU memory once it is out of the scene: every geometry under its root, and its own materials and their textures. */
+export function disposeLevel(level: Level) {
+  const mats = new Set<THREE.Material>();
+  level.root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    mesh.geometry?.dispose();
+    const m = mesh.material;
+    if (!m) return;
+    for (const x of Array.isArray(m) ? m : [m]) if (owned.has(x)) mats.add(x);
+  });
+  for (const m of mats) {
+    (m as THREE.MeshStandardMaterial).map?.dispose();
+    m.dispose();
+  }
+}
+
+const mergeBox = new THREE.Box3();
+/**
+ * Static meshes placed straight in `root` with a shared material (houses, stilts, stalls, piers, lantern posts...)
+ * baked into one mesh per material per CHUNK-metre square: a few dozen draw calls (and shadow passes) instead of
+ * hundreds. Meshes inside groups (boats, palms, ships), instanced, multi-material or one-off materials are left alone.
+ * Flat ground pieces are kept apart from the rest, so the wayang look still tells floor from walls (wayangLook.ts).
+ */
+function mergeStatic(root: THREE.Group) {
+  const shared = new Set<THREE.Material>([...matCache.values(), ...basicCache.values()]);
+  const sets = new Map<string, { m: THREE.Material; cast: boolean; flat: boolean; list: THREE.Mesh[] }>();
+  const ids = new Map<THREE.Material, number>();
+  for (const o of root.children) {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.children.length || Array.isArray(mesh.material)) continue;
+    if (!shared.has(mesh.material) || !mesh.receiveShadow || !mesh.visible) continue;
+    const geo = mesh.geometry;
+    mesh.updateMatrix();
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    mergeBox.copy(geo.boundingBox!).applyMatrix4(mesh.matrix);
+    const flat = mergeBox.max.y - mergeBox.min.y < 0.2 && mergeBox.max.y < 0.35;
+    let id = ids.get(mesh.material);
+    if (id === undefined) ids.set(mesh.material, (id = ids.size));
+    const attrs = Object.keys(geo.attributes).sort().join(",");
+    const cell = `${Math.floor(mesh.position.x / CHUNK)},${Math.floor(mesh.position.z / CHUNK)}`;
+    const key = `${id}|${mesh.castShadow}|${flat}|${geo.index ? 1 : 0}|${attrs}|${cell}`;
+    const s = sets.get(key);
+    if (s) s.list.push(mesh);
+    else sets.set(key, { m: mesh.material, cast: mesh.castShadow, flat, list: [mesh] });
+  }
+  for (const { m, cast, flat, list } of sets.values()) {
+    if (list.length < 2) continue;
+    const merged = mergeGeometries(list.map((x) => x.geometry.clone().applyMatrix4(x.matrix)));
+    if (!merged) continue;
+    merged.computeBoundingBox();
+    merged.computeBoundingSphere();
+    // a flat set that is no longer flat as a whole would change how the wayang look paints it: keep it as it was
+    const b = merged.boundingBox!;
+    if (flat && !(b.max.y - b.min.y < 0.2 && b.max.y < 0.35)) {
+      merged.dispose();
+      continue;
+    }
+    for (const x of list) {
+      root.remove(x);
+      x.geometry.dispose();
+    }
+    const one = new THREE.Mesh(merged, m);
+    one.castShadow = cast;
+    one.receiveShadow = true;
+    one.matrixAutoUpdate = false;
+    root.add(one);
+  }
 }
 
 function seeded(seed: number) {
@@ -229,16 +316,15 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     return t;
   })();
   groundTex.repeat.set(40, 56);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 280), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 280), own(new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 })));
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(0, 0, def.shoreZ + 140);
   ground.receiveShadow = true;
   root.add(ground);
 
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(500, 300),
-    new THREE.MeshStandardMaterial({ color: 0x1c5560, roughness: 0.25, metalness: 0.35 }),
-  );
+  // the sea and every river sheet share one water material
+  const waterMat = own(new THREE.MeshStandardMaterial({ color: 0x1c5560, roughness: 0.25, metalness: 0.35 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 300), waterMat);
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, -0.3, def.shoreZ - 150 + 1);
   root.add(water);
@@ -247,7 +333,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   // rivers: a water sheet just above the ground, with muddy banks
   const sheets: THREE.Mesh[] = [];
   for (const r of def.water) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), new THREE.MeshStandardMaterial({ color: 0x1c5560, roughness: 0.25, metalness: 0.35 }));
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), waterMat);
     w.rotation.x = -Math.PI / 2;
     w.position.set(r.x, 0.06, r.z);
     w.receiveShadow = true;
@@ -360,7 +446,8 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     flow = new THREE.CanvasTexture(c);
     flow.wrapS = flow.wrapT = THREE.RepeatWrapping;
     flow.colorSpace = THREE.SRGBColorSpace;
-    const fm = new THREE.MeshBasicMaterial({ map: flow, transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide });
+    const fm = own(new THREE.MeshBasicMaterial({ map: flow, transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide }));
+    const splash = own(new THREE.MeshBasicMaterial({ color: 0xdcecf0, transparent: true, opacity: 0.55, depthWrite: false }));
     /** a plane whose texture repeats once every 2 m, so every piece of the falls flows at the same speed */
     const sheet = (w: number, h: number) => {
       const geo = new THREE.PlaneGeometry(w, h);
@@ -373,7 +460,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
       const m = new THREE.Mesh(sheet(s.w, s.y1 - s.y0 + 0.2), fm);
       m.position.set(s.x, (s.y0 + s.y1) / 2, s.z - 0.45);
       root.add(m);
-      root.add(mesh(new THREE.CircleGeometry(s.w * 0.7, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xdcecf0, transparent: true, opacity: 0.55, depthWrite: false }), s.x, s.y0 + 0.08, s.z - 0.9, false));
+      root.add(mesh(new THREE.CircleGeometry(s.w * 0.7, 10).rotateX(-Math.PI / 2), splash, s.x, s.y0 + 0.08, s.z - 0.9, false));
     }
     for (const s of def.falls.streams) {
       // flat on the ledge, flowing south to the next drop
@@ -391,7 +478,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
       for (const sz of [-1, 1]) {
         addCollider(boxOf(x + sx * 1.8, z + sz * 1.8, 0.3, 0.3, y + 2.5, y));
         root.add(mesh(new THREE.CylinderGeometry(0.13, 0.16, 2.5, 6), mat(0x5a3a24), x + sx * 1.8, y + 1.25, z + sz * 1.8));
-        root.add(mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc069 }), x + sx * 1.8, y + 2.3, z + sz * 1.8 - sz * 0.2, false));
+        root.add(mesh(new THREE.SphereGeometry(0.16, 8, 6), glow(0xffc069), x + sx * 1.8, y + 2.3, z + sz * 1.8 - sz * 0.2, false));
       }
     // the roof is solid (and climbable) above head height
     addCollider(boxOf(x, z, 4.6, 4.6, y + 3.6, y + 2.5));
@@ -636,7 +723,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
   const lampLights: THREE.PointLight[] = [];
   for (const [i, { x, z }] of def.lamps.entries()) {
     root.add(mesh(new THREE.CylinderGeometry(0.07, 0.09, 3, 5), mat(0x3d2a1a), x, 1.5, z));
-    root.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb14a }), x, 3.1, z, false));
+    root.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), glow(0xffb14a), x, 3.1, z, false));
     if (!litLamps.has(i)) continue;
     const l = new THREE.PointLight(0xffa04a, 11, 17, 1.5);
     l.position.set(x, 3.0, z);
@@ -651,16 +738,17 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     list.forEach((mx, i) => im.setMatrixAt(i, mx));
     root.add(im);
   };
-  addWindows(winLit, new THREE.MeshBasicMaterial({ color: 0xffc069 }));
+  addWindows(winLit, glow(0xffc069));
   addWindows(winDark, mat(0x1c120b));
 
   // ---------------------------------------------------------------- exit beam
   const exitBeam = new THREE.Mesh(
     new THREE.CylinderGeometry(0.9, 0.9, 30, 16, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0x5affc8, transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide }),
+    own(new THREE.MeshBasicMaterial({ color: 0x5affc8, transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide })),
   );
   exitBeam.position.set(def.exit.x, 15, def.exit.z);
   root.add(exitBeam);
+  mergeStatic(root);
 
   return {
     root,

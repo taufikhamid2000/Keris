@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { buildLevel, cullFoliage, disposeLevel, instanced, type Level } from "./level";
-import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
+import { HARBOUR, LEVELS, type GuardDef, type LevelDef, type Placed } from "./levels";
+import { exitAt, exitsOf, type ExitDef } from "./worldgraph";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
@@ -98,6 +99,8 @@ export interface HudState {
   pantun?: PantunHud;
   /** pasang surut: the tide now (tide.ts) */
   tide?: TideReading;
+  /** gate crossing: black overlay alpha, 0..1 (absent when no gate is being used) */
+  fade?: number;
 }
 
 export interface RunStats {
@@ -134,6 +137,8 @@ export interface GameCallbacks {
   onKitab?: (id: string) => void;
   /** a pantun password was overheard or answered rightly (id from pantun.ts) */
   onPantun?: (id: string) => void;
+  /** a gate carried the player to another map (already swapped, fresh attempt begun); react can update its level state */
+  onTravel?: (def: LevelDef) => void;
 }
 
 /** Where things stand, for the pause menu's map and gear tabs (read when the game pauses). */
@@ -142,6 +147,8 @@ export interface MapState {
   /** the target or the item while the objective is open, null once it is done */
   objective: { x: number; z: number } | null;
   exit: { x: number; z: number };
+  /** walkable gates to neighbouring maps (worldgraph.ts) */
+  exits: { id: string; x: number; z: number; label: string; to: string }[];
   escape: boolean;
   guards: number;
   guardsDown: number;
@@ -495,6 +502,12 @@ export class Game {
   /** the saved explored map for this level (packed), laid under each fresh attempt */
   private fogSaved: string | null = null;
   private fogDirty = false;
+  /** gate travel: seconds stood in a gate, the gate, a swap queued for the end of the frame, arrival grace, fade-in after the swap */
+  private gateDwell = 0;
+  private gateNow: ExitDef | null = null;
+  private pendingTravel: ExitDef | null = null;
+  private gateCd = 0;
+  private gateFade = 0;
   /** Kitab places already written (from the save), so each is announced once */
   private kitab = new Set<string>();
   private kitabT = 0;
@@ -783,10 +796,11 @@ export class Game {
     return guard;
   }
 
-  private resetWorld() {
-    const s = this.level.start;
-    this.p = { x: s.x, y: 0, z: s.z, vy: 0, grounded: true, yaw: (3 * Math.PI) / 4, moving: false, running: false };
-    this.camYaw = (3 * Math.PI) / 4;
+  private resetWorld(spawn?: { x: number; z: number; rotY: number }) {
+    const s = spawn ?? this.level.start;
+    const yaw = spawn ? spawn.rotY : (3 * Math.PI) / 4;
+    this.p = { x: s.x, y: spawn ? groundHeight(s.x, s.z, 1.0, this.level.colliders) : 0, z: s.z, vy: 0, grounded: true, yaw, moving: false, running: false };
+    this.camYaw = yaw;
     this.camPitch = 0.35;
     this.climb = null;
     this.leap = null;
@@ -1158,6 +1172,7 @@ export class Game {
       player: { x: this.p.x, z: this.p.z, yaw: this.p.yaw },
       objective: tgt ? { x: tgt.x, z: tgt.z } : null,
       exit: { x: this.level.exit.x, z: this.level.exit.z },
+      exits: exitsOf(this.def.id).map((e) => ({ id: e.id, x: e.at.x, z: e.at.z, label: e.label, to: e.to })),
       escape: this.objective === "escape",
       guards: this.guards.length,
       guardsDown: this.guards.filter((g) => g.dead).length,
@@ -1654,6 +1669,36 @@ export class Game {
   /** Switch missions on the title screen: rebuild the map, nav grid and guards in place, no reload. */
   setLevel(def: LevelDef) {
     if (def === this.def || (this.phase !== "title" && this.phase !== "won" && this.phase !== "lost")) return;
+    this.swapLevel(def);
+  }
+  /** Gate travel: queue the swap; update() ends first, the swap runs at the end of the frame. */
+  travel(toId: string, arrive: { x: number; z: number; rotY: number }) {
+    const e = exitsOf(this.def.id).find((x) => x.to === toId && x.arrive.x === arrive.x && x.arrive.z === arrive.z);
+    this.pendingTravel = e ?? { id: "", at: { x: 0, z: 0, w: 0, d: 0 }, to: toId, arrive, label: "" };
+  }
+  private doTravel(e: ExitDef) {
+    const def = LEVELS.find((l) => l.id === e.to);
+    if (!def || this.phase !== "playing") return;
+    if (this.fogDirty && this.fog.cols) {
+      this.fogDirty = false;
+      this.cb.onExplored?.(this.def.id, packFog(this.fog.seen));
+    }
+    this.swapLevel(def, e.arrive);
+    this.clearFog();
+    this.clearKapitan(true);
+    this.run = { time: 0, alerts: 0, fromStart: true };
+    this.tideSaid = null;
+    this.chron.begin(def.id, "start", this.guards.length);
+    this.dalang.begin(!!def.wayang, false);
+    this.shade = 0;
+    this.gateDwell = 0;
+    this.gateNow = null;
+    this.gateCd = 1.5;
+    this.gateFade = 1;
+    this.cb.onTravel?.(def);
+    this.cb.onCheckpoint?.("start");
+  }
+  private swapLevel(def: LevelDef, spawn?: { x: number; z: number; rotY: number }) {
     this.scene.remove(this.level.root);
     // geometries and the level's own materials go; materials from the shared cache are kept
     disposeLevel(this.level);
@@ -1685,7 +1730,7 @@ export class Game {
     }
     this.level.guards.forEach((gd, i) => this.guards.push(this.makeGuard(gd.waypoints, !!gd.isTarget, i)));
     this.wayangLook?.setActive(!!def.wayang);
-    this.resetWorld();
+    this.resetWorld(spawn);
   }
   /** Swap the procedural figures for the loaded models (player and every guard that has none yet). */
   private attachRigs() {
@@ -1804,6 +1849,11 @@ export class Game {
     // hit-stop slows the world for a beat; input still lands (keys are events)
     const ts = this.phase === "playing" ? this.feel.step(dt) : 1;
     if (this.phase === "playing") this.update((this.wheel ? dt * TOOL.slow : dt) * ts);
+    if (this.pendingTravel) {
+      const e = this.pendingTravel;
+      this.pendingTravel = null;
+      this.doTravel(e);
+    }
     if (this.phase === "title") this.attractCamera();
     if (this.phase === "intro") this.stepIntro(dt);
     this.render(dt);
@@ -2032,6 +2082,20 @@ export class Game {
       this.setPhase("won");
       return;
     }
+
+    // ---- gates to neighbouring maps: stand in one for a beat; the swap runs at the end of the frame
+    this.gateCd = Math.max(0, this.gateCd - dt);
+    this.gateFade = Math.max(0, this.gateFade - dt / 0.4);
+    const gate = this.gateCd > 0 || this.climb || this.leap ? null : exitAt(this.def.id, p.x, p.z);
+    if (gate && !this.pendingTravel) {
+      this.gateDwell = gate === this.gateNow ? this.gateDwell + dt : dt;
+      this.gateNow = gate;
+      if (this.gateDwell >= 0.6) this.pendingTravel = gate;
+    } else {
+      this.gateDwell = 0;
+      this.gateNow = null;
+    }
+    if (this.gateNow || this.gateFade > 0) this.hudTimer = 0;
 
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
@@ -3161,6 +3225,7 @@ export class Game {
     const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
     const foe = sanc ? null : this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
+    else if (this.gateNow) prompt = `Masuk: ${this.gateNow.label}`;
     else if (this.swim)
       prompt = this.nearBoat()
         ? "E  Climb into the sampan"
@@ -3216,6 +3281,7 @@ export class Game {
       shadow: this.shade,
       pantun: this.pantun.hud(),
       tide: this.tide,
+      fade: this.gateNow ? Math.max(0, (this.gateDwell - 0.3) / 0.3) : this.gateFade,
     };
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, MapState, Phase } from "@/game/engine";
 import { TOOLS } from "@/game/tools";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
@@ -310,6 +310,14 @@ export default function GameClient() {
               setPhase(p);
               setReason(r);
             },
+            // a gate carried the player to another map: the engine already swapped it, so only adopt it here (no title, no list)
+            ...{
+              onTravel: (def: LevelDef) => {
+                levelRef.current = def; // before onCheckpoint("start"), so missionId() is the new one
+                setLevel(def);
+                inst?.setExplored(store.get().explored[def.id] ?? null); // the swap leaves the fog empty
+              },
+            },
             onIntro: setIntroView,
             onIntroEnd: () => {
               if (!inst) return;
@@ -438,6 +446,12 @@ export default function GameClient() {
   }, [phase, showSettings]);
 
   const g = () => game;
+  // maps the player has been to (a mission record or explored ground); gates show only these by name
+  const knownMaps = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const l of LEVELS) if (save.missions[l.missionId] || save.explored[l.id]) out[l.id] = l.name;
+    return out;
+  }, [save.missions, save.explored]);
   /** Pick a mission on the title screen: the engine swaps the map in place. */
   const pickLevel = (l: LevelDef) => {
     levelRef.current = l;
@@ -485,6 +499,8 @@ export default function GameClient() {
   return (
     <div className={`root${touch ? " touch-ui" : ""}`} onContextMenu={(e) => touch && e.preventDefault()}>
       <div ref={mount} className="stage" />
+      {/* gate travel: the screen dips to black while the next map loads (HudState.fade, cast until engine types merge) */}
+      {((hud as { fade?: number }).fade ?? 0) > 0 && <div className="intro-fade" style={{ opacity: (hud as { fade?: number }).fade }} />}
       {level.wayang && game && <WayangOverlay hud={hud} playing={phase === "playing"} />}
       {failed && (
         <div className="overlay">
@@ -706,6 +722,7 @@ export default function GameClient() {
           skills={skillTree}
           kitab={<Kitab save={save} />}
           visited={save.kitab}
+          known={knownMaps}
           places={save.kitab}
           charms={{ found: save.amulets, worn: save.amulet, wear: (id) => store.update((d) => wearAmulet(d, id)) }}
           lastTale={save.tales[level.missionId] ? <HikayatScroll text={save.tales[level.missionId]} title="Your last tale" /> : null}

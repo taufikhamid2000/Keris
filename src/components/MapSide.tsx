@@ -6,6 +6,25 @@ import { exploredFraction } from "@/game/fog";
 import { placesInBounds } from "@/game/kitab";
 import type { LevelDef } from "@/game/levels";
 
+/** A walkable gate to another map, as the engine reports it in MapState.exits. */
+export interface MapExit {
+  id: string;
+  x: number;
+  z: number;
+  label: string;
+  to: string;
+}
+
+/** The gates on this map. (Cast until MapState.exits is in the engine type everywhere.) */
+export function mapExits(s: MapState | null): MapExit[] {
+  return (s as (MapState & { exits?: MapExit[] }) | null)?.exits ?? [];
+}
+
+/** Where a gate leads: the map's name once the player has been there, a vague hint before. */
+export function gateText(e: MapExit, known: Record<string, string>): string {
+  return known[e.to] ? `Ke ${known[e.to]}` : "Jalan ke ...?";
+}
+
 /** Left of the Peta map: what the markers mean. */
 export function MapLegend({ def }: { def: LevelDef }) {
   return (
@@ -22,6 +41,9 @@ export function MapLegend({ def }: { def: LevelDef }) {
           <i className="k-exit" /> Escape
         </span>
         <span>
+          <i className="k-gate" /> Pintu ke peta lain
+        </span>
+        <span>
           <i className="k-hide" /> Hiding spot
         </span>
         <span>
@@ -33,7 +55,8 @@ export function MapLegend({ def }: { def: LevelDef }) {
 }
 
 /** Right of the Peta map: mission objectives, Kitab places on this level and how much of it is explored. */
-export function MapObjectives({ def, s, places }: { def: LevelDef; s: MapState | null; places: string[] }) {
+export function MapObjectives({ def, s, places, known = {} }: { def: LevelDef; s: MapState | null; places: string[]; known?: Record<string, string> }) {
+  const exits = mapExits(s);
   const here = useMemo(() => placesInBounds(def.bounds, def.id), [def.bounds, def.id]);
   const mainDone = !!s && !s.escape && s.objective === null;
   const escapeNow = !!s && s.escape;
@@ -78,6 +101,19 @@ export function MapObjectives({ def, s, places }: { def: LevelDef; s: MapState |
           )}
         </ul>
       </div>
+      {exits.length > 0 && (
+        <div>
+          <h4>Laluan</h4>
+          <ul>
+            {exits.map((e) => (
+              <li key={e.id}>
+                <b>{e.label}</b>
+                <span className="small dim">{gateText(e, known)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div>
         <h4>
           Diterokai <span className="dim small">{s ? `${pct}% explored` : "-"}</span>

@@ -133,13 +133,23 @@ export const EN: Record<MsgKey, string> = {
   "title.credits": "Credits",
 };
 
-export const DICTS: Record<Lang, Record<string, string>> = { ms: MS, en: EN };
+import * as hud from "./strings/hud";
+import * as menus from "./strings/menus";
+import * as story from "./strings/story";
+import * as missions from "./strings/missions";
+
+const AREAS = [hud, menus, story, missions];
+/** Core dictionaries plus one file per area under strings/ (so parallel edits never collide). */
+export const DICTS: Record<Lang, Record<string, string>> = {
+  ms: Object.assign({}, MS, ...AREAS.map((a) => a.ms)),
+  en: Object.assign({}, EN, ...AREAS.map((a) => a.en)),
+};
 
 export type Vars = Record<string, string | number>;
 
 /** Look up `key` in `lang`, falling back to Malay, then to the key itself; fills {name} placeholders. */
 export function t(lang: Lang, key: string, vars?: Vars): string {
-  const raw = DICTS[lang]?.[key] ?? (MS as Record<string, string>)[key] ?? key;
+  const raw = DICTS[lang]?.[key] ?? DICTS.ms[key] ?? key;
   if (!vars) return raw;
   return raw.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 }

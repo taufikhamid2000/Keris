@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { DICTS, EN, MS, t } from "./i18n";
+import { DICTS, t } from "./i18n";
 
 describe("i18n", () => {
   it("EN and MS have exactly the same keys", () => {
-    expect(Object.keys(EN).sort()).toEqual(Object.keys(MS).sort());
+    expect(Object.keys(DICTS.en).sort()).toEqual(Object.keys(DICTS.ms).sort());
   });
   it("no empty strings", () => {
-    for (const d of [MS, EN]) for (const v of Object.values(d)) expect(v.length).toBeGreaterThan(0);
+    for (const d of [DICTS.ms, DICTS.en]) for (const v of Object.values(d)) expect(v.length).toBeGreaterThan(0);
   });
   it("EN and MS use the same placeholders", () => {
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
-    for (const k of Object.keys(MS)) expect(ph(DICTS.en[k])).toEqual(ph(DICTS.ms[k]));
+    for (const k of Object.keys(DICTS.ms)) expect(ph(DICTS.en[k])).toEqual(ph(DICTS.ms[k]));
   });
   it("interpolates {vars}, leaving unknown ones alone", () => {
     expect(t("en", "title.continueNamed", { name: "Melaka" })).toBe("Continue: Melaka");

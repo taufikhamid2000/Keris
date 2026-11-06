@@ -811,6 +811,7 @@ export class Game {
     if (this.loot) this.loot.visible = true;
     if (this.charm) this.charm.group.visible = !this.charmFound;
     this.charmPopT = null;
+    this.charm?.group.scale.setScalar(1);
     this.feel.reset();
     this.camLookY = null;
     this.hidden = false;
@@ -1050,6 +1051,7 @@ export class Game {
   /** Whether the player already owns this mission's tangkal (then it is not on the map). */
   setAmuletFound(found: boolean) {
     this.charmFound = found;
+    if (this.charmPopT !== null && !found) this.charmPopT = null;
     // a pickup pop still playing hides the charm itself when it ends
     if (this.charm && this.charmPopT === null) this.charm.group.visible = !found;
   }
@@ -1658,6 +1660,7 @@ export class Game {
     this.lampTimer = 0;
     this.loot = this.buildLoot();
     this.charm = this.buildCharm();
+    this.charmPopT = null;
     this.pantun.build(this.level.root);
     this.takeBoats();
     this.takeHorses();
@@ -2541,7 +2544,8 @@ export class Game {
     if (this.climb || this.leap || this.carrying) return;
     if (this.nearCharm() && this.charm) {
       this.charmFound = true;
-      this.charm.group.visible = false;
+      this.charmPopT = 0; // the mesh pops and then hides itself (render)
+      this.feel.kick(KICK.charm);
       this.toast(`Found the ${this.charm.name}. Your tangkal are under Kelengkapan in the pause menu.`);
       this.cb.onAmulet?.(this.charm.id);
       this.chron.add({ k: "charm", name: this.charm.name });
@@ -2929,6 +2933,7 @@ export class Game {
       return;
     }
     g.hp -= heavy ? HEAVY.damage : 1;
+    this.feel.kick(heavy ? KICK.heavy : KICK.strike);
     if (g.hp <= 0) {
       this.killGuard(g, "Cut down.");
       return;
@@ -2999,11 +3004,13 @@ export class Game {
       g.animKick = "hit";
       this.parryT = 0;
       this.parryCd = 0;
+      this.feel.kick(KICK.parry);
       this.toast("Parried! Strike now.");
       this.chron.add({ k: "parry" });
       return;
     }
     this.hp = Math.max(0, this.hp - 1);
+    this.feel.kick(KICK.hurt);
     this.hurtT = 0;
     this.hurtAnimT = 0.4;
     this.playerKick = "hit";
@@ -3055,6 +3062,7 @@ export class Game {
       b.z = p.z + Math.cos(p.yaw) * 0.6;
       b.y = p.y;
       if (isBodyHidden(b, this.level.hides)) this.chron.add({ k: "hideBody" });
+      this.feel.kick(KICK.drop);
       this.toast(isBodyHidden(b, this.level.hides) ? "Body hidden." : "Body dropped. Hide it in a haystack or bush.");
       return;
     }
@@ -3062,6 +3070,7 @@ export class Game {
     if (!b) return;
     this.carrying = b;
     b.carried = true;
+    this.feel.kick(KICK.carry); // the weight of the body settles on the shoulders
     this.toast("Carrying body. F to drop.");
   }
 
@@ -3109,6 +3118,7 @@ export class Game {
       this.say(hitGuard, "stunned");
       hitGuard.atk = null;
       hitGuard.meter = 0;
+      this.feel.kick(KICK.knifeStun);
       this.toast("Guard stunned.");
     } else {
       // clatter: guards near the landing point go and look
@@ -3277,7 +3287,15 @@ export class Game {
       g.marker.visible = showAll || showState;
       g.marker.rotation.y += dt * 2.5;
       const winding = g.atk !== null && g.atk < GUARD_ATK.windup;
-      g.marker.scale.setScalar(winding ? 1.8 : 1 + Math.sin(this.time * 6) * 0.12 * (g.brain.state === "alert" ? 1.5 : 0.5));
+      let mScale = winding ? 1.8 : 1 + Math.sin(this.time * 6) * 0.12 * (g.brain.state === "alert" ? 1.5 : 0.5);
+      if (g.pop) {
+        g.pop.t += dt;
+        // noticing swells the marker past full size; losing you shrinks it away
+        if (g.pop.t >= FEEL.markerPop) g.pop = undefined;
+        else if (!winding) mScale *= markerPopScale(g.pop.t, g.pop.gain);
+        if (g.pop && !g.pop.gain) g.marker.visible = !g.dead;
+      }
+      g.marker.scale.setScalar(mScale);
       const col = winding ? 0xffffff : g.stagger > 0 ? 0xffd24a : g.brain.state === "patrol" && g.isTarget ? 0xffd24a : STATE_COLOR[g.brain.state];
       (g.marker.material as THREE.MeshBasicMaterial).color.setHex(col);
       g.coneMat.color.setHex(col);
@@ -3288,7 +3306,10 @@ export class Game {
     // camera
     if (this.phase === "playing" || this.phase === "paused" || this.phase === "won" || this.phase === "lost") {
       // scratch vectors, reused every frame (CAM_LOOK, CAM_OFF, CAM_WANT below the class)
-      const look = CAM_LOOK.set(p.x, p.y + (crouch ? 1.1 : 1.55), p.z);
+      // crouching and standing ease the view height instead of snapping it
+      const lookH = crouch ? 1.1 : 1.55;
+      this.camLookY = this.camLookY === null ? lookH : this.camLookY + (lookH - this.camLookY) * (1 - Math.pow(0.001, dt));
+      const look = CAM_LOOK.set(p.x, p.y + this.camLookY, p.z);
       // swimming (and diving), keep the view on the water surface
       if (this.swim) look.y = Math.max(look.y, 0.5);
       const rx = -Math.cos(this.camYaw) * 0.45;
@@ -3306,6 +3327,15 @@ export class Game {
       this.camPos.lerp(want, 1 - Math.pow(0.0005, dt));
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(look);
+      // shake, roll and landing dip ride on top of the camera, never on the player (feel.ts)
+      if (this.phase === "playing") {
+        const f = this.feel.offset();
+        if (f.x || f.y || f.roll || f.dip) {
+          this.camera.translateX(f.x);
+          this.camera.translateY(f.y + f.dip);
+          this.camera.rotateZ(f.roll);
+        }
+      }
     }
     this.sky.position.copy(this.camera.position);
 
@@ -3336,10 +3366,21 @@ export class Game {
     // the falls flow
     if (this.level.flow) this.level.flow.offset.y = (this.time * 0.9) % 1;
 
-    // the hidden tangkal turns and bobs
+    // the hidden tangkal turns and bobs; once taken it swells, rises and fades out
     if (this.charm?.group.visible) {
-      this.charm.group.rotation.y += dt * 1.6;
+      this.charm.group.rotation.y += dt * (this.charmPopT === null ? 1.6 : 7);
       this.charm.group.position.y = 1.7 + Math.sin(this.time * 2) * 0.08;
+      if (this.charmPopT !== null) {
+        this.charmPopT += dt;
+        const pop = charmPop(this.charmPopT);
+        this.charm.group.scale.setScalar(pop.scale);
+        this.charm.group.position.y += pop.lift;
+        if (this.charmPopT >= FEEL.charmPop) {
+          this.charmPopT = null;
+          this.charm.group.visible = false;
+          this.charm.group.scale.setScalar(1);
+        }
+      }
     }
     // exit beam pulse
     const eb = this.level.exitBeam.material as THREE.MeshBasicMaterial;

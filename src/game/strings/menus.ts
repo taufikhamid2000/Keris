@@ -31,6 +31,7 @@ const P: Record<string, [string, string]> = {
   "menu.gear.stones": ["{n} biji batu tinggal", "{n} stones left"],
   "menu.gear.pepper": ["{n} genggam tinggal", "{n} handfuls left"],
   "menu.gear.clothing": ["Kain gelap untuk senja", "Dark cloth for the dusk"],
+  "menu.gear.clothingName": ["Baju pendekar", "Pendekar's garb"],
   "menu.gear.healthName": ["Kesihatan", "Health"],
   "menu.gear.healthValue": ["{n} daripada {max}", "{n} of {max}"],
   "menu.gear.empty": ["Kosong", "Empty"],

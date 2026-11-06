@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react";
 import type { MapState } from "@/game/engine";
-import { AMULETS, amuletById, amuletForLevel } from "@/game/amulets";
-import type { LevelDef, Rect } from "@/game/levels";
+import { AMULETS, amuletById, amuletDesc, amuletForLevel } from "@/game/amulets";
+import { missionText, type LevelDef, type Rect } from "@/game/levels";
+import { toolName } from "@/game/tools";
 import { formatTime } from "@/game/save";
 import { DEFAULT_LANG, type Lang } from "@/game/i18n";
 import { useT } from "./useT";
@@ -89,7 +90,7 @@ export function MapView({
   const fs = labelSize ?? mark * 1.1;
   const vb = view ?? { x: vx, y: vy, w: vw, h: vh };
   return (
-    <svg className="map" viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("map.aria", { name: def.name })}>
+    <svg className="map" viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("map.aria", { name: missionText(lang, def, "name") ?? def.name })}>
       <rect className="m-land" x={vx} y={vy} width={vw} height={vh} />
       {def.forestFloor?.map((r, i) => box(r, i, "m-forest"))}
       {def.clearings?.map((c, i) => <circle key={i} className="m-clear" cx={sx(c.x)} cy={sy(c.z)} r={c.r} />)}
@@ -211,7 +212,7 @@ export default function PauseMenu({
   return (
     <div className="overlay menu-screen pause">
       <nav className="menu" aria-label={t("pause.menu.aria")}>
-        <p className="kicker">{def.name}</p>
+        <p className="kicker">{missionText(lang, def, "name") ?? def.name}</p>
         <h2 className="pause-title">{t("pause.title")}</h2>
         {actions}
       </nav>
@@ -242,11 +243,11 @@ export default function PauseMenu({
           {cur === "kelengkapan" && (
             <div className="slots">
               <Slot sub={t("menu.slot.weapon")} name="Keris" value={t("menu.gear.keris")} />
-              <Slot sub={t("menu.slot.tool1")} name="Pisau lempar" value={s ? t("menu.gear.knives", { n: s.knives, max: s.maxKnives }) : "-"} />
-              <Slot sub={t("menu.slot.tool2")} name="Batu" value={s ? t("menu.gear.stones", { n: s.stones }) : "-"} />
-              <Slot sub={t("menu.slot.tool3")} name="Serbuk lada" value={s ? t("menu.gear.pepper", { n: s.pepper }) : "-"} />
-              <Slot sub={t("menu.slot.clothing")} name="Baju pendekar" value={t("menu.gear.clothing")} />
-              {worn ? <Slot sub={t("menu.slot.charm")} name={worn.name} value={worn.desc} /> : <Slot sub={t("menu.slot.charm")} name={t("menu.gear.empty")} value={charms.found.length ? t("menu.gear.noneWorn") : t("menu.gear.noneFound")} empty />}
+              <Slot sub={t("menu.slot.tool1")} name={toolName(lang, "knife")} value={s ? t("menu.gear.knives", { n: s.knives, max: s.maxKnives }) : "-"} />
+              <Slot sub={t("menu.slot.tool2")} name={toolName(lang, "stone")} value={s ? t("menu.gear.stones", { n: s.stones }) : "-"} />
+              <Slot sub={t("menu.slot.tool3")} name={toolName(lang, "pepper")} value={s ? t("menu.gear.pepper", { n: s.pepper }) : "-"} />
+              <Slot sub={t("menu.slot.clothing")} name={t("menu.gear.clothingName")} value={t("menu.gear.clothing")} />
+              {worn ? <Slot sub={t("menu.slot.charm")} name={worn.name} value={amuletDesc(lang, worn.id)} /> : <Slot sub={t("menu.slot.charm")} name={t("menu.gear.empty")} value={charms.found.length ? t("menu.gear.noneWorn") : t("menu.gear.noneFound")} empty />}
               <Slot sub={t("menu.slot.health")} name={t("menu.gear.healthName")} value={s ? t("menu.gear.healthValue", { n: Math.ceil(s.hp), max: s.maxHp }) : "-"} />
             </div>
           )}
@@ -262,7 +263,7 @@ export default function PauseMenu({
                   return (
                     <li key={a.id} className={`charm${have ? "" : " missing"}${on ? " on" : ""}`}>
                       <b>{have ? a.name : t("menu.charms.missing")}</b>
-                      <span className="small dim">{have ? a.desc : a.level === def.id ? t("menu.charms.hereHidden") : t("menu.charms.elsewhere")}</span>
+                      <span className="small dim">{have ? amuletDesc(lang, a.id) : a.level === def.id ? t("menu.charms.hereHidden") : t("menu.charms.elsewhere")}</span>
                       {have && (
                         <button className="btn ghost sm" onClick={() => charms.wear(on ? null : a.id)}>
                           {on ? t("menu.charms.takeOff") : t("menu.charms.wear")}
@@ -278,8 +279,8 @@ export default function PauseMenu({
           {cur === "kitab" && kitab}
           {cur === "hikayat" && (
             <>
-              <h3>{def.name}</h3>
-              <p className="story">{def.story}</p>
+              <h3>{missionText(lang, def, "name") ?? def.name}</h3>
+              <p className="story">{missionText(lang, def, "story") ?? def.story}</p>
               {s && (
                 <p className="small">
                   {t("menu.hikayat.stats", { time: formatTime(s.time), down: s.guardsDown, total: s.guards, alerts: s.alerts })}

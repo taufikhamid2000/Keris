@@ -3,9 +3,9 @@
 import ChapterSelect from "./ChapterSelect";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, MapState, Phase } from "@/game/engine";
-import { TOOLS } from "@/game/tools";
+import { TOOLS, toolName } from "@/game/tools";
 import { isTouchDevice, pickQuality, qualityFromUrl } from "@/game/touch";
-import { LEVELS, initialLevel, type LevelDef } from "@/game/levels";
+import { LEVELS, initialLevel, missionText, type LevelDef } from "@/game/levels";
 import {
   checkpointFor,
   defaultSave,
@@ -41,7 +41,7 @@ import { PantunChoice, PantunLine } from "./PantunChoice";
 import { addPantun } from "@/game/pantun";
 import { TideBadge } from "./Tide";
 import { DuaPemainButton, KapitanHostPanel } from "./KapitanHost";
-import { CHANGE_NOTE, judge, recordJudgement, type Whisper } from "@/game/ghaib";
+import { changeNote, judge, recordJudgement, type Whisper } from "@/game/ghaib";
 
 const EMPTY: HudState = {
   meter: 0,
@@ -304,7 +304,7 @@ export default function GameClient() {
                 });
               }
               if ((p === "won" || p === "lost") && inst) {
-                const text = tellHikayat(inst.chronicle(), levelRef.current ?? lv, inst.stats());
+                const text = tellHikayat(inst.chronicle(), levelRef.current ?? lv, inst.stats(), store.get().settings.lang);
                 setTaleText(text);
                 // a loss is only kept when the mission has no tale yet, so it never replaces a winning one
                 if (p === "won" || !store.get().tales[missionId()]) store.update((d) => setTale(d, missionId(), text));
@@ -312,7 +312,7 @@ export default function GameClient() {
               if (p === "won" && inst) {
                 // Bisikan puteri: her verdict on how this mission was played, added to the save's restu
                 const d = store.get();
-                const w = judge(inst.ghaibTally(), d.puteri.restu, inst.levelDef.id, d.puteri.judged);
+                const w = judge(inst.ghaibTally(), d.puteri.restu, inst.levelDef.id, d.puteri.judged, d.settings.lang);
                 store.set(recordJudgement(d, w));
                 setWhisper(w);
               }
@@ -363,6 +363,10 @@ export default function GameClient() {
       delete window.__keris;
     };
   }, [touch, qualityPref, store]);
+
+  useEffect(() => {
+    game?.setLang(save.settings.lang);
+  }, [game, save.settings.lang]);
 
   useEffect(() => {
     game?.setSkills(withAmulet(skillMods(save.skills), save.amulet, save.amulets));
@@ -457,9 +461,9 @@ export default function GameClient() {
   // maps the player has been to (a mission record or explored ground); gates show only these by name
   const knownMaps = useMemo(() => {
     const out: Record<string, string> = {};
-    for (const l of LEVELS) if (save.missions[l.missionId] || save.explored[l.id]) out[l.id] = l.name;
+    for (const l of LEVELS) if (save.missions[l.missionId] || save.explored[l.id]) out[l.id] = missionText(save.settings.lang, l, "name") ?? l.name;
     return out;
-  }, [save.missions, save.explored]);
+  }, [save.missions, save.explored, save.settings.lang]);
   /** Pick a mission on the title screen: the engine swaps the map in place. */
   const pickLevel = (l: LevelDef) => {
     levelRef.current = l;
@@ -538,7 +542,7 @@ export default function GameClient() {
               {hud.eagle && <em className="gold">{t("hud.chip.eagle")}</em>}
               {!!hud.pantun?.disguise && <em className="gold">{t("hud.chip.disguise", { s: hud.pantun.disguise })}</em>}
               <em className="tool-chip">
-                {TOOLS.find((tool) => tool.id === hud.tool)?.name} x{hud.ammo[hud.tool]}
+                {toolName(lang, hud.tool)} x{hud.ammo[hud.tool]}
               </em>
             </div>
             {hud.semangat !== undefined && (hud.eagle || hud.semangat < 0.999) && (
@@ -568,7 +572,7 @@ export default function GameClient() {
           {hud.prompt && <div className="prompt">{touch ? trMsg(lang, hud.prompt).replace(/(^|·\s+)[A-Z]\s\s/g, "$1") : trMsg(lang, hud.prompt)}</div>}
           {hud.toast && <div className="toast">{trMsg(lang, hud.toast)}</div>}
           {hud.talk && <div className="talk">&ldquo;{hud.talk}&rdquo;</div>}
-          {hud.pantun?.line && !hud.pantun.choice && <PantunLine line={hud.pantun.line} />}
+          {hud.pantun?.line && !hud.pantun.choice && <PantunLine line={hud.pantun.line} lang={lang} />}
           {hud.wheel && (
             <div className="wheel" aria-label={t("hud.wheel.aria")}>
               {TOOLS.map((tool, i) => {
@@ -580,7 +584,7 @@ export default function GameClient() {
                     style={{ transform: `translate(${Math.sin(a) * 110}px, ${-Math.cos(a) * 110}px)` }}
                   >
                     <kbd>{i + 1}</kbd>
-                    <b>{tool.name}</b>
+                    <b>{toolName(lang, tool.id)}</b>
                     <span>x{hud.ammo[tool.id]}</span>
                   </div>
                 );
@@ -612,7 +616,7 @@ export default function GameClient() {
       )}
 
       {phase === "playing" && touch && <TouchControls game={game} hud={hud} lang={lang} />}
-      {phase === "playing" && hud.pantun?.choice && <PantunChoice view={hud.pantun.choice} game={game} />}
+      {phase === "playing" && hud.pantun?.choice && <PantunChoice view={hud.pantun.choice} game={game} lang={lang} />}
 
       {splash && (
         <div className="overlay splash" onPointerDown={dismissSplash} role="button" tabIndex={-1} aria-label={t("title.splash.aria")}>
@@ -637,7 +641,7 @@ export default function GameClient() {
             </div>
             {canContinue && (
               <button className="btn" onClick={() => continueLevel && begin(checkpointFor(save, continueLevel.missionId), continueLevel)} disabled={!game}>
-                {continueLevel === level ? t("title.continue") : t("title.continueNamed", { name: continueLevel?.name ?? "" })}
+                {continueLevel === level ? t("title.continue") : t("title.continueNamed", { name: continueLevel ? (missionText(lang, continueLevel, "name") ?? continueLevel.name) : "" })}
               </button>
             )}
             <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
@@ -668,16 +672,16 @@ export default function GameClient() {
                 <div className="missions">
                   {LEVELS.map((l) => (
                     <button key={l.id} className={`btn ghost${l === level ? " on" : ""}`} aria-pressed={l === level} onClick={() => pickLevel(l)} disabled={!game}>
-                      {l.name}
+                      {missionText(lang, l, "name") ?? l.name}
                       {save.missions[l.missionId]?.completed ? " ✓" : ""}
                     </button>
                   ))}
                 </div>
                 </ChapterSelect>
-                <h3>{level.name}</h3>
-                <p className="story">{level.story}</p>
+                <h3>{missionText(lang, level, "name") ?? level.name}</h3>
+                <p className="story">{missionText(lang, level, "story") ?? level.story}</p>
                 {savedHere && (
-                  <p className="dim small">{checkpointHere === "target" ? t("title.checkpoint", { label: level.checkpointLabel }) : t("title.checkpointStart")}</p>
+                  <p className="dim small">{checkpointHere === "target" ? t("title.checkpoint", { label: missionText(lang, level, "checkpoint") ?? level.checkpointLabel }) : t("title.checkpointStart")}</p>
                 )}
                 <Best m={mission} lang={lang} />
               </>
@@ -691,7 +695,7 @@ export default function GameClient() {
             {view === "kitab" && (
               <>
                 <h2>{t("title.kitab")}</h2>
-                <Kitab save={save} />
+                <Kitab save={save} lang={lang} />
               </>
             )}
             {view === "controls" && (
@@ -730,7 +734,7 @@ export default function GameClient() {
           controls={<Controls touch={touch} lang={lang} />}
           best={<Best m={mission} lang={lang} />}
           skills={skillTree}
-          kitab={<Kitab save={save} />}
+          kitab={<Kitab save={save} lang={lang} />}
           visited={save.kitab}
           known={knownMaps}
           places={save.kitab}
@@ -754,8 +758,8 @@ export default function GameClient() {
       {phase === "won" && (
         <div className="overlay">
           <div className="panel">
-            <h2>{(win?.text ?? level.win).title}</h2>
-            <p>{(win?.text ?? level.win).body}</p>
+            <h2>{win?.text?.title ?? missionText(lang, level, "winTitle") ?? level.win.title}</h2>
+            <p>{win?.text?.body ?? missionText(lang, level, "winBody") ?? level.win.body}</p>
             {win && (
               <p className={`best ${win.newBestTime || win.newBestRating ? "new" : ""}`}>
                 {t("hud.win.time", { time: formatTime(win.time), rating: rate(t, win.rating) })}
@@ -771,7 +775,7 @@ export default function GameClient() {
               <blockquote className={`bisikan ${whisper.mood}`}>
                 <span className="small">{t("hud.win.whisper")}</span>
                 <p>&ldquo;{whisper.line}&rdquo;</p>
-                {whisper.change && <p className="small">{CHANGE_NOTE[whisper.change]}</p>}
+                {whisper.change && <p className="small">{changeNote(lang, whisper.change)}</p>}
               </blockquote>
             )}
             <Best m={mission} lang={lang} />

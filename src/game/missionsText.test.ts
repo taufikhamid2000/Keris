@@ -24,6 +24,24 @@ describe("mission text", () => {
   });
 });
 
+describe("missionText coverage", () => {
+  const PROPER = ["kampung", "ledang", "gualanun", "kota", "penjara"];
+  const FIELDS = ["name", "story", "checkpoint", "winTitle", "winBody", "objective", "escape", "targetDown"] as const;
+  it("every mission level has non-empty text in both languages, and English names differ", () => {
+    for (const l of LEVELS) {
+      for (const f of FIELDS) {
+        for (const lang of ["ms", "en"] as const) {
+          const v = missionText(lang, l, f);
+          expect(typeof v, `${l.id}.${f}.${lang}`).toBe("string");
+          expect((v ?? "").length, `${l.id}.${f}.${lang}`).toBeGreaterThan(0);
+        }
+      }
+      // place names that are the same proper noun in both languages are exempt
+      if (!PROPER.includes(l.id)) expect(missionText("en", l, "name"), l.id).not.toBe(missionText("ms", l, "name"));
+    }
+  });
+});
+
 describe("gate labels", () => {
   it("every gate has both languages", () => {
     for (const list of Object.values(EXITS)) {

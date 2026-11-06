@@ -26,7 +26,7 @@ export interface MissionStats {
   bestRating: number | null;
 }
 
-import { DEFAULT_LANG, isLang, type Lang } from "./i18n";
+import { DEFAULT_LANG, isLang, t, type Lang } from "./i18n";
 
 export interface SaveSettings {
   quality: QualityPref;
@@ -91,10 +91,11 @@ export function stealthRating(alerts: number): number {
 
 export const RATING_NAMES: Record<number, string> = { 3: "Ghost", 2: "Shadow", 1: "Seen" };
 
-export function ratingLabel(r: number | null): string {
+/** "*** Ghost" (legacy English names); with `lang` the name comes from the dictionary (hud.rating.N: Hantu / Ghost, ...). */
+export function ratingLabel(r: number | null, lang?: Lang): string {
   if (r === null) return "-";
   const n = Math.max(1, Math.min(3, Math.round(r)));
-  return `${"*".repeat(n)} ${RATING_NAMES[n]}`;
+  return `${"*".repeat(n)} ${lang ? t(lang, `hud.rating.${n}`) : RATING_NAMES[n]}`;
 }
 
 export function formatTime(sec: number | null): string {

@@ -4,7 +4,7 @@ import { memo } from "react";
 import { AMULETS } from "@/game/amulets";
 import { charmLore, CHARM_META, missionLore, PLACES, placeText } from "@/game/kitab";
 import type { KitabKind, Sumber } from "@/game/kitab";
-import { LEVELS } from "@/game/levels";
+import { LEVELS, missionText } from "@/game/levels";
 import { ghaibPages } from "@/game/ghaib";
 import type { SaveData } from "@/game/save";
 import { pantunPages } from "@/game/pantun";
@@ -80,12 +80,13 @@ export default memo(function Kitab({ save, lang = "ms" }: { save: SaveData; lang
       text: charmLore(lang, a.id) ?? t(`amulet.${a.id}.desc`),
       kind: CHARM_META[a.id]?.kind,
       sumber: CHARM_META[a.id]?.sumber,
-      hint: level ? t("kitab.hint.charm", { level: level.name }) : t("kitab.hint.charmAny"),
+      hint: level ? t("kitab.hint.charm", { level: missionText(lang, level, "name") ?? level.name }) : t("kitab.hint.charmAny"),
     };
   });
   const tales: Page[] = LEVELS.map((l) => {
     const lore = missionLore(lang, l.id);
-    return { key: l.id, open: !!save.missions[l.missionId]?.completed, title: lore?.title ?? l.name, text: lore?.text ?? l.win.body, kind: lore?.kind, sumber: lore?.sumber, hint: t("kitab.hint.mission", { level: l.name }) };
+    const name = missionText(lang, l, "name") ?? l.name;
+    return { key: l.id, open: !!save.missions[l.missionId]?.completed, title: lore?.title ?? name, text: lore?.text ?? missionText(lang, l, "winBody") ?? l.win.body, kind: lore?.kind, sumber: lore?.sumber, hint: t("kitab.hint.mission", { level: name }) };
   });
   const pantun: Page[] = pantunPages(save.pantun, lang);
   const ghaib: Page[] = ghaibPages(save, lang);

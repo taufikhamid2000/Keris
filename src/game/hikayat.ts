@@ -7,7 +7,7 @@
 
 import type { ChronEvent, ChronicleData, KillHow } from "./chronicle";
 import { t as tr, type Lang, type Vars } from "./i18n";
-import type { LevelDef } from "./levels";
+import { missionText, type LevelDef } from "./levels";
 import { tx, variantKeys } from "./tx";
 
 /** The bits of RunStats the tale needs (kept structural so this module never imports the engine). */
@@ -34,11 +34,11 @@ function castFor(def: LevelDef, lang: Lang): Cast {
   const k = (part: string) => tx(lang, `hikayat.cast.${def.id}.${part}`, "");
   const who = k("who");
   if (who) return { who, deed: k("deed"), region: k("region"), exit: k("exit") };
-  const obj = def.text.objective;
+  const obj = missionText(lang, def, "objective") ?? def.text.objective;
   return {
     who: tr(lang, def.objective.kind === "steal" ? "hikayat.cast.default.who.steal" : "hikayat.cast.default.who.kill"),
     deed: obj.charAt(0).toLowerCase() + obj.slice(1),
-    region: def.name,
+    region: missionText(lang, def, "name") ?? def.name,
     exit: tr(lang, "hikayat.cast.default.exit"),
   };
 }

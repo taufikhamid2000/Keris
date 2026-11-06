@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import type { SaveData } from "@/game/save";
-import { BRANCHES, GHOST_POINTS, MISSION_POINTS, SKILLS, freePoints, skillStatus } from "@/game/skills";
+import { BRANCHES, GHOST_POINTS, MISSION_POINTS, SKILLS, branchName, branchSub, freePoints, skillDesc, skillName, skillStatus } from "@/game/skills";
 import { useT } from "./useT";
 
 /** Memoized: it only changes with the save, not with the HUD updates that re-render the game screen. */
@@ -23,7 +23,7 @@ export default memo(function SkillTree({ save, onLearn, onReset }: { save: SaveD
         {BRANCHES.map((b) => (
           <div key={b.id} className="branch">
             <h3>
-              {b.name} <span className="dim small">{t(`skills.branch.${b.id}`)}</span>
+              {branchName(save.settings.lang, b.id)} <span className="dim small">{branchSub(save.settings.lang, b.id)}</span>
             </h3>
             <p className="dim small known">{t("skills.known", { what: t(`skills.known.${b.id}`) })}</p>
             <ul>
@@ -31,8 +31,8 @@ export default memo(function SkillTree({ save, onLearn, onReset }: { save: SaveD
                 const st = skillStatus(save, k.id);
                 return (
                   <li key={k.id} className={`skill ${st}`}>
-                    <b>{k.name}</b>
-                    <span className="small">{k.desc}</span>
+                    <b>{skillName(save.settings.lang, k.id)}</b>
+                    <span className="small">{skillDesc(save.settings.lang, k.id)}</span>
                     {st === "learned" ? (
                       <span className="small gold">✓ {t("skills.learned")}</span>
                     ) : (

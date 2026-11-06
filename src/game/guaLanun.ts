@@ -32,8 +32,8 @@ const APPROACH: P[] = [[-24, 7], [-24, 18], [-14, 25], [-4, 31], [6, 36], [13, 4
 /** a blind side passage off the cleft: somewhere to wait out a patrol */
 const SPUR: P[] = [[-4, 31], [-14, 38], [-24, 43]];
 const HALF_WIDTH = 2.3;
-/** round pockets: the start glade, the guard chamber, the spur's end and three niches beside the cleft (u, z, radius) */
-const DISCS: [number, number, number][] = [[-24, 8, 4.5], [6, 38, 4.2], [-24, 43, 4.5], [-7, 25, 2.2], [13.5, 40, 2.2], [2, 58.5, 2.2]];
+/** round pockets: the start glade (and its mouth to the south, where a gate can stand), the guard chamber, the spur's end and three niches beside the cleft (u, z, radius) */
+const DISCS: [number, number, number][] = [[-24, 8, 4.5], [-24, 5, 4], [6, 38, 4.2], [-24, 43, 4.5], [-7, 25, 2.2], [13.5, 40, 2.2], [2, 58.5, 2.2]];
 /** the cavern is an ellipse, with a lobe to the north for the chief's ledge */
 const CAVERN = { u: 0.5, z: 88, a: 31.5, b: 29 };
 const LOBE = { minU: -22, maxU: -4, minZ: 100, maxZ: 116 };
@@ -188,7 +188,7 @@ export const GUA_LANUN: LevelDef = {
   ],
   cliffs: [...carveWalls(), LEDGE, SHELF],
   rocks: keep(scatterRocks()),
-  trees: keep([{ x: X(-26.8), z: 5, s: 0.9, r: 0.4 }, { x: X(-21.4), z: 9.2, s: 0.8, r: 2.1 }]),
+  trees: keep([{ x: X(-28.4), z: 6.2, s: 0.9, r: 0.4 }, { x: X(-21.4), z: 9.2, s: 0.8, r: 2.1 }]),
   ferns: keep(
     [[-26, 12], [-22.5, 13], [-26, 16], [-22.5, 6], [-27, 9], [-25.5, 21], [-9, 28.5], [-3, 31.5], [8, 35], [-16, 38], [10, 47], [-12, 58]].map(([u, z], i) => ({
       x: X(u),

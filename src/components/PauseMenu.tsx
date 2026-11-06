@@ -6,6 +6,7 @@ import { AMULETS, amuletById, amuletForLevel } from "@/game/amulets";
 import type { LevelDef, Rect } from "@/game/levels";
 import { formatTime } from "@/game/save";
 import { TideNote } from "./Tide";
+import { MapLegend, MapObjectives } from "./MapSide";
 
 export const PAUSE_TABS = [
   { id: "peta", name: "Peta", sub: "Map" },
@@ -121,6 +122,7 @@ export default function PauseMenu({
   actions,
   skills,
   kitab,
+  places = [],
   charms,
   lastTale,
 }: {
@@ -134,6 +136,8 @@ export default function PauseMenu({
   actions: ReactNode;
   skills: ReactNode;
   kitab: ReactNode;
+  /** Kitab place ids written so far (save.kitab) */
+  places?: string[];
   /** tangkal found (ids) and the one worn */
   charms: { found: string[]; worn: string | null; wear: (id: string | null) => void };
   /** the hikayat told at the end of this mission's last attempt, if any */
@@ -164,11 +168,13 @@ export default function PauseMenu({
         <div role="tabpanel">
           {cur === "peta" && (
             <>
-              <MapView def={def} s={s} />
-              <p className="legend small dim">
-                <i className="k-you" /> You <i className="k-obj" /> {def.objective.kind === "steal" ? "Item" : "Target"} <i className="k-exit" /> Escape{" "}
-                <i className="k-hide" /> Hiding spot <i className="k-fog" /> Not explored yet
-              </p>
+              <div className="map-tab">
+                <MapLegend def={def} />
+                <div className="map-mid">
+                  <MapView def={def} s={s} />
+                </div>
+                <MapObjectives def={def} s={s} places={places} />
+              </div>
               {s && <TideNote levelId={def.id} time={s.time} />}
             </>
           )}

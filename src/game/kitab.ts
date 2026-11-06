@@ -9,6 +9,7 @@ import type { LevelDef } from "./levels";
 import { MASJID_COURT, MASJID_POND } from "./masjid";
 import { PENJARA_BLOCK, PENJARA_YARD } from "./levels/penjara";
 import { GUA_LANUN, GUA_LANUN_LORE, GUA_LANUN_PLACES } from "./guaLanun";
+import { KEEP, KOTA_WALLS, KOTA_Z0 } from "./kota";
 
 export interface PlaceDef {
   id: string;
@@ -83,7 +84,7 @@ export const PLACES: PlaceDef[] = [
     title: "Gunung Ledang",
     hint: "The mountain to the north",
     text: "The mountain of the legend of its puteri, who is said to have set a sultan impossible gifts as her bride price. Its ledges climb in tiers into the mist.",
-    at: (_x, _y, z) => z >= JUNGLE_Z1,
+    at: (_x, _y, z) => z >= JUNGLE_Z1 && z < KOTA_Z0 - 40,
   },
   {
     id: "kolam",
@@ -164,6 +165,39 @@ MISSION_LORE.masjid = {
 };
 
 MISSION_LORE[GUA_LANUN.id] = GUA_LANUN_LORE;
+
+// Kota Batu (kota.ts), appended after the shared lists so the missions merge cleanly. Its map lies far north of the
+// rest (z from 293), so the Gunung Ledang place above stops short of it.
+PLACES.push(
+  {
+    id: "kota-bukit",
+    level: "kota",
+    title: "The rocks below the Kota",
+    hint: "Under the fortress walls",
+    text: "A tumble of rock and thorn running up to the west wall. The sentries watch the road; they have never learned to watch the stones.",
+    at: (x, _y, z) => z >= KOTA_Z0 + 74 || (z >= KOTA_Z0 + 8 && Math.abs(x) > 31.5),
+  },
+  {
+    id: "kota-halaman",
+    level: "kota",
+    title: "The Kota courtyard",
+    hint: "Inside the fortress walls",
+    text: "A well, a barracks that never sleeps, an armoury, and a keep three storeys high. Everything inside the walls looks outward, and no one thinks to look at the roofs.",
+    at: (x, _y, z) => x > KOTA_WALLS.minX && x < KOTA_WALLS.maxX && z > KOTA_WALLS.minZ && z < KOTA_WALLS.maxZ,
+  },
+  {
+    id: "kota-kubu",
+    level: "kota",
+    title: "The keep roof",
+    hint: "The top of the keep",
+    text: "A flat roof under the stars and a table with the council's map, weighted down by a dagger and a lantern. From here the sea wall is one jump and the jetty one long fall.",
+    at: (x, y, z) => y >= 9 && Math.hypot(x - KEEP.x, z - KEEP.z) <= 6,
+  },
+);
+MISSION_LORE.kota = {
+  title: "The war map",
+  text: "The map reached the elder wrapped in wet cloth. They say the Capitão-mor counted the walls twice that night, and never once looked at the sea.",
+};
 
 const placeIds = new Set(PLACES.map((p) => p.id));
 export const placeById = (id: string) => PLACES.find((p) => p.id === id) ?? null;

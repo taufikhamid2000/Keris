@@ -95,3 +95,16 @@ export const barkLines = (levelId: string, kind: BarkKind): string[] => {
   if (own) return (kind === "idle" ? own.idle : own[kind]) ?? BARKS[kind as Exclude<BarkKind, "idle">];
   return kind === "idle" ? idleLines(levelId) : BARKS[kind];
 };
+// Kota Batu (kota.ts): officers and sentries of the stone fort, more formal and more tense than the field patrols.
+IDLE_LEVEL.kota = [
+  "Orders of the Capitão-mor: the gate is barred at the evening bell.",
+  "Double the watch on the north wall tonight.",
+  "The council sits in the keep until the lamps burn low. Let nothing disturb it.",
+  "Sentinel, report. Anything on the rocks?",
+  "A Malay was seen by the west crag at dusk. Watch the stones, not only the road.",
+  "They say a postern in the west wall was once left unbarred. Check it again.",
+  "No one climbs to the keep roof without the Capitão's seal.",
+  "The Governor wants a full count of the guns by morning.",
+  "If the war map is lost, every man on this wall will answer for it.",
+  "Hold your post. The relief comes at the third bell.",
+];

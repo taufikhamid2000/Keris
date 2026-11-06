@@ -5,6 +5,7 @@ import type { WayangDef } from "./wayang";
 import { TIDE_HOUSES } from "./tide";
 import { PENJARA } from "./levels/penjara";
 import { GUA_LANUN } from "./guaLanun";
+import { KOTA } from "./kota";
 
 export interface HouseDef {
   x: number;
@@ -807,3 +808,6 @@ export function initialLevel(search: string, checkpointMission: string | null): 
   if (new URLSearchParams(search).has("level")) return levelFromSearch(search);
   return LEVELS.find((l) => l.missionId === checkpointMission) ?? LEVELS[0];
 }
+
+// Kota Batu, the climax: its own map in kota.ts, appended here so the mission list merges cleanly.
+LEVELS.push(KOTA);

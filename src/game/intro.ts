@@ -1,32 +1,38 @@
 // Intro cutscene: pure timeline, caption sequencing, camera path and skip handling. No DOM or three.js,
 // so everything is unit tested in intro.test.ts. The engine drives the camera from cameraAt(); the UI shows captionAt().
 
+import { t as tr, type Lang } from "./i18n";
+import { ms } from "./strings/missions";
+
 export type Vec3 = [number, number, number];
 
 export interface Caption {
   start: number;
   end: number;
+  /** Malay text (the source); captionAt() looks the key up in the chosen language */
   text: string;
+  /** dictionary key, intro.N (strings/missions.ts) */
+  key: string;
 }
 
 /** Full version: a slow fly-over of the harbour and town at dusk, about 22 seconds. */
 export const INTRO_DURATION = 22;
 export const INTRO_CAPTIONS: Caption[] = [
-  { start: 0.8, end: 4.6, text: "Malacca, July 1511." },
-  { start: 5.4, end: 9.6, text: "A Portuguese fleet lies in the roads." },
-  { start: 10.4, end: 14.8, text: "Their battery commands the bridge, and its guns may turn on the town." },
-  { start: 15.4, end: 18.8, text: "The elder Hang Tuah has chosen you, Pendekar." },
-  { start: 19.0, end: 21.2, text: "Silence the Kapitan. Leave by the jetty." },
+  { start: 0.8, end: 4.6, key: "intro.1", text: ms["intro.1"] },
+  { start: 5.4, end: 9.6, key: "intro.2", text: ms["intro.2"] },
+  { start: 10.4, end: 14.8, key: "intro.3", text: ms["intro.3"] },
+  { start: 15.4, end: 18.8, key: "intro.4", text: ms["intro.4"] },
+  { start: 19.0, end: 21.2, key: "intro.5", text: ms["intro.5"] },
 ];
 
 /** prefers-reduced-motion version: a still view with the same captions, shorter, fading in and out. */
 export const REDUCED_DURATION = 12;
 export const REDUCED_CAPTIONS: Caption[] = [
-  { start: 0.6, end: 2.8, text: "Malacca, July 1511." },
-  { start: 2.8, end: 5.0, text: "A Portuguese fleet lies in the roads." },
-  { start: 5.0, end: 7.4, text: "Their battery commands the bridge, and its guns may turn on the town." },
-  { start: 7.4, end: 9.6, text: "The elder Hang Tuah has chosen you, Pendekar." },
-  { start: 9.6, end: 11.6, text: "Silence the Kapitan. Leave by the jetty." },
+  { start: 0.6, end: 2.8, key: "intro.1", text: ms["intro.1"] },
+  { start: 2.8, end: 5.0, key: "intro.2", text: ms["intro.2"] },
+  { start: 5.0, end: 7.4, key: "intro.3", text: ms["intro.3"] },
+  { start: 7.4, end: 9.6, key: "intro.4", text: ms["intro.4"] },
+  { start: 9.6, end: 11.6, key: "intro.5", text: ms["intro.5"] },
 ];
 
 /** seconds a caption takes to fade in and out */
@@ -49,14 +55,14 @@ export interface CaptionView {
 }
 
 /** The caption to show at time t with its fade opacity, or null between captions. */
-export function captionAt(t: number, reduced = false): CaptionView | null {
+export function captionAt(t: number, reduced = false, lang: Lang = "ms"): CaptionView | null {
   const caps = introCaptions(reduced);
   for (let i = 0; i < caps.length; i++) {
     const c = caps[i];
     if (t < c.start || t >= c.end) continue;
     const fade = Math.min(CAPTION_FADE, (c.end - c.start) / 2);
     const o = Math.min((t - c.start) / fade, (c.end - t) / fade, 1);
-    return { index: i, text: c.text, opacity: Math.max(0, o) };
+    return { index: i, text: tr(lang, c.key), opacity: Math.max(0, o) };
   }
   return null;
 }

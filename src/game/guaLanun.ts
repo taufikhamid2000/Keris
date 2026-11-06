@@ -14,6 +14,7 @@
 //   z   3  |  start glade                     |
 //          +----------------------------------+
 import type { PlaceDef } from "./kitab";
+import { mt } from "./strings/missions";
 import type { GuardDef, LevelDef, Placed, Rect } from "./levels";
 
 /** x of the cave's local origin */
@@ -167,7 +168,7 @@ const GUARDS: GuardDef[] = [
 
 export const GUA_LANUN: LevelDef = {
   id: "gualanun",
-  name: "Gua Lanun",
+  name: mt("gualanun", "name"),
   missionId: "gua-lanun",
   seed: 1405,
   shoreZ: -31,
@@ -229,21 +230,17 @@ export const GUA_LANUN: LevelDef = {
   start: at([-24, 6]),
   exit: at([23, 97]),
   bounds: { minX: X(-33), maxX: X(33), minZ: 3, maxZ: 117, jettyZ: -500, jettyHalf: 1.1 },
-  story:
-    "Lanun, sea-raiders out of the Riau waters, took the Sultan's tribute prahu off Tanjung Tuan and ran it into a cave they call Gua Lanun. " +
-    "The gold casket of Pahang's tribute sits on their chief's ledge, and they sail with the next tide. Follow the cleft in the rock, " +
-    "slip past the sentries into the cavern, take the casket from under the chief's eye, and leave by the water gate on the lagoon's east shore. " +
-    "Only their torches give light in here. Keep to the dark between them.",
-  checkpointLabel: "the casket is taken",
+  story: mt("gualanun", "story"),
+  checkpointLabel: mt("gualanun", "checkpoint"),
   win: {
-    title: "The tribute is recovered",
-    body: "You reached the water gate with the Sultan's casket. By the time the lanun count their loss, the tide has closed the cave behind you.",
+    title: mt("gualanun", "winTitle"),
+    body: mt("gualanun", "winBody"),
   },
   text: {
-    objective: "Take the Sultan's gold casket from the lanun chief's ledge",
-    escape: "Slip out by the water gate on the lagoon's east shore",
-    targetDown: "You have the casket. Out by the water gate.",
-    take: "Take the Sultan's gold casket",
+    objective: mt("gualanun", "objective"),
+    escape: mt("gualanun", "escape"),
+    targetDown: mt("gualanun", "targetDown"),
+    take: mt("gualanun", "take"),
   },
 };
 

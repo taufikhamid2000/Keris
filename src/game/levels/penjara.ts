@@ -3,6 +3,7 @@
 // terraces (cliffs) laid as corridors and cells, the "sunken yard" is a walled court with a low step down to the gate,
 // the drain is a deck over a river. Plain data, no three.js. Registered in LEVELS (levels.ts).
 import type { GuardDef, LevelDef, Rect } from "../levels";
+import { mt } from "../strings/missions";
 import type { Vec2 } from "../logic";
 
 /** One character of MAP is one T x T metre tile; the grid is COLS wide (x, west to east) and ROWS deep (z, north to south). */
@@ -152,7 +153,7 @@ const CAPTIVE = at("K");
 
 export const PENJARA: LevelDef = {
   id: "penjara",
-  name: "Penjara",
+  name: mt("penjara", "name"),
   missionId: "penjara-kota",
   seed: 4107,
   // the grid lies on dry land; the sea is far off to the south, beyond the walls
@@ -189,21 +190,16 @@ export const PENJARA: LevelDef = {
   start: START,
   exit: EXIT,
   bounds: { minX: X0 + 0.6, maxX: X0 + COLS * T - 0.6, minZ: Z0 - ROWS * T + T + 0.1, maxZ: tileZ(1) + T / 2 - 0.1, jettyZ: -38, jettyHalf: 1.1 },
-  story:
-    "Pak Long Hasan, the old boatwright who built half the sultan's prahu, was taken in the night. He knows every channel of the " +
-    "harbour, and the Portuguese mean to have it out of him in the penjara under the fort: damp stone, straw, a soldier at every " +
-    "corner and a jailer who never takes his keys off. Drop into the yard, go down by the gate or the jailer's back door, find the " +
-    "deepest cell and free him. Behind it a rusted grating opens on the old drain that empties into the river. The lanterns are few " +
-    "down there. Keep to the dark.",
-  checkpointLabel: "Pak Long Hasan is free",
+  story: mt("penjara", "story"),
+  checkpointLabel: mt("penjara", "checkpoint"),
   win: {
-    title: "The boatwright is free",
-    body: "The drain took you out into the river, and the river took the trail. Pak Long Hasan is away under a sampan's mat, and the penjara has one cell empty.",
+    title: mt("penjara", "winTitle"),
+    body: mt("penjara", "winBody"),
   },
   text: {
-    objective: "Find Pak Long Hasan in the deepest cell of the penjara",
-    escape: "Out through the grating and the drain to the river",
-    targetDown: "The boatwright is free. Out by the drain to the river.",
-    take: "Unlock the cell and free Pak Long Hasan",
+    objective: mt("penjara", "objective"),
+    escape: mt("penjara", "escape"),
+    targetDown: mt("penjara", "targetDown"),
+    take: mt("penjara", "take"),
   },
 };

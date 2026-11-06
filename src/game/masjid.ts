@@ -6,6 +6,7 @@
 // takedown is made, and the guards' navigation never enters. The patrols keep to the streets outside, so all
 // the tension is in the approach and in the way out. The map shares the harbour's frame (sea shore at z = -31).
 import type { GuardDef, HouseDef, LevelDef, Rect } from "./levels";
+import { mt } from "./strings/missions";
 
 /** The compound inside its low wall: courtyard, hall, beduk house and pond. */
 export const MASJID_COURT: Rect = { x: 0, z: 8, w: 24, d: 24 };
@@ -72,7 +73,7 @@ const GUARDS: GuardDef[] = [
  */
 export const MASJID: LevelDef = {
   id: "masjid",
-  name: "Masjid: The Warkah",
+  name: mt("masjid", "name"),
   missionId: "masjid-warkah",
   seed: 4107,
   shoreZ: -31,
@@ -134,21 +135,16 @@ export const MASJID: LevelDef = {
   start: { x: -31.5, z: 31.5 },
   exit: { x: 0, z: -36 },
   bounds: { minX: -33.6, maxX: 33.6, minZ: -37.4, maxZ: 34.6, jettyZ: -31, jettyHalf: 1.1 },
-  story:
-    "The Portuguese are searching every messenger who comes into the town. An old penjaga at the masjid has kept a sealed warkah " +
-    "for the Sultan's envoy, and he has left it wrapped in cloth beneath the floor of the beduk house, where the drum is kept. " +
-    "Cross the town at dusk, past the patrols in the lanes, and take it up. The soldiers will not set foot in the compound, and " +
-    "neither will any blade of yours: this ground is for peace. Then leave as quietly as you came, and give the warkah to the " +
-    "envoy's boatman at the jetty. If a single guard raises the alarm, the letter is lost.",
-  checkpointLabel: "the warkah is in hand",
+  story: mt("masjid", "story"),
+  checkpointLabel: mt("masjid", "checkpoint"),
   win: {
-    title: "The warkah is delivered",
-    body: "The boatman pushed off with the letter wrapped in oilcloth, and the town never learned that anything had passed through the masjid's yard.",
+    title: mt("masjid", "winTitle"),
+    body: mt("masjid", "winBody"),
   },
   text: {
-    objective: "Find the warkah beneath the beduk house, inside the masjid's wall",
-    escape: "Carry the warkah to the jetty unseen",
-    targetDown: "You have the warkah. Leave the grounds quietly and reach the jetty unseen.",
-    take: "Take up the sealed warkah",
+    objective: mt("masjid", "objective"),
+    escape: mt("masjid", "escape"),
+    targetDown: mt("masjid", "targetDown"),
+    take: mt("masjid", "take"),
   },
 };

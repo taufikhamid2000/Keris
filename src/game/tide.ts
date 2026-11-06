@@ -10,6 +10,8 @@
 //   house on the north bank, for one) turns to wading and swimming.
 // - reach: at high water a swimmer floats higher, and can climb a little higher onto decks and hulls.
 
+import { t, type Lang } from "./i18n";
+
 export const TIDE = {
   /** seconds of play for a full cycle, low to low */
   period: 270,
@@ -151,11 +153,26 @@ export function tideClock(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** The name of a tide state in `lang` (Malay by default). */
+export function tideName(state: TideState, lang: Lang = "ms"): string {
+  return t(lang, `tide.${state}`);
+}
+
+/** The toast when the tide reaches low or high water (the engine shows it on arriving in a tidal map). */
+export function tideToast(state: "surut" | "pasang", lang: Lang = "ms"): string {
+  return t(lang, `tide.toast.${state}`, { state: tideName(state, lang) });
+}
+
 /** One line for the pause menu: where the tide stands and when it turns. */
-export function tideLine(r: TideReading): string {
-  const n = TIDE_NAMES[r.state];
-  const next = r.rising ? "turns to ebb" : "turns to flood";
-  const lvl = `${r.off >= 0 ? "+" : "−"}${Math.abs(r.off).toFixed(1)} m`;
-  const mud = mudShare(r.k) > 0.3 ? " · the mudflats are bare" : floodShare(r.k) > 0.3 ? " · the river is over its banks" : "";
-  return `Pasang surut: ${n.name} (${n.en}, ${lvl})${mud} · ${next} in ${tideClock(r.toTurn)}`;
+export function tideLine(r: TideReading, lang: Lang = "ms"): string {
+  const lvl = `${r.off >= 0 ? "+" : "\u2212"}${Math.abs(r.off).toFixed(1)} m`;
+  const mud = mudShare(r.k) > 0.3 ? t(lang, "tide.mudBare") : floodShare(r.k) > 0.3 ? t(lang, "tide.overBanks") : "";
+  return t(lang, "tide.line", {
+    heading: t(lang, "tide.heading"),
+    state: tideName(r.state, lang),
+    level: lvl,
+    extra: mud ? ` \u00b7 ${mud}` : "",
+    next: t(lang, r.rising ? "tide.toEbb" : "tide.toFlood"),
+    clock: tideClock(r.toTurn),
+  });
 }

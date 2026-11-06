@@ -1,6 +1,8 @@
 // Level definitions: plain data, no three.js. buildLevel() in level.ts turns one into meshes and
 // colliders, so a new mission is a new definition built from the same kit of parts.
 import type { Vec2 } from "./logic";
+import { mt } from "./strings/missions";
+import { DICTS, t, type Lang } from "./i18n";
 import type { WayangDef } from "./wayang";
 import { TIDE_HOUSES } from "./tide";
 import { PENJARA } from "./levels/penjara";
@@ -578,7 +580,7 @@ const CLERK_POST: Vec2[] = north([{ x: -22, z: -7.5 }, { x: -14, z: -7.5 }]);
 export const HARBOUR: LevelDef = {
   ...WORLD,
   id: "harbour",
-  name: "The Bridge Battery",
+  name: mt("harbour", "name"),
   missionId: "malacca-1511",
   intro: true,
   guards: [
@@ -590,22 +592,19 @@ export const HARBOUR: LevelDef = {
   objective: { kind: "kill" },
   start: { x: -31.5, z: 31.5 },
   exit: { x: 0, z: -36 },
-  story:
-    "The Portuguese fleet lies in the roads and their battery commands the bridge. The elder Hang Tuah has chosen you, Pendekar, to " +
-    "silence the Kapitan before the guns are turned on the town. Move over the atap roofs and through the kampung lanes, strike once with " +
-    "your keris, and slip out by the jetty.",
-  checkpointLabel: "the Kapitan is down",
+  story: mt("harbour", "story"),
+  checkpointLabel: mt("harbour", "checkpoint"),
   win: {
-    title: "The Kapitan is silenced",
-    body: "You reached the jetty and vanished into the harbour. The battery will wait for a new commander.",
+    title: mt("harbour", "winTitle"),
+    body: mt("harbour", "winBody"),
   },
   text: {
-    objective: "Find and silence the Kapitan of the bridge battery",
-    escape: "Slip away to the jetty",
-    targetDown: "The Kapitan is down. Reach the jetty.",
-    targetSpotted: "The Kapitan has seen you!",
-    strike: "Strike the Kapitan with the keris",
-    leap: "Leap down on the Kapitan",
+    objective: mt("harbour", "objective"),
+    escape: mt("harbour", "escape"),
+    targetDown: mt("harbour", "targetDown"),
+    targetSpotted: mt("harbour", "targetSpotted"),
+    strike: mt("harbour", "strike"),
+    leap: mt("harbour", "leap"),
   },
 };
 
@@ -620,28 +619,25 @@ const RIVER_EXIT: Vec2 = { x: 0, z: -36 + KAMPUNG_DZ };
 export const KAMPUNG: LevelDef = {
   ...WORLD,
   id: "kampung",
-  name: "Kampung Hulu",
+  name: mt("kampung", "name"),
   missionId: "kampung-hulu",
   guards: [...KAMPUNG_GUARDS, { waypoints: CLERK_POST, isTarget: true }, ...RIVER_GUARDS, ...HARBOUR_GUARDS],
   objective: { kind: "kill" },
   start: { x: 31.5, z: 31.5 + KAMPUNG_DZ },
   exit: RIVER_EXIT,
-  story:
-    "Someone sold the battery's plans to the Portuguese, and the trail leads to a harbour clerk hiding in the upper kampung. " +
-    "He paces in front of the penghulu's hall, guarded and nervous. Cross the rooftops from the north-east gate, deal with him before " +
-    "he can sell anything more, and leave by the river jetty.",
-  checkpointLabel: "the clerk is silenced",
+  story: mt("kampung", "story"),
+  checkpointLabel: mt("kampung", "checkpoint"),
   win: {
-    title: "The clerk is silenced",
-    body: "You slipped out by the river jetty before the kampung woke. Whatever he knew stays in the upper kampung.",
+    title: mt("kampung", "winTitle"),
+    body: mt("kampung", "winBody"),
   },
   text: {
-    objective: "Find the turncoat clerk who sold the battery plans",
-    escape: "Slip away to the river jetty",
-    targetDown: "The clerk is silenced. Reach the river jetty.",
-    targetSpotted: "The clerk has seen you!",
-    strike: "Strike the clerk with the keris",
-    leap: "Leap down on the clerk",
+    objective: mt("kampung", "objective"),
+    escape: mt("kampung", "escape"),
+    targetDown: mt("kampung", "targetDown"),
+    targetSpotted: mt("kampung", "targetSpotted"),
+    strike: mt("kampung", "strike"),
+    leap: mt("kampung", "leap"),
   },
 };
 
@@ -649,27 +645,24 @@ export const KAMPUNG: LevelDef = {
 export const PLANS: LevelDef = {
   ...KAMPUNG,
   id: "plans",
-  name: "The Battery Plans",
+  name: mt("plans", "name"),
   missionId: "kampung-plans",
   // the clerk's post is kept by an ordinary guard now
   guards: KAMPUNG.guards.map((g) => ({ waypoints: g.waypoints })),
   // a chest in the crawl space under the hall's back corner, clear of the solid upper tier
   objective: { kind: "steal", at: { x: -23, y: 0, z: -18 + KAMPUNG_DZ } },
   undetected: true,
-  story:
-    "The clerk is dead, but the battery plans he sold were never found. Word is he hid them in a chest under the penghulu's hall " +
-    "before the end. Crawl in beneath the floor, take them back, and leave by the river jetty. No one may know you were here: " +
-    "if a single guard raises the alarm, the mission fails.",
-  checkpointLabel: "the plans are taken",
+  story: mt("plans", "story"),
+  checkpointLabel: mt("plans", "checkpoint"),
   win: {
-    title: "The plans are recovered",
-    body: "The chest under the hall is empty and no one saw who emptied it. The battery's secrets are safe again.",
+    title: mt("plans", "winTitle"),
+    body: mt("plans", "winBody"),
   },
   text: {
-    objective: "Find the chest hidden under the penghulu's hall",
-    escape: "Carry the plans to the river jetty unseen",
-    targetDown: "You have the plans. Reach the river jetty unseen.",
-    take: "Take the battery plans",
+    objective: mt("plans", "objective"),
+    escape: mt("plans", "escape"),
+    targetDown: mt("plans", "targetDown"),
+    take: mt("plans", "take"),
   },
 };
 
@@ -685,28 +678,25 @@ const JUNGLE_GUARDS: GuardDef[] = [
 export const JUNGLE_CAMP: LevelDef = {
   ...WORLD,
   id: "jungle",
-  name: "The Jungle Camp",
+  name: mt("jungle", "name"),
   missionId: "hutan-camp",
   guards: [...JUNGLE_GUARDS, { waypoints: [{ x: -1, z: 144.5 }, { x: 5, z: 144.5 }], isTarget: true }, ...KAMPUNG_GUARDS],
   objective: { kind: "kill" },
   start: { x: 31, z: 114.5 },
   exit: RIVER_EXIT,
-  story:
-    "A Portuguese scouting party has made camp in the hutan north of Kampung Hulu, mapping the jungle trails to take Malacca from behind. " +
-    "Slip through the trees from the north-east gate, silence their captain in his camp, then get back through the kampung to the " +
-    "river jetty before the scouts raise the alarm. A horse waits by the gate.",
-  checkpointLabel: "the scout captain is down",
+  story: mt("jungle", "story"),
+  checkpointLabel: mt("jungle", "checkpoint"),
   win: {
-    title: "The scouts are leaderless",
-    body: "Their captain lies in the clearing and his maps of the trails went with you. The hutan keeps Malacca's back door shut.",
+    title: mt("jungle", "winTitle"),
+    body: mt("jungle", "winBody"),
   },
   text: {
-    objective: "Find the scout captain in the jungle camp",
-    escape: "Get back to the river jetty",
-    targetDown: "The captain is down. Back through the kampung to the river jetty.",
-    targetSpotted: "The captain has seen you!",
-    strike: "Strike the captain with the keris",
-    leap: "Leap down on the captain",
+    objective: mt("jungle", "objective"),
+    escape: mt("jungle", "escape"),
+    targetDown: mt("jungle", "targetDown"),
+    targetSpotted: mt("jungle", "targetSpotted"),
+    strike: mt("jungle", "strike"),
+    leap: mt("jungle", "leap"),
   },
 };
 
@@ -726,27 +716,23 @@ const LEDANG_GUARDS: GuardDef[] = [
 export const LEDANG: LevelDef = {
   ...WORLD,
   id: "ledang",
-  name: "Gunung Ledang",
+  name: mt("ledang", "name"),
   missionId: "gunung-ledang",
   guards: LEDANG_GUARDS,
   objective: { kind: "steal", at: { x: SUMMIT.x, y: SUMMIT.y + 0.9, z: SUMMIT.z } },
   start: { x: -25, z: 167.5 },
   exit: { x: POOL.x, z: POOL.z - POOL.d / 2 + 0.6 },
-  story:
-    "Portuguese soldiers have climbed Gunung Ledang, the mountain of the legend of its puteri, and set a watch on every ledge. " +
-    "At the shrine on the summit they hold the golden tepak sireh, the betel box left there as an offering. Climb the mountain " +
-    "by ledge or by stair, take it back from the altar, and get down to the landing in the pool below the falls. The mist " +
-    "hides you as you climb; it hides them too.",
-  checkpointLabel: "the tepak sireh is taken",
+  story: mt("ledang", "story"),
+  checkpointLabel: mt("ledang", "checkpoint"),
   win: {
-    title: "The offering is returned",
-    body: "The golden tepak sireh is back in Malay hands, and the watch on Gunung Ledang never saw who took it.",
+    title: mt("ledang", "winTitle"),
+    body: mt("ledang", "winBody"),
   },
   text: {
-    objective: "Climb to the summit shrine and take the tepak sireh",
-    escape: "Get down to the landing in the pool below the falls",
-    targetDown: "You have the tepak sireh. Down to the pool below the falls.",
-    take: "Take the golden tepak sireh",
+    objective: mt("ledang", "objective"),
+    escape: mt("ledang", "escape"),
+    targetDown: mt("ledang", "targetDown"),
+    take: mt("ledang", "take"),
   },
 };
 
@@ -757,7 +743,7 @@ export const LEDANG: LevelDef = {
 export const WAYANG: LevelDef = {
   ...WORLD,
   id: "wayang",
-  name: "Wayang: The Battery Retold",
+  name: mt("wayang", "name"),
   missionId: "wayang-kulit",
   guards: [...HARBOUR_GUARDS, { waypoints: [{ x: -2.4, z: 5.8 }, { x: 2.4, z: 5.8 }], isTarget: true }],
   objective: { kind: "kill" },
@@ -771,22 +757,19 @@ export const WAYANG: LevelDef = {
     ],
     r: 6,
   },
-  story:
-    "Night in the kampung, and the dalang has lit the blencong behind the kelir. Tonight he tells the Hikayat of the Bridge Battery " +
-    "again, with you as his Pendekar. Keep out of the lamplight: so close to the flame your shadow grows huge on the screen, and the " +
-    "guards watch the screen too. How he ends the tale depends on how you play it.",
-  checkpointLabel: "the Kapitan's puppet is down",
+  story: mt("wayang", "story"),
+  checkpointLabel: mt("wayang", "checkpoint"),
   win: {
-    title: "The tale is told",
-    body: "The dalang lays the puppets down and the blencong burns low.",
+    title: mt("wayang", "winTitle"),
+    body: mt("wayang", "winBody"),
   },
   text: {
-    objective: "Silence the Kapitan's puppet by the well",
-    escape: "Slip away to the jetty before the lamp burns low",
-    targetDown: "The Kapitan's puppet falls. Reach the jetty.",
-    targetSpotted: "The Kapitan has seen your shadow!",
-    strike: "Strike the Kapitan with the keris",
-    leap: "Leap down on the Kapitan",
+    objective: mt("wayang", "objective"),
+    escape: mt("wayang", "escape"),
+    targetDown: mt("wayang", "targetDown"),
+    targetSpotted: mt("wayang", "targetSpotted"),
+    strike: mt("wayang", "strike"),
+    leap: mt("wayang", "leap"),
   },
 };
 
@@ -811,3 +794,24 @@ export function initialLevel(search: string, checkpointMission: string | null): 
 
 // Kota Batu, the climax: its own map in kota.ts, appended here so the mission list merges cleanly.
 LEVELS.push(KOTA);
+
+/** The user-facing fields of a level that have a translation (keys mission.<levelId>.<field>). */
+export type MissionField =
+  | "name"
+  | "story"
+  | "checkpoint"
+  | "winTitle"
+  | "winBody"
+  | "objective"
+  | "escape"
+  | "targetDown"
+  | "targetSpotted"
+  | "strike"
+  | "leap"
+  | "take";
+
+/** A level's text in `lang`; undefined for optional fields the level does not have (e.g. leap on a steal mission). */
+export function missionText(lang: Lang, level: string | { id: string }, field: MissionField): string | undefined {
+  const key = `mission.${typeof level === "string" ? level : level.id}.${field}`;
+  return key in DICTS.ms ? t(lang, key) : undefined;
+}

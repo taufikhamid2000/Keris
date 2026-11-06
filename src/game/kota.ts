@@ -18,6 +18,7 @@
 // collapsed stretch in the east. Clever: the sally port in the west wall (z 19..21), hidden behind a bush and a haystack.
 
 import type { GuardDef, HouseDef, LevelDef, Placed, Rect } from "./levels";
+import { mt } from "./strings/missions";
 import type { Vec2 } from "./logic";
 
 /** z of the Kota's sea shore on the world axis (the shared map ends at z = 236). */
@@ -217,7 +218,7 @@ const ROCKS: (Placed & { kind: number })[] = [
 // ---------------------------------------------------------------------------------------------------------------
 export const KOTA: LevelDef = {
   id: "kota",
-  name: "Kota Batu",
+  name: mt("kota", "name"),
   missionId: "kota-batu",
   seed: 151100,
   shoreZ: Z(0),
@@ -266,21 +267,16 @@ export const KOTA: LevelDef = {
   start: pt(-40, 114),
   exit: pt(0, -6.2),
   bounds: { minX: -43.6, maxX: 43.6, minZ: Z(-6.4), maxZ: Z(118.6), jettyZ: Z(0), jettyHalf: 1.1 },
-  story:
-    "The Portuguese have raised a stone fort, the Kota, on the hill above the harbour, and tonight their captains sit in its keep " +
-    "over a painted map of Malacca: every gun, every gate, every road they mean to take. The elder Hang Tuah has chosen you, Pendekar, " +
-    "to take that map from the table on the keep's roof before the council can use it. There are three ways in. The gate is loud and " +
-    "watched from every side. The rocks under the west wall are quiet but steep. And a fort that is hard from the front is always " +
-    "soft somewhere behind. When you hold the map, go over the sea wall and down to the jetty.",
-  checkpointLabel: "the war map is taken",
+  story: mt("kota", "story"),
+  checkpointLabel: mt("kota", "checkpoint"),
   win: {
-    title: "The war map is taken",
-    body: "You went over the sea wall with the council's map under your baju and were gone before the bell. The Kota still stands, but its masters now plan in the dark.",
+    title: mt("kota", "winTitle"),
+    body: mt("kota", "winBody"),
   },
   text: {
-    objective: "Climb the keep and take the council's war map",
-    escape: "Over the sea wall and down to the jetty",
-    targetDown: "You have the war map. Over the sea wall to the jetty.",
-    take: "Take the council's war map",
+    objective: mt("kota", "objective"),
+    escape: mt("kota", "escape"),
+    targetDown: mt("kota", "targetDown"),
+    take: mt("kota", "take"),
   },
 };

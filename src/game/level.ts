@@ -34,7 +34,7 @@ export interface Level {
   start: Vec2;
   exit: Vec2;
   exitBeam: THREE.Mesh;
-  bounds: LevelDef["bounds"] & { water: Area[]; decks: Area[] };
+  bounds: LevelDef["bounds"] & { water: Area[]; decks: Area[]; keepOut?: Area[] };
   text: LevelDef["text"];
   /** every lantern on the map */
   lamps: Vec2[];
@@ -759,7 +759,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     start: def.start,
     exit: def.exit,
     exitBeam,
-    bounds: { ...def.bounds, water: def.water.map(areaOf), decks: def.decks.map(areaOf) },
+    bounds: { ...def.bounds, water: def.water.map(areaOf), decks: def.decks.map(areaOf), keepOut: def.sanctuary ? [areaOf(def.sanctuary)] : [] },
     text: def.text,
     lamps: def.lamps,
     lampLights,

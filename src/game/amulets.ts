@@ -23,6 +23,8 @@ export const AMULETS: AmuletDef[] = [
   { id: "puteri", level: "ledang", name: "Tangkal Puteri", desc: "Health starts coming back 2 s sooner", apply: (m) => ({ ...m, regenDelay: Math.max(1, m.regenDelay - 2) }) },
 ];
 
+AMULETS.push({ id: "merpati", level: "masjid", name: "Tangkal Merpati", desc: "A quarter longer to catch a parry", apply: (m) => ({ ...m, parryWin: m.parryWin * 1.25 }) });
+
 const byId = new Map(AMULETS.map((a) => [a.id, a]));
 export const amuletById = (id: string | null | undefined) => (id ? byId.get(id) ?? null : null);
 export const amuletForLevel = (levelId: string) => AMULETS.find((a) => a.level === levelId) ?? null;

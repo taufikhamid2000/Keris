@@ -34,7 +34,7 @@ export function MapLegend({ def }: { def: LevelDef }) {
 
 /** Right of the Peta map: mission objectives, Kitab places on this level and how much of it is explored. */
 export function MapObjectives({ def, s, places }: { def: LevelDef; s: MapState | null; places: string[] }) {
-  const here = useMemo(() => placesInBounds(def.bounds), [def.bounds]);
+  const here = useMemo(() => placesInBounds(def.bounds, def.id), [def.bounds, def.id]);
   const mainDone = !!s && !s.escape && s.objective === null;
   const escapeNow = !!s && s.escape;
   const cols = s?.fog.cols ?? 0;

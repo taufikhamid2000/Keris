@@ -6,6 +6,7 @@
 
 import { CAMP, JUNGLE_Z0, JUNGLE_Z1, POOL, RIVER, SUMMIT } from "./levels";
 import type { LevelDef } from "./levels";
+import { MASJID_COURT, MASJID_POND } from "./masjid";
 
 export interface PlaceDef {
   id: string;
@@ -14,7 +15,12 @@ export interface PlaceDef {
   /** shown while locked */
   hint: string;
   at: (x: number, y: number, z: number) => boolean;
+  /** a place that belongs to one mission only (the maps share coordinates); left out, it is on every mission */
+  level?: string;
 }
+
+/** Is this place on that mission? (No mission given: only the places every mission shares.) */
+export const placeOnLevel = (p: PlaceDef, levelId?: string) => !p.level || p.level === levelId;
 
 const near = (c: { x: number; z: number }, r: number) => (x: number, _y: number, z: number) => Math.hypot(x - c.x, z - c.z) <= r;
 const riverZ0 = RIVER.z - RIVER.d / 2 - 1;
@@ -86,12 +92,33 @@ export const PLACES: PlaceDef[] = [
   },
 ];
 
+// Masjid mission places (this mission only)
+PLACES.push(
+  {
+    id: "masjid",
+    level: "masjid",
+    title: "The old masjid",
+    hint: "Inside the low wall, in the heart of the town",
+    text: "A timber masjid under three stacked atap roofs, a verandah at its front and a beduk house in the corner of a quiet yard. The soldiers keep out of the yard, and so does every blade.",
+    at: (x, _y, z) => Math.abs(x - MASJID_COURT.x) <= MASJID_COURT.w / 2 && Math.abs(z - MASJID_COURT.z) <= MASJID_COURT.d / 2,
+  },
+  {
+    id: "kolam-masjid",
+    level: "masjid",
+    title: "The washing pond",
+    hint: "By the south gate of the masjid",
+    text: "A still pond with a stone ledge, kept for washing before worship. Even at dusk the water is clear.",
+    at: near(MASJID_POND, 4.5),
+  },
+);
+
 /** Lore for each tangkal, by amulet id (names and effects stay in amulets.ts). */
 export const CHARM_LORE: Record<string, string> = {
   harimau: "Carved from the claw of a tiger that walked the harbour lanes for years without being seen. Wear it and the floorboards forget you.",
   kancil: "The mousedeer outwits the crocodile and the tiger in every tale. This one is small enough to forget you are wearing it, and so do the guards.",
   besi: "Iron from a broken blade, bound in brass. Smiths say a blade's spirit stays in its iron, and it is happier near other blades.",
   buaya: "A crocodile's tooth on a cord. The buaya waits under the water for as long as it must.",
+  merpati: "A grey dove's feather bound in thread, found where the lanes run quiet. Doves nest in old eaves and do not startle at footsteps they know.",
   puteri: "A thread of gold said to be from the puteri's own sash, left on the mountain. Wounds close a little faster near it.",
 };
 
@@ -103,6 +130,11 @@ export const MISSION_LORE: Record<string, { title: string; text: string }> = {
   jungle: { title: "The scouts", text: "Without their captain the scouts lost the trails they had mapped. The way in from the hutan is closed, for now." },
   ledang: { title: "The tepak sireh", text: "The betel box is back on the summit altar. The mist came down again behind you, as if the mountain had been waiting." },
   wayang: { title: "The shadow play", text: "The dalang keeps the Pendekar's puppet in a box of its own. He says it moves on the kelir before he touches the rods." },
+};
+
+MISSION_LORE.masjid = {
+  title: "The warkah",
+  text: "The letter left the town folded in oilcloth, and not one soldier ever crossed the masjid's wall to ask where it had been kept. The penjaga still sweeps the yard each morning.",
 };
 
 const placeIds = new Set(PLACES.map((p) => p.id));
@@ -130,13 +162,13 @@ export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: 
 }
 
 /** Places the player is standing in right now. */
-export const placesAt = (x: number, y: number, z: number) => PLACES.filter((p) => p.at(x, y, z));
+export const placesAt = (x: number, y: number, z: number, levelId?: string) => PLACES.filter((p) => placeOnLevel(p, levelId) && p.at(x, y, z));
 
 /** Places that lie inside a level's bounds (ground level and summit height sampled every 2 m), in list order. */
-export function placesInBounds(b: LevelDef["bounds"]): PlaceDef[] {
+export function placesInBounds(b: LevelDef["bounds"], levelId?: string): PlaceDef[] {
   const found = new Set<string>();
   for (const y of [0, SUMMIT.y])
     for (let x = b.minX; x <= b.maxX; x += 2)
-      for (let z = b.minZ; z <= b.maxZ; z += 2) for (const p of placesAt(x, y, z)) found.add(p.id);
+      for (let z = b.minZ; z <= b.maxZ; z += 2) for (const p of placesAt(x, y, z, levelId)) found.add(p.id);
   return PLACES.filter((p) => found.has(p.id));
 }

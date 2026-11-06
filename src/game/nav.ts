@@ -30,6 +30,8 @@ export interface NavBounds {
   water?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
   /** ... except on these (bridges, jetties) */
   decks?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
+  /** guards never walk or climb here (a sanctuary) */
+  keepOut?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
 }
 
 type AreaLike = { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -264,6 +266,13 @@ export class NavGrid {
       this.heights.push(hKey);
       this.walk.push(ok);
     }
+
+    // a sanctuary: no guard stands, paths or climbs inside it on any layer
+    for (const k of this.bounds.keepOut ?? [])
+      for (const grid of this.walk)
+        for (let iz = Math.max(0, this.iz(k.minZ)); iz <= Math.min(h - 1, this.iz(k.maxZ)); iz++)
+          for (let ix = Math.max(0, this.ix(k.minX)); ix <= Math.min(w - 1, this.ix(k.maxX)); ix++)
+            if (inArea(k, this.cx(ix), this.cz(iz))) grid[iz * w + ix] = 0;
 
     this.g = new Float32Array(this.layers * size);
     this.parent = new Int32Array(this.layers * size);

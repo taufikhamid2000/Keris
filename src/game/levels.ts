@@ -117,6 +117,8 @@ export interface LevelDef {
   objective: ObjectiveDef;
   /** the mission fails the moment any guard raises the alarm */
   undetected?: boolean;
+  /** a place of worship: no weapon, stone, pepper or takedown is used inside it, and guards never enter (nav keep-out) */
+  sanctuary?: Rect;
   start: Vec2;
   exit: Vec2;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number; jettyZ: number; jettyHalf: number };
@@ -783,6 +785,11 @@ export const WAYANG: LevelDef = {
 
 /** Every mission, in play order. */
 export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG, WAYANG];
+
+// Masjid: the quiet warkah errand (masjid.ts)
+import { MASJID } from "./masjid";
+LEVELS.push(MASJID);
+
 /** The level named by ?level=<id> in a query string, else the first mission. */
 export function levelFromSearch(search: string): LevelDef {
   const id = new URLSearchParams(search).get("level");

@@ -99,6 +99,10 @@ Progress is saved in your browser's localStorage under the single key `keris:sav
 
 Checked with `node scripts/save-check.mjs <url>` (headless Chromium, desktop and touch) plus unit tests in `src/game/save.test.ts`.
 
+## Languages
+
+Malay is the default; English is chosen in Settings (saved as `settings.lang`). To add a string, put a dotted key in both `MS` and `EN` in `src/game/i18n.ts` (`{name}` placeholders allowed; a test checks the two match), then call `const t = useT(save.settings.lang)` from `src/components/useT.ts` and use `t("your.key", { name })`. Only the settings panel, pause menu and title buttons are migrated so far.
+
 ## Stack
 
 Next.js 16 (App Router), React 19, TypeScript, plain three.js in a client component, Vitest, ESLint, GitHub Actions CI. No backend.

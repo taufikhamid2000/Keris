@@ -5,16 +5,18 @@ import type { MapState } from "@/game/engine";
 import { AMULETS, amuletById, amuletForLevel } from "@/game/amulets";
 import type { LevelDef, Rect } from "@/game/levels";
 import { formatTime } from "@/game/save";
+import { DEFAULT_LANG, type Lang } from "@/game/i18n";
+import { useT } from "./useT";
 import { TideNote } from "./Tide";
 import PetaMap from "./PetaMap";
 import { MapLegend, MapObjectives } from "./MapSide";
 
 export const PAUSE_TABS = [
-  { id: "peta", name: "Peta", sub: "Map" },
-  { id: "kelengkapan", name: "Kelengkapan", sub: "Gear" },
-  { id: "ilmu", name: "Ilmu", sub: "Skills" },
-  { id: "kitab", name: "Kitab", sub: "Journal" },
-  { id: "hikayat", name: "Hikayat", sub: "Mission" },
+  { id: "peta" },
+  { id: "kelengkapan" },
+  { id: "ilmu" },
+  { id: "kitab" },
+  { id: "hikayat" },
 ] as const;
 
 // The map looks down with north (+z, inland) up; facing +z, +x is on the left, so screen x is -x.
@@ -174,6 +176,7 @@ export default function PauseMenu({
   lastTale,
   visited = [],
   known = {},
+  lang = DEFAULT_LANG,
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -195,25 +198,27 @@ export default function PauseMenu({
   visited?: string[];
   /** maps the player has been to: level id -> name (a gate shows its destination only for these) */
   known?: Record<string, string>;
+  lang?: Lang;
 }) {
+  const t = useT(lang);
   const cur = PAUSE_TABS[tab]?.id ?? "peta";
   const worn = amuletById(charms.found.includes(charms.worn ?? "") ? charms.worn : null);
   const here = amuletForLevel(def.id);
   const step = (d: number) => setTab((tab + d + PAUSE_TABS.length) % PAUSE_TABS.length);
   return (
     <div className="overlay menu-screen pause">
-      <nav className="menu" aria-label="Pause menu">
+      <nav className="menu" aria-label={t("pause.menu.aria")}>
         <p className="kicker">{def.name}</p>
-        <h2 className="pause-title">Berhenti</h2>
+        <h2 className="pause-title">{t("pause.title")}</h2>
         {actions}
       </nav>
       <section className="songket menu-pane pause-pane">
         <div className="tabs" role="tablist">
           {!touch && <kbd onClick={() => step(-1)}>Q</kbd>}
-          {PAUSE_TABS.map((t, i) => (
-            <button key={t.id} role="tab" aria-selected={i === tab} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>
-              {t.name}
-              <span>{t.sub}</span>
+          {PAUSE_TABS.map((tb, i) => (
+            <button key={tb.id} role="tab" aria-selected={i === tab} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>
+              {t(`pause.tab.${tb.id}`)}
+              <span>{t(`pause.tab.${tb.id}.sub`)}</span>
             </button>
           ))}
           {!touch && <kbd onClick={() => step(1)}>E</kbd>}

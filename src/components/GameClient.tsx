@@ -25,6 +25,7 @@ import {
 import KerisEmblem from "./KerisEmblem";
 import PauseMenu, { PAUSE_TABS } from "./PauseMenu";
 import SettingsPanel from "./SettingsPanel";
+import { useT } from "./useT";
 import SkillTree from "./SkillTree";
 import Kitab from "./Kitab";
 import { earnedPoints, learnSkill, resetSkills, skillMods } from "@/game/skills";
@@ -475,14 +476,15 @@ export default function GameClient() {
   const canContinue = hasProgress(save) && continueLevel !== null;
   const checkpointHere = checkpointFor(save, level.missionId);
   const savedHere = save.checkpointMission === level.missionId && save.checkpoint !== null;
+  const t = useT(save.settings.lang);
   const settingsBtn = (
     <button className="btn ghost" onClick={() => setShowSettings(true)}>
-      Settings
+      {t("pause.settings")}
     </button>
   );
   const menuBtn = (
     <button className="btn ghost" onClick={() => g()?.showTitle()}>
-      Main menu
+      {t("pause.mainMenu")}
     </button>
   );
   const resume = () => {
@@ -617,7 +619,7 @@ export default function GameClient() {
 
       {phase === "title" && started && (
         <div className="overlay title menu-screen">
-          <nav className="menu" aria-label="Main menu">
+          <nav className="menu" aria-label={t("title.menu.aria")}>
             <div className="brand">
               <KerisEmblem />
               <div>
@@ -627,25 +629,25 @@ export default function GameClient() {
             </div>
             {canContinue && (
               <button className="btn" onClick={() => continueLevel && begin(checkpointFor(save, continueLevel.missionId), continueLevel)} disabled={!game}>
-                {continueLevel === level ? "Continue" : `Continue: ${continueLevel?.name}`}
+                {continueLevel === level ? t("title.continue") : t("title.continueNamed", { name: continueLevel?.name ?? "" })}
               </button>
             )}
             <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
-              New game
+              {t("title.newGame")}
             </button>
             <DuaPemainButton disabled={!game} />
             <button className={`btn ghost${view === "ilmu" ? " on" : ""}`} onClick={() => setView(view === "ilmu" ? "main" : "ilmu")}>
-              Ilmu
+              {t("title.ilmu")}
             </button>
             <button className={`btn ghost${view === "kitab" ? " on" : ""}`} onClick={() => setView(view === "kitab" ? "main" : "kitab")}>
-              Kitab
+              {t("title.kitab")}
             </button>
             {settingsBtn}
             <button className={`btn ghost${view === "controls" ? " on" : ""}`} onClick={() => setView(view === "controls" ? "main" : "controls")}>
-              Controls
+              {t("title.controls")}
             </button>
             <button className={`btn ghost${view === "credits" ? " on" : ""}`} onClick={() => setView(view === "credits" ? "main" : "credits")}>
-              Credits
+              {t("title.credits")}
             </button>
             <p className="dim small">
               {touch ? "Best in landscape. Fullscreen is requested where your browser allows it." : "Starting captures the mouse."}
@@ -710,6 +712,7 @@ export default function GameClient() {
 
       {phase === "paused" && (
         <PauseMenu
+          lang={save.settings.lang}
           def={level}
           s={mapState}
           tab={pauseTab}
@@ -727,10 +730,10 @@ export default function GameClient() {
           actions={
             <>
               <button className="btn" onClick={resume}>
-                Resume
+                {t("pause.resume")}
               </button>
               <button className="btn ghost" onClick={() => begin("start")}>
-                Restart
+                {t("pause.restart")}
               </button>
               {settingsBtn}
               {menuBtn}

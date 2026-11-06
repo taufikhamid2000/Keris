@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "./useT";
+import { LANGS, type Lang } from "@/game/i18n";
 import { LOOK_SENS_MAX, LOOK_SENS_MIN, hasProgress, updateSettings, type QualityPref, type SaveData, type SaveStore } from "@/game/save";
 
 interface Props {
@@ -17,34 +19,46 @@ interface Props {
 
 export default function SettingsPanel({ store, save, canChangeQuality, urlQuality, onClose, onReplayIntro }: Props) {
   const s = save.settings;
+  const t = useT(s.lang);
   const [confirming, setConfirming] = useState(false);
   const [code, setCode] = useState("");
   const [msg, setMsg] = useState("");
   const set = (patch: Partial<typeof s>) => store.update((d) => updateSettings(d, patch));
 
   return (
-    <div className="overlay settings" role="dialog" aria-label="Settings">
+    <div className="overlay settings" role="dialog" aria-label={t("settings.title")}>
       <div className="panel">
-        <h2>Settings</h2>
+        <h2>{t("settings.title")}</h2>
 
         <label className="row">
-          <span>Quality</span>
+          <span>{t("lang.label")}</span>
+          <select value={s.lang} onChange={(e) => set({ lang: e.target.value as Lang })} aria-label={t("lang.label")}>
+            {LANGS.map((l) => (
+              <option key={l} value={l}>
+                {t(`lang.${l}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="row">
+          <span>{t("settings.quality")}</span>
           <select
             value={s.quality}
             disabled={!canChangeQuality || !!urlQuality}
             onChange={(e) => set({ quality: e.target.value as QualityPref })}
-            aria-label="Quality"
+            aria-label={t("settings.quality")}
           >
-            <option value="auto">Auto (phones low, desktop high)</option>
-            <option value="low">Low</option>
-            <option value="high">High</option>
+            <option value="auto">{t("settings.quality.auto")}</option>
+            <option value="low">{t("settings.quality.low")}</option>
+            <option value="high">{t("settings.quality.high")}</option>
           </select>
         </label>
-        {urlQuality && <p className="dim small">?quality={urlQuality} in the address bar overrides this for now.</p>}
-        {!urlQuality && !canChangeQuality && <p className="dim small">Change quality from the title screen.</p>}
+        {urlQuality && <p className="dim small">{t("settings.quality.url", { q: urlQuality })}</p>}
+        {!urlQuality && !canChangeQuality && <p className="dim small">{t("settings.quality.titleOnly")}</p>}
 
         <label className="row">
-          <span>Look sensitivity {s.lookSens.toFixed(1)}x</span>
+          <span>{t("settings.lookSens", { x: s.lookSens.toFixed(1) })}</span>
           <input
             type="range"
             min={LOOK_SENS_MIN}
@@ -52,34 +66,34 @@ export default function SettingsPanel({ store, save, canChangeQuality, urlQualit
             step={0.1}
             value={s.lookSens}
             onChange={(e) => set({ lookSens: Number(e.target.value) })}
-            aria-label="Look sensitivity"
+            aria-label={t("settings.lookSens.aria")}
           />
         </label>
         <label className="row">
-          <span>Invert vertical look</span>
-          <input type="checkbox" checked={s.invertY} onChange={(e) => set({ invertY: e.target.checked })} aria-label="Invert vertical look" />
+          <span>{t("settings.invertY")}</span>
+          <input type="checkbox" checked={s.invertY} onChange={(e) => set({ invertY: e.target.checked })} aria-label={t("settings.invertY")} />
         </label>
 
         <label className="row">
-          <span>Kurangkan gegaran (reduce shake)</span>
-          <input type="checkbox" checked={s.reduceShake} onChange={(e) => set({ reduceShake: e.target.checked })} aria-label="Kurangkan gegaran (reduce camera shake)" />
+          <span>{t("settings.reduceShake")}</span>
+          <input type="checkbox" checked={s.reduceShake} onChange={(e) => set({ reduceShake: e.target.checked })} aria-label={t("settings.reduceShake.aria")} />
         </label>
 
         {onReplayIntro && (
           <button className="btn ghost" onClick={onReplayIntro}>
-            Replay intro
+            {t("settings.replayIntro")}
           </button>
         )}
 
         <details className="codebox">
-          <summary>Back up or move your save</summary>
-          <textarea value={code} onChange={(e) => setCode(e.target.value)} rows={3} placeholder="Save code" aria-label="Save code" spellCheck={false} />
+          <summary>{t("settings.backup")}</summary>
+          <textarea value={code} onChange={(e) => setCode(e.target.value)} rows={3} placeholder={t("settings.saveCode")} aria-label={t("settings.saveCode")} spellCheck={false} />
           <div>
-            <button className="btn ghost sm" onClick={() => (setCode(store.exportCode()), setMsg("Code ready to copy."))}>
-              Export
+            <button className="btn ghost sm" onClick={() => (setCode(store.exportCode()), setMsg(t("settings.codeReady")))}>
+              {t("settings.export")}
             </button>
-            <button className="btn ghost sm" onClick={() => setMsg(store.importFrom(code) ? "Imported." : "That code is not valid.")}>
-              Import
+            <button className="btn ghost sm" onClick={() => setMsg(store.importFrom(code) ? t("settings.imported") : t("settings.codeInvalid"))}>
+              {t("settings.import")}
             </button>
           </div>
         </details>
@@ -90,30 +104,30 @@ export default function SettingsPanel({ store, save, canChangeQuality, urlQualit
         )}
 
         {confirming ? (
-          <div className="confirm" role="alertdialog" aria-label="Confirm reset">
-            <p>Erase your checkpoint and best times? Settings are kept.</p>
+          <div className="confirm" role="alertdialog" aria-label={t("settings.confirm.aria")}>
+            <p>{t("settings.confirm.text")}</p>
             <button
               className="btn danger"
               onClick={() => {
                 store.reset();
                 setConfirming(false);
-                setMsg("Progress reset.");
+                setMsg(t("settings.resetDone"));
               }}
             >
-              Yes, reset
+              {t("settings.confirm.yes")}
             </button>
             <button className="btn ghost" onClick={() => setConfirming(false)}>
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         ) : (
           <button className="btn ghost" onClick={() => setConfirming(true)} disabled={!hasProgress(save) && Object.keys(save.missions).length === 0}>
-            Reset progress
+            {t("settings.reset")}
           </button>
         )}
-        <p className="dim small">Saved in this browser only. Clearing site data erases it.</p>
+        <p className="dim small">{t("settings.savedNote")}</p>
         <button className="btn" onClick={onClose}>
-          Close
+          {t("common.close")}
         </button>
       </div>
     </div>

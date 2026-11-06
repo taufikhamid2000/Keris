@@ -26,6 +26,8 @@ export interface MissionStats {
   bestRating: number | null;
 }
 
+import { DEFAULT_LANG, isLang, type Lang } from "./i18n";
+
 export interface SaveSettings {
   quality: QualityPref;
   /** look sensitivity multiplier, applies to mouse and touch */
@@ -33,6 +35,8 @@ export interface SaveSettings {
   invertY: boolean;
   /** "Kurangkan gegaran": no camera shake or landing dip */
   reduceShake: boolean;
+  /** interface language, Malay by default */
+  lang: Lang;
 }
 
 export interface SaveData {
@@ -70,7 +74,7 @@ export function defaultMission(): MissionStats {
 }
 
 export function defaultSettings(): SaveSettings {
-  return { quality: "auto", lookSens: 1, invertY: false, reduceShake: false };
+  return { quality: "auto", lookSens: 1, invertY: false, reduceShake: false, lang: DEFAULT_LANG };
 }
 
 export function defaultSave(): SaveData {
@@ -125,6 +129,7 @@ function cleanSettings(v: unknown): SaveSettings {
     lookSens: num(v.lookSens, LOOK_SENS_MIN, LOOK_SENS_MAX, d.lookSens),
     invertY: v.invertY === true,
     reduceShake: v.reduceShake === true,
+    lang: isLang(v.lang) ? v.lang : d.lang,
   };
 }
 

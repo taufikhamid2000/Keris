@@ -226,6 +226,15 @@ kbd { white-space: nowrap; background: #3a2a40; border: 1px solid #6a5470; borde
 .missions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .missions .btn { margin: 0; padding: 6px 14px; font-size: .9rem; }
 .missions .btn.on { color: #ffcf8a; border-color: #ffcf8a; background: rgba(47, 143, 138, .35); }
+.chapters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 10px; margin: 0 0 12px; }
+.chapter-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; color: var(--ink); background: var(--veil); border: 1px solid var(--rule); border-radius: var(--r-md); font: inherit; cursor: pointer; }
+.chapter-card:hover:not(:disabled), .chapter-card:focus-visible { border-color: var(--gold); }
+.chapter-card.soon { opacity: .5; cursor: default; }
+.chapter-era { font-size: .8rem; color: var(--gold); letter-spacing: .08em; }
+.chapter-title { font-family: var(--font-display); font-size: 1.1rem; }
+.chapter-meta { color: var(--teal-hi); }
+.chapter-card.soon .chapter-meta { color: var(--gold); }
+.chapter-back { margin: 0 0 8px; padding: 4px 12px; font-size: .85rem; }
 .songket { position: relative; padding: 32px 28px; background: rgba(20,10,24,.78); border: 1px solid #ffcf8a; outline: 1px solid rgba(255,207,138,.35); outline-offset: 4px; }
 .songket::before, .songket::after { content: ""; position: absolute; left: 10px; right: 10px; height: 8px; opacity: .8;
   background: repeating-linear-gradient(45deg, #ffcf8a 0 2px, transparent 2px 7px), repeating-linear-gradient(-45deg, #2f8f8a 0 2px, transparent 2px 7px); }

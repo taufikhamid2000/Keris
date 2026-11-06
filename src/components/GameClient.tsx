@@ -1,5 +1,6 @@
 "use client";
 
+import ChapterSelect from "./ChapterSelect";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, MapState, Phase } from "@/game/engine";
 import { TOOLS } from "@/game/tools";
@@ -656,7 +657,7 @@ export default function GameClient() {
           <section className="songket menu-pane" aria-live="polite">
             {view === "main" && (
               <>
-                <h2>Missions</h2>
+                <ChapterSelect missions={save.missions}>
                 <div className="missions">
                   {LEVELS.map((l) => (
                     <button key={l.id} className={`btn ghost${l === level ? " on" : ""}`} aria-pressed={l === level} onClick={() => pickLevel(l)} disabled={!game}>
@@ -665,6 +666,7 @@ export default function GameClient() {
                     </button>
                   ))}
                 </div>
+                </ChapterSelect>
                 <h3>{level.name}</h3>
                 <p className="story">{level.story}</p>
                 {savedHere && (

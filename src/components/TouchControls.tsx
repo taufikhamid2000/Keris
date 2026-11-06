@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { Game, HudState } from "@/game/engine";
+import type { Lang } from "@/game/i18n";
+import { trMsg } from "@/game/hudMsg";
+import { useT } from "./useT";
 import { clampToRadius, joystickVector, lookDelta } from "@/game/touch";
 
 const TOOL_SHORT = { knife: "Pisau", stone: "Batu", pepper: "Lada" } as const;
@@ -58,7 +61,8 @@ function Btn({ code, label, sub, cls = "", on, dim, game }: BtnProps) {
   );
 }
 
-export default function TouchControls({ game, hud }: { game: Game | null; hud: HudState }) {
+export default function TouchControls({ game, hud, lang }: { game: Game | null; hud: HudState; lang: Lang }) {
+  const tr = useT(lang);
   const base = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLDivElement>(null);
   const joy = useRef<{ id: number; ox: number; oy: number } | null>(null);
@@ -77,7 +81,7 @@ export default function TouchControls({ game, hud }: { game: Game | null; hud: H
   // never leave the player running if the controls unmount or the game changes
   useEffect(() => () => game?.setTouchMove(0, 0, false), [game]);
 
-  const t = hud.prompt;
+  const t = trMsg(lang, hud.prompt);
   return (
     <div className="touch" onContextMenu={(e) => e.preventDefault()}>
       <div
@@ -110,7 +114,7 @@ export default function TouchControls({ game, hud }: { game: Game | null; hud: H
         onPointerCancel={(e) => joy.current?.id === e.pointerId && stopMove()}
         onLostPointerCapture={(e) => joy.current?.id === e.pointerId && stopMove()}
       >
-        <div className="joy-hint">MOVE</div>
+        <div className="joy-hint">{tr("touch.move")}</div>
         <div className="joy-base" ref={base}>
           <div className="joy-knob" ref={knob} />
         </div>
@@ -147,7 +151,7 @@ export default function TouchControls({ game, hud }: { game: Game | null; hud: H
       <button
         type="button"
         className="tbtn pause-btn"
-        aria-label="Pause"
+        aria-label={tr("touch.pause")}
         data-act="Pause"
         onPointerDown={(e) => {
           e.preventDefault();
@@ -159,14 +163,14 @@ export default function TouchControls({ game, hud }: { game: Game | null; hud: H
 
       <div className="btn-grid">
         <Btn game={game} code="KeyV" label="V" sub="Mata Helang" cls="eagle" on={hud.eagle} />
-        <Btn game={game} code="KeyF" label="F" sub={hud.carrying ? "Drop" : "Carry"} cls="carry" on={hud.carrying || t.startsWith("F")} />
-        <Btn game={game} code="KeyC" label="C" sub="Crouch" cls="crouch" on={hud.crouched} />
+        <Btn game={game} code="KeyF" label="F" sub={hud.carrying ? tr("touch.drop") : tr("touch.carry")} cls="carry" on={hud.carrying || t.startsWith("F")} />
+        <Btn game={game} code="KeyC" label="C" sub={tr("touch.crouch")} cls="crouch" on={hud.crouched} />
         <Btn game={game} code="KeyQ" label="Q" sub={`${TOOL_SHORT[hud.tool]} x${hud.ammo[hud.tool]}`} cls="throw" dim={hud.ammo[hud.tool] <= 0} />
-        <Btn game={game} code="KeyX" label="X" sub="Roll" cls="roll" />
-        <Btn game={game} code="KeyR" label="R" sub="Parry" cls="parry" on={hud.incoming} />
-        <Btn game={game} code="KeyE" label="E" sub={hud.combat && !t.startsWith("E  Keris") ? "Strike" : "Tikam"} cls="stab" on={t.startsWith("E")} />
-        <Btn game={game} code="Space" label="Jump" sub="Climb" cls="jump" />
-        <Btn game={game} code="ToolNext" label="Alat" sub="Switch" cls="tool" />
+        <Btn game={game} code="KeyX" label="X" sub={tr("touch.roll")} cls="roll" />
+        <Btn game={game} code="KeyR" label="R" sub={tr("touch.parry")} cls="parry" on={hud.incoming} />
+        <Btn game={game} code="KeyE" label="E" sub={hud.combat && hud.prompt !== "§play.prompt.takedown" ? tr("touch.strike") : tr("touch.stab")} cls="stab" on={t.startsWith("E")} />
+        <Btn game={game} code="Space" label={tr("touch.jump")} sub={tr("touch.climb")} cls="jump" />
+        <Btn game={game} code="ToolNext" label={tr("touch.tool")} sub={tr("touch.switch")} cls="tool" />
       </div>
     </div>
   );

@@ -52,8 +52,12 @@ import { KAPITAN, round1, type GuardTuple, type KapitanWorld } from "./kapitan";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 import { PantunGates } from "./pantunGates";
 import type { PantunHud } from "./pantun";
-import { TIDE, TIDE_NAMES, floodShare, inFlood, isTidal, onMudflat, seaMudY, tideAt, tidePhase, type TideMap, type TideReading, type TideState } from "./tide";
+import { TIDE, floodShare, inFlood, isTidal, onMudflat, seaMudY, tideAt, tidePhase, type TideMap, type TideReading, type TideState } from "./tide";
 import { applyTide, seaSurface } from "./tideScene";
+import { hudMsg } from "./hudMsg";
+
+/** The chronicle keeps its own English wording for kills; the HUD toast is a dictionary key per kind. */
+const KILL_EN = { air: "Air assassination.", counter: "Counter kill.", silent: "Silent kill.", cut: "Cut down." } as const;
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
@@ -1132,7 +1136,7 @@ export class Game {
     for (const pl of placesAt(this.p.x, this.p.y, this.p.z, this.def.id)) {
       if (this.kitab.has(pl.id)) continue;
       this.kitab.add(pl.id);
-      this.toast(`Kitab: ${pl.title}`);
+      this.toast(hudMsg("play.toast.kitab", { title: pl.title }));
       this.cb.onKitab?.(pl.id);
     }
   }
@@ -1252,7 +1256,7 @@ export class Game {
     obj.position.set(x, groundHeight(x, z, 99, this.level.colliders), z);
     this.scene.add(obj);
     this.kap.lanterns.push({ x, z, obj });
-    if (dist2D(this.p, { x, z }) < 30) this.toast("A pelita is lit nearby: guards spot you faster in its glow");
+    if (dist2D(this.p, { x, z }) < 30) this.toast(hudMsg("play.toast.pelita"));
     return true;
   }
   /** Send guard `id` to look at (x, z), as if he heard something there. */
@@ -1274,7 +1278,7 @@ export class Game {
       this.kap.orders.set(g, { ...pt, until: this.run.time + KAPITAN.alarmHold, hold: true });
       n++;
     }
-    if (n) this.toast("Kentung! The Kapitan beats the alarm drum: every guard is on edge");
+    if (n) this.toast(hudMsg("play.toast.kentung"));
     return n;
   }
   /** Runs after footsteps and thrown tools are heard: a real noise this frame (noiseFlag) wins over the Kapitan's order. */
@@ -1413,7 +1417,7 @@ export class Game {
   }
   private useTool() {
     if (this.inSanctuary()) {
-      this.toast("Not on this ground. Keep the peace.");
+      this.toast(hudMsg("play.toast.sanctuary"));
       return;
     }
     if (this.tool === "knife") this.tryThrow();
@@ -1444,7 +1448,7 @@ export class Game {
       n++;
     }
     this.chron.add({ k: "tool", tool: "stone", hit: n });
-    this.toast(n ? "Stone thrown. They heard it." : "Stone thrown.");
+    this.toast(hudMsg(n ? "play.toast.stoneHit" : "play.toast.stone"));
   }
   private throwPepper() {
     if (this.pepper <= 0 || this.knifeCd > 0 || this.climb || this.leap || this.swim) return;
@@ -1468,7 +1472,7 @@ export class Game {
     this.puff.t = 0;
     this.puff.mesh.position.set(this.p.x, this.p.y + 1.2, this.p.z);
     this.chron.add({ k: "tool", tool: "pepper", hit: n });
-    this.toast(n ? `Pepper! ${n} guard${n === 1 ? "" : "s"} blinded.` : "Pepper thrown. Nobody close enough.");
+    this.toast(n ? hudMsg(n === 1 ? "play.toast.pepper.one" : "play.toast.pepper.many", { n }) : hudMsg("play.toast.pepper.none"));
   }
   /** Analog movement from the touch joystick: x strafe, y forward, both -1..1 already deadzoned. */
   setTouchMove(x: number, y: number, run: boolean) {
@@ -1982,7 +1986,7 @@ export class Game {
         p.y = g.y;
         p.vy = 0;
         p.grounded = true;
-        if (!g.dead) this.killGuard(g, "Air assassination.", KICK.air);
+        if (!g.dead) this.killGuard(g, "air", KICK.air);
       }
       p.moving = false;
     } else if (this.climb) {
@@ -2112,7 +2116,7 @@ export class Game {
     this.charge = null;
     p.vy = 0;
     p.grounded = true;
-    this.toast("Swimming. Hold Ctrl (or press C) to dive out of sight; swim to a bank to climb out.");
+    this.toast(hudMsg("play.toast.swim"));
   }
 
   /** Swim: camera-relative like walking, slower; crouch dives while breath lasts. Reaching dry land climbs out. */
@@ -2130,7 +2134,7 @@ export class Game {
         s.under = false;
         s.gasp = SWIM.gasp;
         this.crouchToggle = false;
-        this.toast("Out of breath!");
+        this.toast(hudMsg("play.toast.breathOut"));
       }
     } else s.breath = Math.min(SWIM.breath * this.mods.breath, s.breath + dt * SWIM.refill);
     // diving is silent; a fast crawl at the surface splashes like running
@@ -2217,7 +2221,7 @@ export class Game {
     const first = this.tideSaid === null;
     this.tideSaid = st;
     if (first || this.toastT > 0 || (st !== "surut" && st !== "pasang")) return;
-    this.toast(st === "surut" ? `${TIDE_NAMES.surut.name}: the mud is bare along the shore and the river banks.` : `${TIDE_NAMES.pasang.name}: the river is over its banks.`);
+    this.toast(hudMsg(st === "surut" ? "play.toast.surut" : "play.toast.pasang"));
   }
   private tideMap(): TideMap {
     const b = this.level.bounds;
@@ -2400,7 +2404,7 @@ export class Game {
           g.lastKnown = { x: p.x, z: p.z };
           g.lastKnownY = p.y;
         }
-        this.toast(found ? "A body was found!" : g.isTarget ? (this.level.text.targetSpotted ?? "Spotted!") : "Spotted!");
+        this.toast(found ? hudMsg("play.toast.bodyFound") : g.isTarget ? (this.level.text.targetSpotted ?? hudMsg("play.toast.spotted")) : hudMsg("play.toast.spotted"));
         for (const o of this.guards) {
           if (o !== g && !o.dead && o.stun <= 0 && o.brain.state !== "alert" && dist2D(o, g) < 14) {
             o.brain = forceAlert();
@@ -2621,7 +2625,7 @@ export class Game {
       this.charmFound = true;
       this.charmPopT = 0; // the mesh pops and then hides itself (render)
       this.feel.kick(KICK.charm);
-      this.toast(`Found the ${this.charm.name}. Your tangkal are under Kelengkapan in the pause menu.`);
+      this.toast(hudMsg("play.toast.charm", { name: this.charm.name }));
       this.cb.onAmulet?.(this.charm.id);
       this.chron.add({ k: "charm", name: this.charm.name });
       return;
@@ -2651,7 +2655,7 @@ export class Game {
       p.vy = 0;
       return;
     }
-    this.killGuard(guard, guard.stagger > 0 ? "Counter kill." : "Silent kill.");
+    this.killGuard(guard, guard.stagger > 0 ? "counter" : "silent");
   }
 
   // ------------------------------------------------------------------ boats
@@ -2719,7 +2723,7 @@ export class Game {
     this.crouchToggle = false;
     this.swing = null;
     this.charge = null;
-    this.toast("In the sampan. Paddle to a bank or jetty and press E to go ashore.");
+    this.toast(hudMsg("play.toast.sampanIn"));
   }
 
   /** A dry spot beside the boat to step out onto (bank or deck), or null when the boat is out in the stream. */
@@ -2753,7 +2757,7 @@ export class Game {
   private goAshore() {
     const s = this.shoreSpot();
     if (!s) {
-      this.toast("Paddle closer to a bank or jetty.");
+      this.toast(hudMsg("play.toast.sampanFar"));
       return;
     }
     const b = this.boat!;
@@ -2888,7 +2892,7 @@ export class Game {
     this.crouchToggle = false;
     this.swing = null;
     this.charge = null;
-    this.toast("On horseback. Shift gallops, but guards hear it. E to dismount.");
+    this.toast(hudMsg("play.toast.horseOn"));
   }
 
   private horseSpot() {
@@ -2898,7 +2902,7 @@ export class Game {
   private dismount() {
     const s = this.horseSpot();
     if (!s) {
-      this.toast("No room to get down here.");
+      this.toast(hudMsg("play.toast.horseNoRoom"));
       return;
     }
     this.horse!.speed = 0;
@@ -3005,13 +3009,13 @@ export class Game {
 
   private strikeGuard(g: Guard, heavy = false) {
     if (g.stagger > 0 || g.stun > 0) {
-      this.killGuard(g, "Counter kill.");
+      this.killGuard(g, "counter");
       return;
     }
     g.hp -= heavy ? HEAVY.damage : 1;
     this.feel.kick(heavy ? KICK.heavy : KICK.strike);
     if (g.hp <= 0) {
-      this.killGuard(g, "Cut down.");
+      this.killGuard(g, "cut");
       return;
     }
     // a guard struck while unaware turns and fights
@@ -3029,7 +3033,7 @@ export class Game {
       g.atk = null;
       g.atkCd = Math.max(g.atkCd, HEAVY.stagger + 0.4);
       g.animKick = "hit";
-      this.toast("Guard broken! Strike now.");
+      this.toast(hudMsg("play.toast.guardBroken"));
     } else if (this.time - g.lastFlinch > POISE) {
       g.flinch = FLINCH;
       g.lastFlinch = this.time;
@@ -3070,7 +3074,7 @@ export class Game {
     const facing = Math.abs(wrapAngle(yawTo(g, p) - g.yaw)) < 0.9;
     if (dist2D(g, p) > GUARD_ATK.reach + 0.5 || Math.abs(p.y - g.y) > 1.3 || !facing) return;
     if (this.roll && this.roll.t < ROLL.iframes) {
-      this.toast("Dodged.");
+      this.toast(hudMsg("play.toast.dodged"));
       return;
     }
     if (this.parryT > 0) {
@@ -3081,7 +3085,7 @@ export class Game {
       this.parryT = 0;
       this.parryCd = 0;
       this.feel.kick(KICK.parry);
-      this.toast("Parried! Strike now.");
+      this.toast(hudMsg("play.toast.parried"));
       this.chron.add({ k: "parry" });
       return;
     }
@@ -3101,10 +3105,11 @@ export class Game {
       p.z = kz;
       pushOut(p, PLAYER_R, this.level.colliders, p.y);
     }
-    if (this.hp > 0) this.toast(this.hp < 1.5 ? "Badly hurt. Break away!" : "Cut!");
+    if (this.hp > 0) this.toast(hudMsg(this.hp < 1.5 ? "play.toast.hurtBadly" : "play.toast.hurt"));
   }
 
-  private killGuard(guard: Guard, msg: string, kick: Kick = KICK.takedown) {
+  private killGuard(guard: Guard, how: "air" | "counter" | "silent" | "cut", kick: Kick = KICK.takedown) {
+    const msg = KILL_EN[how]; // the chronicle keeps its own English wording; the toast is a key
     this.stabT = 0.7;
     this.feel.kick(kick);
     guard.dead = true;
@@ -3122,7 +3127,7 @@ export class Game {
     this.chron.kill(msg, guard.isTarget, !!cover);
     for (const o of this.guards) if (!o.dead && o !== guard && dist2D(o, guard) < 5) this.hear(o, guard);
     if (guard.isTarget && this.def.objective.kind === "kill") this.completeObjective();
-    else this.toast(cover ? `${msg} Body hidden in cover.` : msg);
+    else this.toast(hudMsg(cover ? `play.toast.kill.${how}.cover` : `play.toast.kill.${how}`));
     if (!guard.isTarget) this.dalang.cue("kill");
   }
 
@@ -3139,7 +3144,7 @@ export class Game {
       b.y = p.y;
       if (isBodyHidden(b, this.level.hides)) this.chron.add({ k: "hideBody" });
       this.feel.kick(KICK.drop);
-      this.toast(isBodyHidden(b, this.level.hides) ? "Body hidden." : "Body dropped. Hide it in a haystack or bush.");
+      this.toast(hudMsg(isBodyHidden(b, this.level.hides) ? "play.toast.bodyHidden" : "play.toast.bodyDropped"));
       return;
     }
     const b = this.nearestBody();
@@ -3147,7 +3152,7 @@ export class Game {
     this.carrying = b;
     b.carried = true;
     this.feel.kick(KICK.carry); // the weight of the body settles on the shoulders
-    this.toast("Carrying body. F to drop.");
+    this.toast(hudMsg("play.toast.carrying"));
   }
 
   private nearestBody(): Guard | null {
@@ -3195,11 +3200,11 @@ export class Game {
       hitGuard.atk = null;
       hitGuard.meter = 0;
       this.feel.kick(KICK.knifeStun);
-      this.toast("Guard stunned.");
+      this.toast(hudMsg("play.toast.stunned"));
     } else {
       // clatter: guards near the landing point go and look
       for (const g of this.guards) if (!g.dead && dist2D(g, hit) < 11) this.hear(g, { x: hit.x, z: hit.z });
-      this.toast("Distraction thrown.");
+      this.toast(hudMsg("play.toast.distraction"));
     }
   }
 
@@ -3225,29 +3230,29 @@ export class Game {
     const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
     const foe = sanc ? null : this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
-    else if (this.gateNow) prompt = `Masuk: ${this.gateNow.label}`;
+    else if (this.gateNow) prompt = hudMsg("play.prompt.gate", { label: this.gateNow.label });
     else if (this.swim)
       prompt = this.nearBoat()
-        ? "E  Climb into the sampan"
+        ? hudMsg("play.prompt.climbBoat")
         : !this.swim.under && this.findClimb(this.swimReach)
-          ? "Space  Climb up"
-          : this.swim.under ? "Diving: unseen" : this.swim.gasp > 0 ? "Catching your breath" : "Ctrl / C  Dive";
-    else if (incoming && !this.roll) prompt = "R  Parry  ·  X  Roll";
-    else if (this.boat) prompt = this.shoreSpot() ? "E  Go ashore" : "";
-    else if (this.horse) prompt = this.horseSpot() ? "E  Dismount" : "";
-    else if (this.charge !== null) prompt = this.charge >= HEAVY.hold ? "Let go: heavy strike" : "Hold for a heavy strike";
-    else if (this.nearCharm() && !this.carrying && this.charm) prompt = `E  Take the ${this.charm.name}`;
-    else if (this.nearLoot() && !this.carrying) prompt = `E  ${this.level.text.take ?? "Take it"}`;
-    else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : "E  Air assassination";
-    else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stagger > 0 ? "E  Finish him" : tg.guard.stun > 0 ? "E  Finish stunned guard" : "E  Keris takedown";
-    else if (foe && !this.carrying) prompt = "E  Strike (hold: heavy)  ·  R  Parry  ·  X  Roll";
-    else if (this.carrying) prompt = "F  Drop body (inside a haystack or bush to hide it)";
-    else if (tg.near) prompt = "Get behind him";
+          ? hudMsg("play.prompt.climbUp")
+          : this.swim.under ? hudMsg("play.prompt.diving") : this.swim.gasp > 0 ? hudMsg("play.prompt.gasp") : hudMsg("play.prompt.dive");
+    else if (incoming && !this.roll) prompt = hudMsg("play.prompt.parryRoll");
+    else if (this.boat) prompt = this.shoreSpot() ? hudMsg("play.prompt.ashore") : "";
+    else if (this.horse) prompt = this.horseSpot() ? hudMsg("play.prompt.dismount") : "";
+    else if (this.charge !== null) prompt = hudMsg(this.charge >= HEAVY.hold ? "play.prompt.heavyGo" : "play.prompt.heavyHold");
+    else if (this.nearCharm() && !this.carrying && this.charm) prompt = hudMsg("play.prompt.takeCharm", { name: this.charm.name });
+    else if (this.nearLoot() && !this.carrying) prompt = this.level.text.take ? `E  ${this.level.text.take}` : hudMsg("play.prompt.take");
+    else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : hudMsg("play.prompt.air");
+    else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stagger > 0 ? hudMsg("play.prompt.finish") : tg.guard.stun > 0 ? hudMsg("play.prompt.finishStunned") : hudMsg("play.prompt.takedown");
+    else if (foe && !this.carrying) prompt = hudMsg("play.prompt.fight");
+    else if (this.carrying) prompt = hudMsg("play.prompt.dropBody");
+    else if (tg.near) prompt = hudMsg("play.prompt.behind");
     else if (this.pantun.prompt(p)) prompt = this.pantun.prompt(p);
-    else if (this.nearBoat()) prompt = "E  Board the sampan";
-    else if (this.nearHorse()) prompt = "E  Mount the horse";
-    else if (this.nearestBody()) prompt = "F  Carry body";
-    else if (this.hidden) prompt = "Hidden";
+    else if (this.nearBoat()) prompt = hudMsg("play.prompt.board");
+    else if (this.nearHorse()) prompt = hudMsg("play.prompt.mount");
+    else if (this.nearestBody()) prompt = hudMsg("play.prompt.carryBody");
+    else if (this.hidden) prompt = hudMsg("play.prompt.hidden");
 
     const o = this.def.objective;
     const tgt: Vec2 | null | undefined =

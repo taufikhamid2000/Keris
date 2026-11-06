@@ -21,6 +21,7 @@ export const AMULETS: AmuletDef[] = [
   { id: "besi", level: "plans", name: "Tangkal Besi", desc: "Carry 2 more throwing knives", apply: (m) => ({ ...m, knives: m.knives + 2 }) },
   { id: "buaya", level: "jungle", name: "Tangkal Buaya", desc: "Hold your breath half again as long", apply: (m) => ({ ...m, breath: m.breath * 1.5 }) },
   { id: "puteri", level: "ledang", name: "Tangkal Puteri", desc: "Health starts coming back 2 s sooner", apply: (m) => ({ ...m, regenDelay: Math.max(1, m.regenDelay - 2) }) },
+  { id: "rantai", level: "penjara", name: "Tangkal Rantai", desc: "Parry window 20% wider", apply: (m) => ({ ...m, parryWin: m.parryWin * 1.2 }) },
 ];
 
 AMULETS.push({ id: "merpati", level: "masjid", name: "Tangkal Merpati", desc: "A quarter longer to catch a parry", apply: (m) => ({ ...m, parryWin: m.parryWin * 1.25 }) });

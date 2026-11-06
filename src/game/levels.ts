@@ -3,6 +3,7 @@
 import type { Vec2 } from "./logic";
 import type { WayangDef } from "./wayang";
 import { TIDE_HOUSES } from "./tide";
+import { PENJARA } from "./levels/penjara";
 
 export interface HouseDef {
   x: number;
@@ -784,7 +785,7 @@ export const WAYANG: LevelDef = {
 };
 
 /** Every mission, in play order. */
-export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG, WAYANG];
+export const LEVELS: LevelDef[] = [HARBOUR, KAMPUNG, PLANS, JUNGLE_CAMP, LEDANG, WAYANG, PENJARA];
 
 // Masjid: the quiet warkah errand (masjid.ts)
 import { MASJID } from "./masjid";

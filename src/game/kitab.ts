@@ -7,6 +7,7 @@
 import { CAMP, JUNGLE_Z0, JUNGLE_Z1, POOL, RIVER, SUMMIT } from "./levels";
 import type { LevelDef } from "./levels";
 import { MASJID_COURT, MASJID_POND } from "./masjid";
+import { PENJARA_BLOCK, PENJARA_YARD } from "./levels/penjara";
 
 export interface PlaceDef {
   id: string;
@@ -23,6 +24,7 @@ export interface PlaceDef {
 export const placeOnLevel = (p: PlaceDef, levelId?: string) => !p.level || p.level === levelId;
 
 const near = (c: { x: number; z: number }, r: number) => (x: number, _y: number, z: number) => Math.hypot(x - c.x, z - c.z) <= r;
+const inBox = (r: { x: number; z: number; w: number; d: number }) => (x: number, _y: number, z: number) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2;
 const riverZ0 = RIVER.z - RIVER.d / 2 - 1;
 const riverZ1 = RIVER.z + RIVER.d / 2 + 1;
 
@@ -90,6 +92,20 @@ export const PLACES: PlaceDef[] = [
     text: "A small shrine above the clouds where offerings are left. The golden tepak sireh sat on its altar before the soldiers came.",
     at: (x, y, z) => y >= SUMMIT.y - 1 && Math.hypot(x - SUMMIT.x, z - SUMMIT.z) <= 10,
   },
+  {
+    id: "halaman-penjara",
+    title: "The penjara yard",
+    hint: "Below the fort wall, outside the gate",
+    text: "A walled yard of packed earth where the guard is changed. One gate and the jailer's back door lead down to the cells, and nothing grows here but straw.",
+    at: inBox(PENJARA_YARD),
+  },
+  {
+    id: "sel",
+    title: "The cells",
+    hint: "Down in the damp, past the gate",
+    text: "Stone and straw, with water running down the walls and a lantern at every second corner. The corridors are only wide enough for two men, and somewhere behind the last cell an old drain still runs to the river.",
+    at: inBox(PENJARA_BLOCK),
+  },
 ];
 
 // Masjid mission places (this mission only)
@@ -120,6 +136,7 @@ export const CHARM_LORE: Record<string, string> = {
   buaya: "A crocodile's tooth on a cord. The buaya waits under the water for as long as it must.",
   merpati: "A grey dove's feather bound in thread, found where the lanes run quiet. Doves nest in old eaves and do not startle at footsteps they know.",
   puteri: "A thread of gold said to be from the puteri's own sash, left on the mountain. Wounds close a little faster near it.",
+  rantai: "One link of a prisoner's chain, worn smooth in the dark. It has held men who should never have been held, and it remembers how to let go: a blade turned aside is turned a moment longer.",
 };
 
 /** After-the-mission pages, by level id. */
@@ -130,6 +147,7 @@ export const MISSION_LORE: Record<string, { title: string; text: string }> = {
   jungle: { title: "The scouts", text: "Without their captain the scouts lost the trails they had mapped. The way in from the hutan is closed, for now." },
   ledang: { title: "The tepak sireh", text: "The betel box is back on the summit altar. The mist came down again behind you, as if the mountain had been waiting." },
   wayang: { title: "The shadow play", text: "The dalang keeps the Pendekar's puppet in a box of its own. He says it moves on the kelir before he touches the rods." },
+  penjara: { title: "The empty cell", text: "At the morning bell the jailer swore the door was still locked. Down in the drain the soldiers found wet footprints, a boatwright's cap, and no one to ask." },
 };
 
 MISSION_LORE.masjid = {

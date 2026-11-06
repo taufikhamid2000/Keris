@@ -1,10 +1,14 @@
 // Hikayat: the game writes your tale. Turns an attempt's chronicle (chronicle.ts) into a short story in the
-// cadence of the old Malay hikayat, told in English. Pure data and helpers, no DOM or three.js.
+// cadence of the old Malay hikayat, told in Malay (default) or English. Pure data and helpers, no DOM or three.js.
 // Wording is picked by a seeded RNG from the attempt, so the same run always reads the same, and the
 // tone follows how it went: a ghost run, a bloody one, a messy one, or one that ended in a fall.
+// All sentences live in strings/story.ts (hikayat.*); numbered variants (key.0, key.1) are the RNG's choices.
+// The tale is an in-world fiction set in Melaka in 1511 (see docs/STORYLINE-DRAFT.md), not history.
 
 import type { ChronEvent, ChronicleData, KillHow } from "./chronicle";
+import { t as tr, type Lang, type Vars } from "./i18n";
 import type { LevelDef } from "./levels";
+import { tx, variantKeys } from "./tx";
 
 /** The bits of RunStats the tale needs (kept structural so this module never imports the engine). */
 export interface TaleStats {
@@ -17,7 +21,7 @@ type Tone = "ghost" | "shadow" | "messy" | "bloody" | "fallen";
 interface Cast {
   /** kill missions: the target; steal missions: the item */
   who: string;
-  /** what the pendekar was sent to do, after "to" */
+  /** what the pendekar was sent to do, after "to" / "untuk" */
   deed: string;
   /** the place the tale is set */
   region: string;
@@ -25,41 +29,19 @@ interface Cast {
   exit: string;
 }
 
-const CAST: Record<string, Cast> = {
-  harbour: { who: "the Kapitan", deed: "silence the Kapitan of the bridge battery", region: "Bandar Melaka", exit: "the harbour jetty" },
-  kampung: { who: "the turncoat clerk", deed: "find the clerk who had sold the battery plans for silver", region: "Kampung Hulu", exit: "the river jetty" },
-  plans: { who: "the chest of plans", deed: "take back the battery plans from under the penghulu's hall", region: "Kampung Hulu", exit: "the river jetty" },
-  jungle: { who: "the scout captain", deed: "find the captain of the scouts in his jungle camp", region: "the hutan", exit: "the river jetty" },
-  ledang: { who: "the golden tepak sireh", deed: "bring the golden tepak sireh out of the soldiers' hands", region: "Gunung Ledang", exit: "the pool below the falls" },
-  penjara: { who: "Pak Long Hasan", deed: "free Pak Long Hasan, the old boatwright, from the cells under the fort", region: "the penjara", exit: "the old drain to the river" },
-};
-
-CAST.masjid = { who: "the sealed warkah", deed: "carry the penjaga's sealed warkah out of the town to the envoy's boatman", region: "the lanes round the old masjid", exit: "the harbour jetty" };
-
-function castFor(def: LevelDef): Cast {
-  const c = CAST[def.id];
-  if (c) return c;
+/** Levels with a cast of their own (hikayat.cast.<id>.*); others fall back to the level's own objective text. */
+function castFor(def: LevelDef, lang: Lang): Cast {
+  const k = (part: string) => tx(lang, `hikayat.cast.${def.id}.${part}`, "");
+  const who = k("who");
+  if (who) return { who, deed: k("deed"), region: k("region"), exit: k("exit") };
   const obj = def.text.objective;
-  return { who: def.objective.kind === "steal" ? "the prize" : "the man he sought", deed: obj.charAt(0).toLowerCase() + obj.slice(1), region: def.name, exit: "the way out" };
+  return {
+    who: tr(lang, def.objective.kind === "steal" ? "hikayat.cast.default.who.steal" : "hikayat.cast.default.who.kill"),
+    deed: obj.charAt(0).toLowerCase() + obj.slice(1),
+    region: def.name,
+    exit: tr(lang, "hikayat.cast.default.exit"),
+  };
 }
-
-/** Kitab place ids as they sit in a sentence. */
-const PLACE_WORDS: Record<string, string> = {
-  jeti: "the harbour jetty",
-  pelabuhan: "the lanes of Bandar Melaka",
-  sungai: "the brown river",
-  "kampung-hulu": "Kampung Hulu",
-  hutan: "the old hutan",
-  kem: "the scouts' camp",
-  ledang: "the slopes of Gunung Ledang",
-  kolam: "the pool below the falls",
-  puncak: "the summit shrine",
-  "halaman-penjara": "the yard of the penjara",
-  sel: "the dripping cells",
-};
-
-PLACE_WORDS.masjid = "the quiet yard of the masjid";
-PLACE_WORDS["kolam-masjid"] = "the still pond by the gate";
 
 // ---------------------------------------------------------------- small helpers
 
@@ -80,19 +62,7 @@ const hash = (s: string) => {
   return h >>> 0;
 };
 
-const NUMS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-const num = (n: number) => NUMS[n] ?? String(n);
-const times = (n: number) => (n === 1 ? "once" : n === 2 ? "twice" : n === 3 ? "thrice" : `${num(n)} times`);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** "a", "a and b", "a, b and c" */
-function list(xs: string[]): string {
-  if (xs.length <= 1) return xs[0] ?? "";
-  return `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
-}
-
-/** Words that may lose their capital after a connective ("Maka he..."); names keep theirs. */
-const LOWERABLE = /^(He|His|Him|The|There|Twice|Thrice|Once|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Many|A|An|At|In|On|By|When|Not|Where|Down|Up|Into|From|Only|Even|Before|After|With|Below|Above|Some|No|None|So|Of|All|Each|Under|Over|Long|Every)\b/;
 
 // ---------------------------------------------------------------- the tale
 
@@ -176,13 +146,25 @@ function toneOf(t: Tally, s: TaleStats): Tone {
   return s.alerts === 0 ? "ghost" : "shadow";
 }
 
-/** Tell the tale of one attempt: 5 to 10 sentences, one paragraph. */
-export function tellHikayat(log: ChronicleData, def: LevelDef, stats: TaleStats): string {
+/** Tell the tale of one attempt: 5 to 10 sentences, one paragraph, in `lang` (default Malay). */
+export function tellHikayat(log: ChronicleData, def: LevelDef, stats: TaleStats, lang: Lang = "ms"): string {
   const r = rng(log.seed ^ hash(def.id));
-  const pick = <T,>(xs: T[]): T => xs[Math.floor(r() * xs.length)];
+  /** one dictionary entry */
+  const S = (key: string, vars?: Vars) => tr(lang, key, vars);
+  /** one of the numbered variants of `prefix`, by the seeded RNG */
+  const pk = (prefix: string, vars?: Vars) => {
+    const keys = variantKeys(lang, prefix);
+    return tr(lang, keys[Math.floor(r() * keys.length)], vars);
+  };
+  const num = (n: number) => tx(lang, `hikayat.num.${n}`, String(n));
+  const times = (n: number) => (n >= 1 && n <= 3 ? S(`hikayat.times.${n}`) : S("hikayat.times.n", { n: num(n) }));
+  /** "a", "a and b", "a, b and c" */
+  const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} ${S("hikayat.and")} ${xs[xs.length - 1]}`);
+  const lowerable = new RegExp(`^(${S("hikayat.lowerable")})\\b`);
+
   const t = tally(log.events);
   const tone = toneOf(t, stats);
-  const c = castFor(def);
+  const c = castFor(def, lang);
   const steal = def.objective.kind === "steal";
   const won = !!t.end?.won;
   const Who = cap(c.who);
@@ -193,127 +175,125 @@ export function tellHikayat(log: ChronicleData, def: LevelDef, stats: TaleStats)
   const say = (p: number, s: string) => body.push({ p, s });
 
   // ---- opening (always)
-  const dusk = def.id === "ledang" ? "when the mist lay thick on the mountain" : def.id === "jungle" ? "when the hutan was loud with insects" : "when the lamps were lit along the lanes";
+  const dusk = S(`hikayat.dusk.${def.id === "ledang" ? "ledang" : def.id === "jungle" ? "jungle" : "default"}`);
   const opening =
     t.from === "target"
-      ? pick([
-          `Adapun ${c.who} was already ${steal ? "in his hands" : "dead"}, and there remained to the pendekar only the road to ${c.exit}.`,
-          `Sebermula, the work was half done: ${c.who} ${steal ? "was taken" : "lay still"}, and the pendekar had yet to reach ${c.exit} alive.`,
-        ])
-      : pick([
-          `Sebermula, in the days when the Portuguese ships lay in the roads off Melaka, a pendekar was sent to ${c.deed}.`,
-          `Alkisah, it is told that ${dusk}, the pendekar went out into ${c.region} to ${c.deed}.`,
-          `Adapun the pendekar, having taken his charge from the elder, set out ${dusk} to ${c.deed}.`,
-        ]);
+      ? pk(`hikayat.open.target.${steal ? "steal" : "kill"}`, { who: c.who, exit: c.exit })
+      : pk("hikayat.open.start", { deed: c.deed, dusk, region: c.region });
 
   // ---- the road taken
-  const words = t.places.map((id) => PLACE_WORDS[id]).filter((w): w is string => !!w);
+  const words = t.places.map((id) => tx(lang, `hikayat.place.${id}`, "")).filter((w) => w !== "");
   if (words.length >= 2) {
     const mid = words.slice(1, -1).slice(0, 2);
     const first = words[0];
     const last = words[words.length - 1];
-    say(5, mid.length
-      ? pick([`From ${first} he went by way of ${list(mid)}, and came at last to ${last}.`, `His road ran from ${first} through ${list(mid)} to ${last}, and he kept to the dark the whole way.`])
-      : pick([`From ${first} he went on to ${last}, keeping to the shadows of the eaves.`, `He left ${first} behind him and went on to ${last}.`]));
+    say(5, mid.length ? pk("hikayat.road.mid", { first, mid: list(mid), last }) : pk("hikayat.road.nomid", { first, last }));
   } else if (words.length === 1) {
-    say(5, pick([`He kept to ${words[0]} the whole night through.`, `All that he did, he did in ${words[0]}.`]));
+    say(5, pk("hikayat.road.one", { place: words[0] }));
   }
 
   // ---- water and mounts
   const travel: string[] = [];
-  if (t.swims) travel.push(t.dives ? pick([`into the water he went like a buaya, and ${times(t.dives)} he slipped under and held his breath while the soldiers looked about`, `he took to the water, and went under ${times(t.dives)} where no eye could follow`]) : pick(["he swam where no soldier would wade", "he crossed the water as the buaya crosses it, with only his eyes above"]));
-  if (t.boat) travel.push(pick(["he took a sampan and slid along the water, and his paddle made no splash", "a sampan carried him a while, low on the water"]));
-  if (t.horse) travel.push(pick(["he took a horse and rode it hard, so that the hooves were heard from far off", "he rode a while on a stolen horse, and the road went by fast beneath him"]));
+  if (t.swims) travel.push(t.dives ? pk("hikayat.travel.dive", { times: times(t.dives) }) : pk("hikayat.travel.swim"));
+  if (t.boat) travel.push(pk("hikayat.travel.boat"));
+  if (t.horse) travel.push(pk("hikayat.travel.horse"));
   if (travel.length) say(3, `${cap(list(travel))}.`);
 
   // ---- hiding
   if (t.hides || t.hidBodies) {
-    const a = t.hides ? pick([`${cap(times(t.hides))} he folded himself into the hay and the bushes, and the soldiers walked by close enough to touch`, `${cap(times(t.hides))} he went to ground in the hay and the leaves and waited for the boots to pass`]) : "";
-    const b = t.hidBodies ? `${a ? ", and " : ""}${t.hidBodies === 1 ? "one of the dead he dragged into cover, that no one should find him" : `${num(t.hidBodies)} of the dead he dragged into cover, that no one should find them`}` : "";
+    const a = t.hides ? pk("hikayat.hide.a", { times: times(t.hides) }) : "";
+    const b = t.hidBodies ? `${a ? S("hikayat.hide.join") : ""}${t.hidBodies === 1 ? S("hikayat.hide.body.1") : S("hikayat.hide.body.n", { n: num(t.hidBodies) })}` : "";
     say(2, `${cap(a + b)}.`);
   }
 
   // ---- tools
   const tools: string[] = [];
-  if (t.stones) tools.push(t.stoneHeard ? (t.stones === 1 ? "one stone tossed into the dark turned a soldier's head the wrong way" : `${num(t.stones)} stones he threw into the dark, and the soldiers went to look at nothing`) : `${t.stones === 1 ? "a stone" : `${num(t.stones)} stones`} he threw that no one heard`);
-  if (t.pepper) tools.push(t.blinded ? `with serbuk lada he blinded ${t.blinded === 1 ? "a man" : `${num(t.blinded)} men`}, who wept and clawed at their eyes` : "a handful of pepper he gave to the wind, and it blinded nobody");
-  if (t.knives) tools.push(t.knifeHits ? `${t.knifeHits === t.knives ? (t.knives === 1 ? "his one throwing knife" : `all ${num(t.knives)} of his throwing knives`) : `${num(t.knifeHits)} of his ${num(t.knives)} throwing knives`} struck home, and the struck men reeled` : `his throwing knives clattered off into the dark`);
+  if (t.stones) {
+    const one = t.stones === 1;
+    const n = num(t.stones);
+    tools.push(t.stoneHeard ? (one ? S("hikayat.tool.stone.heard1") : S("hikayat.tool.stone.heardN", { n })) : one ? S("hikayat.tool.stone.quiet1") : S("hikayat.tool.stone.quietN", { n }));
+  }
+  if (t.pepper) {
+    tools.push(t.blinded ? S("hikayat.tool.pepper.hit", { men: t.blinded === 1 ? S("hikayat.men.1") : S("hikayat.men.n", { n: num(t.blinded) }) }) : S("hikayat.tool.pepper.miss"));
+  }
+  if (t.knives) {
+    const what =
+      t.knifeHits === t.knives
+        ? t.knives === 1
+          ? S("hikayat.tool.knife.all1")
+          : S("hikayat.tool.knife.allN", { n: num(t.knives) })
+        : S("hikayat.tool.knife.some", { h: num(t.knifeHits), n: num(t.knives) });
+    tools.push(t.knifeHits ? S("hikayat.tool.knife.hit", { what }) : S("hikayat.tool.knife.miss"));
+  }
   if (tools.length) say(1, `${cap(list(tools))}.`);
 
   // ---- the fallen (merged by how they died)
   if (killed) {
     const parts: string[] = [];
     const k = t.kills;
-    if (k.silent) parts.push(k.silent === 1 ? pick(["one guard he took from behind, and the man made no sound", "a single guard died with the keris in his back before he knew he was not alone"]) : pick([`${num(k.silent)} guards fell before him without a sound`, `${num(k.silent)} men he took from behind, one by one, and not one of them cried out`]));
-    if (k.air) parts.push(k.air === 1 ? pick(["one he took from above, dropping on him as the helang drops on a chick", "one never thought to look up, and the pendekar came down on him from the eaves"]) : `${times(k.air)} he dropped from on high like the helang, and each time a man did not rise`);
-    if (k.counter) parts.push(k.counter === 1 ? "one who staggered under his blade he finished where he stood" : `${num(k.counter)} who reeled from his blade he finished before they could steady themselves`);
-    if (k.cut) parts.push(k.cut === 1 ? pick(["one he cut down face to face", "one stood against him in the open, and was cut down"]) : pick([`${num(k.cut)} he cut down blade to blade, for all to see`, `${num(k.cut)} stood against him in the open, and the ground was red with them`]));
-    const lead = parts.length > 1 && killed >= 3 ? "Many were the soldiers who met him: " : "";
+    if (k.silent) parts.push(k.silent === 1 ? pk("hikayat.kill.silent1") : pk("hikayat.kill.silentN", { n: num(k.silent) }));
+    if (k.air) parts.push(k.air === 1 ? pk("hikayat.kill.air1") : S("hikayat.kill.airN", { times: times(k.air) }));
+    if (k.counter) parts.push(k.counter === 1 ? S("hikayat.kill.counter1") : S("hikayat.kill.counterN", { n: num(k.counter) }));
+    if (k.cut) parts.push(k.cut === 1 ? pk("hikayat.kill.cut1") : pk("hikayat.kill.cutN", { n: num(k.cut) }));
+    const lead = parts.length > 1 && killed >= 3 ? S("hikayat.kill.lead") : "";
     say(6, lead ? `${lead}${list(parts)}.` : `${cap(list(parts))}.`);
   } else if (won || tone !== "fallen") {
-    say(6, steal || t.target || t.from === "target" ? pick(["His keris tasted no blood that night save what the task required.", "Not one soldier's blood did he spill that he did not have to."]) : pick(["His keris never once left its sheath.", "Not a single soldier did he harm, and his keris stayed in its sheath."]));
+    say(6, steal || t.target || t.from === "target" ? pk("hikayat.nokill.task") : pk("hikayat.nokill.none"));
   }
 
   // ---- seen
   if (t.spotted) {
-    const body2 = t.bodiesFound ? `, and ${t.bodiesFound === 1 ? "once it was a body he had left that was found" : `${times(t.bodiesFound)} it was the bodies he had left that gave him away`}` : "";
-    const tgt = t.targetSpotted && !steal ? ` ${Who} himself saw him and called for his men.` : "";
-    say(7, pick([`But ${times(t.spotted)} the cry went up and the soldiers came running${body2}.`, `Yet he was seen ${times(t.spotted)}, and ${t.spotted === 1 ? "the alarm" : "each time the alarm"} ran from post to post${body2}.`]) + tgt);
+    const body2 = t.bodiesFound ? (t.bodiesFound === 1 ? S("hikayat.seen.body1") : S("hikayat.seen.bodyN", { times: times(t.bodiesFound) })) : "";
+    const tgt = t.targetSpotted && !steal ? S("hikayat.seen.target", { Who }) : "";
+    say(7, pk("hikayat.seen.v", { times: times(t.spotted), alarm: t.spotted === 1 ? S("hikayat.seen.alarm1") : S("hikayat.seen.alarmN"), body: body2 }) + tgt);
   }
 
   // ---- blood and steel
   if (t.nearDeath || t.wounds || t.parries) {
     const parts: string[] = [];
-    if (t.parries) parts.push(t.parries === 1 ? "one blow he turned aside on the keris" : `${num(t.parries)} blows he turned aside on the keris`);
-    if (t.nearDeath) parts.push(won ? "once his own blood ran so freely that the tale nearly ended there, but he did not fall" : "his blood ran freely");
-    else if (t.wounds) parts.push(t.wounds === 1 ? "he took one cut and paid it no mind" : `he took ${num(t.wounds)} cuts and paid them no mind`);
+    if (t.parries) parts.push(t.parries === 1 ? S("hikayat.fight.parry1") : S("hikayat.fight.parryN", { n: num(t.parries) }));
+    if (t.nearDeath) parts.push(won ? S("hikayat.fight.near.won") : S("hikayat.fight.near.lost"));
+    else if (t.wounds) parts.push(t.wounds === 1 ? S("hikayat.fight.wound1") : S("hikayat.fight.woundN", { n: num(t.wounds) }));
     say(4, `${cap(list(parts))}.`);
   }
 
   // ---- the tangkal
-  if (t.charm) say(2, pick([`And hidden in the straw he found the ${t.charm}, and wore it after.`, `There too he came upon the ${t.charm}, tucked away where only a pendekar would look.`]));
+  if (t.charm) say(2, pk("hikayat.charm", { charm: t.charm }));
 
   // ---- the deed
   if (t.from === "start" && (t.objectiveT !== null || t.target)) {
-    const quick = t.objectiveT !== null && t.objectiveT < 120 ? pick([", before the watch had even changed", ", and the night was still young"]) : "";
+    const quick = t.objectiveT !== null && t.objectiveT < 120 ? pk("hikayat.quick") : "";
     if (steal) {
       say(8, stats.alerts > 0
-        ? `${Who} he found where it was hidden and took it up, though the hunt was loud around him${quick}.`
-        : pick([`${Who} he found where it was hidden, and took it up, and no hand stopped him${quick}.`, `He laid his hand on ${c.who} at last, and no one in all ${c.region} knew it was gone${quick}.`]));
+        ? S("hikayat.deed.steal.alert", { Who, quick })
+        : pk("hikayat.deed.steal.quiet", { Who, who: c.who, region: c.region, quick }));
     } else {
       const how = t.target?.how ?? "silent";
       say(8, how === "air"
-        ? `From above he fell upon ${c.who}, as the helang falls upon its prey, and it was done in a breath${quick}.`
+        ? S("hikayat.deed.kill.air", { who: c.who, quick })
         : how === "silent"
-          ? pick([`${Who} he found at last, and came at him from behind, and the keris went in once, and ${c.who} spoke no more${quick}.`, `Then he stood behind ${c.who}, close as a shadow, and struck once${quick}.`])
-          : `${Who} would not die quietly; they crossed blades in the open, and at the last the keris found him${quick}.`);
+          ? pk("hikayat.deed.kill.silent", { Who, who: c.who, quick })
+          : S("hikayat.deed.kill.open", { Who, quick }));
     }
   }
 
   // ---- how it went (tone)
-  const toneLine: Record<Tone, string[]> = {
-    ghost: ["No soldier saw so much as his shadow; to them he was only a wind moving in the atap.", "The soldiers would swear by morning that nobody had come at all."],
-    shadow: ["Seen he was, but only for a moment, and moments pass.", "A glimpse they had of him, no more, and a glimpse is not a name."],
-    messy: [`It was not a quiet night; all ${c.region} heard of it by morning.`, "It was a loud and ragged business, and the soldiers did not sleep again that night."],
-    bloody: ["The soldiers would speak of that night in whispers for a long time after.", "Red was the keris that night, and the ships in the roads heard the count by dawn."],
-    fallen: ["Who he was, the soldiers never learned.", "The lamps burned late that night in the soldiers' quarters."],
-  };
-  const toneSay = () => say(won ? 4 : 8, pick(toneLine[tone]));
+  const toneSay = () => say(won ? 4 : 8, pk(`hikayat.tone.${tone}`, { region: c.region }));
 
   if (won) toneSay();
 
   // ---- the end of it
   const mins = Math.max(1, Math.round(stats.time / 60));
   if (won) {
-    const pace = stats.time < 180 ? "quicker than a quid of sireh is chewed" : stats.time < 480 ? "in the time it takes rice to cook" : `and ${num(mins)} minutes had passed since he set out`;
-    say(9, pick([`Hatta, he went down to ${c.exit} and was gone, ${pace}.`, `Maka he came to ${c.exit} and slipped away into the dark, ${pace}.`]));
+    const pace = stats.time < 180 ? S("hikayat.pace.0") : stats.time < 480 ? S("hikayat.pace.1") : S("hikayat.pace.2", { n: num(mins) });
+    say(9, pk("hikayat.end.won", { exit: c.exit, pace }));
   } else {
     const where = words.length ? words[words.length - 1] : c.region;
     say(9, t.end?.reason === "slain"
-      ? pick([`Maka there in ${where} the pendekar fell at last, and the soldiers stood over him and wondered who he had been.`, `Hatta, in ${where} the blades closed around him, and there the pendekar fell.`])
+      ? pk("hikayat.end.slain", { where })
       : t.end?.reason === "detected"
-        ? `Maka the alarm went up in ${where}, and what had to be done unseen could not be done that night.`
-        : `Maka in ${where} the work came undone, and the pendekar had to leave it for another night.`);
+        ? S("hikayat.end.detected", { where })
+        : S("hikayat.end.other", { where }));
   }
 
   if (!won) toneSay();
@@ -331,7 +311,7 @@ export function tellHikayat(log: ChronicleData, def: LevelDef, stats: TaleStats)
   let prevCon = true;
   for (let i = 0; i < mids.length - 1 && pool.length; i++) {
     const s = mids[i];
-    if (prevCon || r() > 0.45 || !LOWERABLE.test(s)) {
+    if (prevCon || r() > 0.45 || !lowerable.test(s)) {
       prevCon = false;
       continue;
     }
@@ -340,11 +320,7 @@ export function tellHikayat(log: ChronicleData, def: LevelDef, stats: TaleStats)
     prevCon = true;
   }
 
-  const closing = pick(
-    won
-      ? ["Demikianlah the tale, as the one who owns it told it; and God knows best.", "Thus it is told, and thus it was; wallahualam.", "So ends this part of the hikayat of the pendekar, as the tellers tell it."]
-      : ["So the tale breaks off here; but tales in Melaka are told more than once.", "Thus it is told, though the tellers say it ended otherwise the next time; wallahualam."],
-  );
+  const closing = pk(won ? "hikayat.closing.won" : "hikayat.closing.lost");
   return [opening, ...mids, closing].join(" ");
 }
 

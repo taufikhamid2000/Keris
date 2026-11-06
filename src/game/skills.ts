@@ -4,6 +4,7 @@
 // The moves themselves (crouch, hide, parry, roll, knives, Mata Helang) are always there; these make them better.
 
 import type { SaveData } from "./save";
+import { t, type Lang } from "./i18n";
 
 export const MISSION_POINTS = 2;
 export const GHOST_POINTS = 1;
@@ -20,22 +21,28 @@ export interface SkillDef {
   needs?: string;
 }
 
-export const BRANCHES: { id: BranchId; name: string; sub: string }[] = [
-  { id: "bayang", name: "Bayang", sub: "Shadow" },
-  { id: "silat", name: "Silat", sub: "Combat" },
-  { id: "helang", name: "Helang", sub: "Eagle" },
-];
+export const BRANCHES: { id: BranchId; name: string; sub: string }[] = (["bayang", "silat", "helang"] as const).map((id) => ({
+  id,
+  name: t("ms", `skill.branch.${id}.name`),
+  sub: t("ms", `skill.branch.${id}.sub`),
+}));
+
+/** Wording in one language (the name / desc / sub fields above are Malay). */
+export const skillName = (lang: Lang, id: string) => t(lang, `skill.${id}.name`);
+export const skillDesc = (lang: Lang, id: string) => t(lang, `skill.${id}.desc`);
+export const branchName = (lang: Lang, id: BranchId) => t(lang, `skill.branch.${id}.name`);
+export const branchSub = (lang: Lang, id: BranchId) => t(lang, `skill.branch.${id}.sub`);
 
 export const SKILLS: SkillDef[] = [
-  { id: "langkah-kucing", branch: "bayang", name: "Langkah kucing", desc: "Footsteps carry 40% less far", cost: 1 },
-  { id: "bayang-senja", branch: "bayang", name: "Bayang senja", desc: "Guards take a third longer to spot you", cost: 1, needs: "langkah-kucing" },
-  { id: "nafas-panjang", branch: "bayang", name: "Nafas panjang", desc: "Hold your breath 75% longer under water", cost: 2, needs: "bayang-senja" },
-  { id: "tangkis-tajam", branch: "silat", name: "Tangkis tajam", desc: "Half again as long to catch a parry", cost: 1 },
-  { id: "kebal", branch: "silat", name: "Kebal", desc: "One more point of health", cost: 1, needs: "tangkis-tajam" },
-  { id: "pulih", branch: "silat", name: "Pulih", desc: "Health starts coming back after 3 s instead of 6 s", cost: 2, needs: "kebal" },
-  { id: "pisau-tambahan", branch: "helang", name: "Pisau tambahan", desc: "Carry 3 more throwing knives", cost: 1 },
-  { id: "pisau-berat", branch: "helang", name: "Pisau berat", desc: "A knife stuns for 9 s instead of 5 s", cost: 1, needs: "pisau-tambahan" },
-  { id: "sambar", branch: "helang", name: "Sambar", desc: "Leap onto a guard from up to 10 m instead of 7 m", cost: 2, needs: "pisau-berat" },
+  { id: "langkah-kucing", branch: "bayang", name: t("ms", "skill.langkah-kucing.name"), desc: t("ms", "skill.langkah-kucing.desc"), cost: 1 },
+  { id: "bayang-senja", branch: "bayang", name: t("ms", "skill.bayang-senja.name"), desc: t("ms", "skill.bayang-senja.desc"), cost: 1, needs: "langkah-kucing" },
+  { id: "nafas-panjang", branch: "bayang", name: t("ms", "skill.nafas-panjang.name"), desc: t("ms", "skill.nafas-panjang.desc"), cost: 2, needs: "bayang-senja" },
+  { id: "tangkis-tajam", branch: "silat", name: t("ms", "skill.tangkis-tajam.name"), desc: t("ms", "skill.tangkis-tajam.desc"), cost: 1 },
+  { id: "kebal", branch: "silat", name: t("ms", "skill.kebal.name"), desc: t("ms", "skill.kebal.desc"), cost: 1, needs: "tangkis-tajam" },
+  { id: "pulih", branch: "silat", name: t("ms", "skill.pulih.name"), desc: t("ms", "skill.pulih.desc"), cost: 2, needs: "kebal" },
+  { id: "pisau-tambahan", branch: "helang", name: t("ms", "skill.pisau-tambahan.name"), desc: t("ms", "skill.pisau-tambahan.desc"), cost: 1 },
+  { id: "pisau-berat", branch: "helang", name: t("ms", "skill.pisau-berat.name"), desc: t("ms", "skill.pisau-berat.desc"), cost: 1, needs: "pisau-tambahan" },
+  { id: "sambar", branch: "helang", name: t("ms", "skill.sambar.name"), desc: t("ms", "skill.sambar.desc"), cost: 2, needs: "pisau-berat" },
 ];
 
 const byId = new Map(SKILLS.map((s) => [s.id, s]));

@@ -5,26 +5,28 @@
 import type { LevelDef } from "./levels";
 import type { Vec2 } from "./logic";
 import type { SkillMods } from "./skills";
+import { t, type Lang } from "./i18n";
 
 export interface AmuletDef {
   id: string;
   /** the level it is hidden in */
   level: string;
   name: string;
+  /** Malay; use amuletDesc for the player's language */
   desc: string;
   apply: (m: SkillMods) => SkillMods;
 }
 
 export const AMULETS: AmuletDef[] = [
-  { id: "harimau", level: "harbour", name: "Tangkal Harimau", desc: "Footsteps 20% quieter", apply: (m) => ({ ...m, noise: m.noise * 0.8 }) },
-  { id: "kancil", level: "kampung", name: "Tangkal Kancil", desc: "Guards take a little longer to spot you", apply: (m) => ({ ...m, detect: m.detect * 0.85 }) },
-  { id: "besi", level: "plans", name: "Tangkal Besi", desc: "Carry 2 more throwing knives", apply: (m) => ({ ...m, knives: m.knives + 2 }) },
-  { id: "buaya", level: "jungle", name: "Tangkal Buaya", desc: "Hold your breath half again as long", apply: (m) => ({ ...m, breath: m.breath * 1.5 }) },
-  { id: "puteri", level: "ledang", name: "Tangkal Puteri", desc: "Health starts coming back 2 s sooner", apply: (m) => ({ ...m, regenDelay: Math.max(1, m.regenDelay - 2) }) },
-  { id: "rantai", level: "penjara", name: "Tangkal Rantai", desc: "Parry window 20% wider", apply: (m) => ({ ...m, parryWin: m.parryWin * 1.2 }) },
+  { id: "harimau", level: "harbour", name: "Tangkal Harimau", desc: t("ms", "amulet.harimau.desc"), apply: (m) => ({ ...m, noise: m.noise * 0.8 }) },
+  { id: "kancil", level: "kampung", name: "Tangkal Kancil", desc: t("ms", "amulet.kancil.desc"), apply: (m) => ({ ...m, detect: m.detect * 0.85 }) },
+  { id: "besi", level: "plans", name: "Tangkal Besi", desc: t("ms", "amulet.besi.desc"), apply: (m) => ({ ...m, knives: m.knives + 2 }) },
+  { id: "buaya", level: "jungle", name: "Tangkal Buaya", desc: t("ms", "amulet.buaya.desc"), apply: (m) => ({ ...m, breath: m.breath * 1.5 }) },
+  { id: "puteri", level: "ledang", name: "Tangkal Puteri", desc: t("ms", "amulet.puteri.desc"), apply: (m) => ({ ...m, regenDelay: Math.max(1, m.regenDelay - 2) }) },
+  { id: "rantai", level: "penjara", name: "Tangkal Rantai", desc: t("ms", "amulet.rantai.desc"), apply: (m) => ({ ...m, parryWin: m.parryWin * 1.2 }) },
 ];
 
-AMULETS.push({ id: "merpati", level: "masjid", name: "Tangkal Merpati", desc: "A quarter longer to catch a parry", apply: (m) => ({ ...m, parryWin: m.parryWin * 1.25 }) });
+AMULETS.push({ id: "merpati", level: "masjid", name: "Tangkal Merpati", desc: t("ms", "amulet.merpati.desc"), apply: (m) => ({ ...m, parryWin: m.parryWin * 1.25 }) });
 
 const byId = new Map(AMULETS.map((a) => [a.id, a]));
 export const amuletById = (id: string | null | undefined) => (id ? byId.get(id) ?? null : null);
@@ -59,3 +61,9 @@ export function amuletSpot(def: LevelDef): Vec2 | null {
     : spots.reduce((a, b) => (d(b, goal) < d(a, goal) ? b : a));
   return { x: pick.x, z: pick.z };
 }
+
+/** The effect line of a tangkal in one language. */
+export const amuletDesc = (lang: Lang, id: string): string => {
+  const a = byId.get(id);
+  return a ? t(lang, `amulet.${id}.desc`) : "";
+};

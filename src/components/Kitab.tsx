@@ -2,12 +2,14 @@
 
 import { memo } from "react";
 import { AMULETS } from "@/game/amulets";
-import { CHARM_LORE, CHARM_META, MISSION_LORE, PLACES } from "@/game/kitab";
+import { charmLore, CHARM_META, missionLore, PLACES, placeText } from "@/game/kitab";
 import type { KitabKind, Sumber } from "@/game/kitab";
 import { LEVELS } from "@/game/levels";
 import { ghaibPages } from "@/game/ghaib";
 import type { SaveData } from "@/game/save";
 import { pantunPages } from "@/game/pantun";
+import type { Lang } from "@/game/i18n";
+import { useT } from "./useT";
 
 interface Page {
   key: string;
@@ -19,34 +21,31 @@ interface Page {
   sumber?: Sumber[];
 }
 
-// One local map so the labels can be swapped for t() later.
-const KIND_LABEL: Record<KitabKind, string> = { fakta: "Fakta", legenda: "Legenda", rekaan: "Rekaan" };
-const KIND_NOTE: Record<KitabKind, string> = { fakta: "Sejarah yang disahkan sumber", legenda: "Cerita lisan, bukan sejarah terjamin", rekaan: "Rekaan untuk permainan" };
-const SUMBER_LABEL = "Sumber";
+type T = ReturnType<typeof useT>;
 
-function Section({ name, sub, pages }: { name: string; sub: string; pages: Page[] }) {
+function Section({ id, pages, t }: { id: string; pages: Page[]; t: T }) {
   const n = pages.filter((p) => p.open).length;
   return (
     <div className="kitab-sec">
       <h3>
-        {name}{" "}
+        {t(`kitab.sec.${id}.name`)}{" "}
         <span className="dim small">
-          {sub} · {n} of {pages.length}
+          {t(`kitab.sec.${id}.sub`)} · {t("kitab.count", { n, total: pages.length })}
         </span>
       </h3>
       <ul>
         {pages.map((p) => (
           <li key={p.key} className={`page${p.open ? "" : " missing"}`}>
-            <b>{p.open ? p.title : "Not written yet"}</b>
+            <b>{p.open ? p.title : t("kitab.notWritten")}</b>
             {p.open && p.kind && (
-              <span className={`kind kind-${p.kind}`} title={KIND_NOTE[p.kind]}>
-                {KIND_LABEL[p.kind]}
+              <span className={`kind kind-${p.kind}`} title={t(`kitab.kindNote.${p.kind}`)}>
+                {t(`kitab.kind.${p.kind}`)}
               </span>
             )}
             <span className="small">{p.open ? p.text : p.hint}</span>
             {p.open && p.sumber && p.sumber.length > 0 && (
               <span className="small sumber">
-                {SUMBER_LABEL}:{" "}
+                {t("kitab.sumber")}:{" "}
                 {p.sumber.map((r, i) => (
                   <span key={i}>
                     {i > 0 && "; "}
@@ -68,30 +67,39 @@ function Section({ name, sub, pages }: { name: string; sub: string; pages: Page[
   );
 }
 
-/** The journal: places reached, tangkal found and missions completed, each with a page of its own. */
-export default memo(function Kitab({ save }: { save: SaveData }) {
-  const places: Page[] = PLACES.map((p) => ({ key: p.id, open: save.kitab.includes(p.id), title: p.title, text: p.text, hint: p.hint, kind: p.kind, sumber: p.sumber }));
+/** The journal: places reached, tangkal found and missions completed, each with a page of its own. `lang` defaults to Malay. */
+export default memo(function Kitab({ save, lang = "ms" }: { save: SaveData; lang?: Lang }) {
+  const t = useT(lang);
+  const places: Page[] = PLACES.map((p) => ({ key: p.id, open: save.kitab.includes(p.id), ...placeText(lang, p), kind: p.kind, sumber: p.sumber }));
   const charms: Page[] = AMULETS.map((a) => {
     const level = LEVELS.find((l) => l.id === a.level);
-    return { key: a.id, open: save.amulets.includes(a.id), title: a.name, text: CHARM_LORE[a.id] ?? a.desc, kind: CHARM_META[a.id]?.kind, sumber: CHARM_META[a.id]?.sumber, hint: `Hidden on ${level?.name ?? "a mission"}` };
+    return {
+      key: a.id,
+      open: save.amulets.includes(a.id),
+      title: a.name,
+      text: charmLore(lang, a.id) ?? t(`amulet.${a.id}.desc`),
+      kind: CHARM_META[a.id]?.kind,
+      sumber: CHARM_META[a.id]?.sumber,
+      hint: level ? t("kitab.hint.charm", { level: level.name }) : t("kitab.hint.charmAny"),
+    };
   });
   const tales: Page[] = LEVELS.map((l) => {
-    const lore = MISSION_LORE[l.id];
-    return { key: l.id, open: !!save.missions[l.missionId]?.completed, title: lore?.title ?? l.name, text: lore?.text ?? l.win.body, kind: lore?.kind, sumber: lore?.sumber, hint: `Complete ${l.name}` };
+    const lore = missionLore(lang, l.id);
+    return { key: l.id, open: !!save.missions[l.missionId]?.completed, title: lore?.title ?? l.name, text: lore?.text ?? l.win.body, kind: lore?.kind, sumber: lore?.sumber, hint: t("kitab.hint.mission", { level: l.name }) };
   });
-  const pantun: Page[] = pantunPages(save.pantun);
-  const ghaib: Page[] = ghaibPages(save);
+  const pantun: Page[] = pantunPages(save.pantun, lang);
+  const ghaib: Page[] = ghaibPages(save, lang);
   const all = [...places, ...charms, ...tales, ...pantun, ...ghaib];
   return (
     <div className="kitab">
       <p className="points">
-        <b>{all.filter((p) => p.open).length}</b> of {all.length} pages written
+        <b>{all.filter((p) => p.open).length}</b> {t("kitab.pagesOf", { total: all.length })}
       </p>
-      <Section name="Tempat" sub="Places reached" pages={places} />
-      <Section name="Tangkal" sub="Amulets found" pages={charms} />
-      <Section name="Hikayat" sub="Missions completed" pages={tales} />
-      <Section name="Pantun" sub="Passwords overheard" pages={pantun} />
-      <Section name="Ghaib" sub="The unseen" pages={ghaib} />
+      <Section id="places" pages={places} t={t} />
+      <Section id="charms" pages={charms} t={t} />
+      <Section id="tales" pages={tales} t={t} />
+      <Section id="pantun" pages={pantun} t={t} />
+      <Section id="ghaib" pages={ghaib} t={t} />
     </div>
   );
 });

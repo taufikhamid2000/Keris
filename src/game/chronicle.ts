@@ -50,6 +50,15 @@ export interface ChronTick {
 }
 
 const MAX_EVENTS = 400;
+
+/** The kind of takedown a toast announces: "Air ...", "Silent ...", "Counter ..." (or the Malay equivalents). */
+export function killHowFromToast(msg: string): KillHow {
+  const m = msg.trim().toLowerCase();
+  if (/^(air|udara|dari atas|terkaman udara|serangan udara)/.test(m)) return "air";
+  if (/^(silent|senyap|tikaman senyap|pembunuhan senyap)/.test(m)) return "silent";
+  if (/^(counter|balas|serangan balas)/.test(m)) return "counter";
+  return "cut";
+}
 type Without<T> = T extends unknown ? Omit<T, "t"> : never;
 
 export class Chronicle {
@@ -105,10 +114,12 @@ export class Chronicle {
     }
   }
 
-  /** A guard went down; msg is the engine's toast for it. */
-  kill(msg: string, target: boolean, cover: boolean) {
-    const how: KillHow = msg.startsWith("Air") ? "air" : msg.startsWith("Silent") ? "silent" : msg.startsWith("Counter") ? "counter" : "cut";
-    this.add({ k: "kill", how, target, cover });
+  /**
+   * A guard went down. Pass `how` when the caller knows it; otherwise it is read from the start of the engine's toast
+   * for the kill (English or Malay), so a translated toast does not turn every takedown into a plain cut.
+   */
+  kill(msg: string, target: boolean, cover: boolean, how?: KillHow) {
+    this.add({ k: "kill", how: how ?? killHowFromToast(msg), target, cover });
   }
 
   end(won: boolean, reason: string | null) {

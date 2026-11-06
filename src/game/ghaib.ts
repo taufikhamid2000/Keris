@@ -7,6 +7,8 @@
 
 import { CAMP, HARBOUR, JUNGLE_Z0, POOL, RIVER } from "./levels";
 import type { SaveData } from "./save";
+import { t as tr, type Lang } from "./i18n";
+import { variants } from "./tx";
 
 // ---------------------------------------------------------------- semangat (the cost of Mata Helang)
 
@@ -175,28 +177,8 @@ export function moodFor(t: Tally): Mood {
   return d >= 2 ? "berkenan" : d >= -1 ? "diam" : "murka";
 }
 
-const WHISPERS: Record<Mood, string[]> = {
-  suci: [
-    "You passed like mist over the padi. Not one leaf was bruised. Walk my paths whenever you wish.",
-    "No blood, no shout. Even the kelip-kelip did not stop their blinking. I am pleased with you.",
-    "The bunian say a shadow crossed their kampung and left the sirih untouched. That shadow was you.",
-  ],
-  berkenan: [
-    "You chose the knife's flat over its edge more than once. The mountain remembers small kindnesses.",
-    "Some saw you, and still you spared them. That is harder than killing. I watched.",
-    "Not clean, but kind. Burn a little kemenyan and go on as you began.",
-  ],
-  diam: [
-    "I say nothing tonight. Weigh what you did, and decide for yourself what it was worth.",
-    "Blood on one hand, mercy in the other. The mist has not yet chosen which to cover.",
-    "The bunian closed their doors as you passed. Not in anger. Only watching.",
-  ],
-  murka: [
-    "The river carries what you left behind. My paths grow dim under feet like yours.",
-    "Too many fell who did not need to. Do not ask the mountain for its light.",
-    "You fought where you might have hidden. The kemenyan smokes bitter tonight.",
-  ],
-};
+/** The puteri's lines for a mood (ghaib.whisper.<mood> in strings/story.ts). */
+const whispers = (mood: Mood, lang: Lang): string[] => variants(lang, `ghaib.whisper.${mood}`);
 
 export interface Whisper {
   mood: Mood;
@@ -208,11 +190,11 @@ export interface Whisper {
 }
 
 /** The puteri's verdict on a finished mission, and the save's restu after it. The line is picked without randomness. */
-export function judge(t: Tally, restuBefore: number, levelId: string, judged: number): Whisper {
+export function judge(t: Tally, restuBefore: number, levelId: string, judged: number, lang: Lang = "ms"): Whisper {
   const mood = moodFor(t);
   const delta = restuDelta(t);
   const restu = clampRestu(restuBefore + delta);
-  const pool = WHISPERS[mood];
+  const pool = whispers(mood, lang);
   let h = judged;
   for (const c of levelId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const was = blessingFor(restuBefore);
@@ -221,11 +203,15 @@ export function judge(t: Tally, restuBefore: number, levelId: string, judged: nu
   return { mood, line: pool[h % pool.length], delta, restu, change };
 }
 
+/** The note under a judgement that changed her blessing, in one language. */
+export const changeNote = (lang: Lang, change: NonNullable<Whisper["change"]>): string => tr(lang, `ghaib.change.${change}`);
+
+/** The same notes in Malay (the default language). */
 export const CHANGE_NOTE: Record<NonNullable<Whisper["change"]>, string> = {
-  granted: "Restu granted: the bunian paths shine brighter and Mata Helang burns your semangat more slowly.",
-  lost: "Her restu is withdrawn. The bunian paths burn at their plain light again.",
-  wrath: "She turns her face away: the bunian paths flicker under your feet.",
-  eased: "Her anger cools. The bunian paths hold steady again.",
+  granted: changeNote("ms", "granted"),
+  lost: changeNote("ms", "lost"),
+  wrath: changeNote("ms", "wrath"),
+  eased: changeNote("ms", "eased"),
 };
 
 // ---------------------------------------------------------------- save
@@ -263,30 +249,24 @@ export interface GhaibPage {
   hint: string;
 }
 
-const STANDING: Record<Blessing, string> = {
-  restu: "For now she smiles on you: the paths shine brighter, and Mata Helang burns your semangat more slowly.",
-  none: "For now she watches and gives nothing, and takes nothing.",
-  murka: "For now she is displeased: the paths flicker, as if they might not hold.",
-};
-
 /** Two pages for the journal: the bunian paths, and the puteri's restu (with where the player stands). */
-export function ghaibPages(d: SaveData): GhaibPage[] {
+export function ghaibPages(d: SaveData, lang: Lang = "ms"): GhaibPage[] {
   const p = d.puteri;
+  const standing = tr(lang, `ghaib.standing.${blessingFor(p.restu)}`);
   return [
     {
       key: "jalan-bunian",
       open: p.judged > 0,
-      title: "Jalan orang bunian",
-      text:
-        "Beside every kampung of ours the orang bunian keep one of their own, and their paths run where ours do not: stones across the river, a stair over the north fence, steps beside the falls, a vine bridge round the scouts' camp. Open Mata Helang and they show in pale gold, with fireflies and kemenyan smoke. They hold only while you look, and Mata Helang burns semangat as you do; you walk slower in their world.",
-      hint: "Finish a mission and hear the puteri",
+      title: tr(lang, "ghaib.page.bunian.title"),
+      text: tr(lang, "ghaib.page.bunian.text"),
+      hint: tr(lang, "ghaib.page.bunian.hint"),
     },
     {
       key: "restu-puteri",
       open: p.judged >= 2 || blessingFor(p.restu) !== "none",
-      title: "Restu Puteri Gunung Ledang",
-      text: `The puteri of the mountain watches each mission. Guards spared and passes unseen please her; killing those who need not die, and alarms, do not. The mission's target is the task and she does not count it. ${STANDING[blessingFor(p.restu)]}`,
-      hint: "Let her watch you work, mission after mission",
+      title: tr(lang, "ghaib.page.restu.title"),
+      text: tr(lang, "ghaib.page.restu.text", { standing }),
+      hint: tr(lang, "ghaib.page.restu.hint"),
     },
   ];
 }

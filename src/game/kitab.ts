@@ -8,8 +8,11 @@ import { CAMP, JUNGLE_Z0, JUNGLE_Z1, POOL, RIVER, SUMMIT } from "./levels";
 import type { LevelDef } from "./levels";
 import { MASJID_COURT, MASJID_POND } from "./masjid";
 import { PENJARA_BLOCK, PENJARA_YARD } from "./levels/penjara";
-import { GUA_LANUN, GUA_LANUN_LORE, GUA_LANUN_PLACES } from "./guaLanun";
+import { GUA_LANUN, GUA_LANUN_PLACES } from "./guaLanun";
 import { KEEP, KOTA_WALLS, KOTA_Z0 } from "./kota";
+import type { Lang } from "./i18n";
+import { t } from "./i18n";
+import { tx } from "./tx";
 
 /** How reliable an entry is: fakta (cited history), legenda (tradition), rekaan (invented for the game). */
 export type KitabKind = "fakta" | "legenda" | "rekaan";
@@ -18,6 +21,11 @@ export interface Sumber {
   label: string;
   url?: string;
 }
+
+/** Title, hint and text of a place in Malay (the source text; other languages come from placeText). */
+const txt = (id: string) => ({ title: t("ms", `kitab.place.${id}.title`), hint: t("ms", `kitab.place.${id}.hint`), text: t("ms", `kitab.place.${id}.text`) });
+/** A mission page in one language (strings/story.ts: kitab.mission.<id>.*). */
+const loreText = (lang: Lang, id: string) => ({ title: t(lang, `kitab.mission.${id}.title`), text: t(lang, `kitab.mission.${id}.text`) });
 
 export interface PlaceDef {
   id: string;
@@ -51,132 +59,89 @@ const riverZ1 = RIVER.z + RIVER.d / 2 + 1;
 export const PLACES: PlaceDef[] = [
   {
     id: "jeti",
-    title: "The harbour jetty",
-    hint: "Down by the sea",
-    text: "Where the town meets the Straits. Sampans tie up here at dusk, and a pendekar who reaches the end of the boards can be gone before the alarm is raised.",
+    ...txt("jeti"),
     at: (_x, _y, z) => z < -20,
   },
   {
     id: "pelabuhan",
-    title: "Bandar Melaka",
-    hint: "The harbour town",
-    text: "Atap roofs packed close above the lanes, stalls under the eaves, and now a Portuguese battery at the bridge. Roofs are roads to anyone light enough to run them.",
+    ...txt("pelabuhan"),
     at: (_x, _y, z) => z >= -20 && z < riverZ0,
   },
   {
     id: "sungai",
-    title: "The river",
-    hint: "Between the harbour and the upper kampung",
-    text: "Brown water nobody wades. The guarded bridge is the easy way over; the narrow plank on the west bank is the quiet one.",
+    ...txt("sungai"),
     at: (_x, _y, z) => z >= riverZ0 && z <= riverZ1,
   },
   {
     id: "kampung-hulu",
-    title: "Kampung Hulu",
-    hint: "Upriver, past the bridge",
-    text: "The upper kampung around the penghulu's hall. Houses stand on stilts, and the dark under the floors is room enough to crawl.",
+    ...txt("kampung-hulu"),
     at: (_x, _y, z) => z > riverZ1 && z < JUNGLE_Z0,
   },
   {
     id: "hutan",
-    title: "The hutan",
-    hint: "Beyond the kampung's north fence",
-    text: "Old jungle north of the kampung. The trails are few and the ferns are deep; a scout who strays from the path is easy to lose, and easy to find.",
+    ...txt("hutan"),
     at: (_x, _y, z) => z >= JUNGLE_Z0 && z < JUNGLE_Z1,
   },
   {
     id: "kem",
-    title: "The scouts' camp",
-    hint: "A clearing deep in the hutan",
-    text: "A Portuguese camp in a clearing, maps of the jungle trails drying by the fire. They mean to come at Malacca from behind.",
+    ...txt("kem"),
     at: near(CAMP, CAMP.r + 4),
   },
   {
     id: "ledang",
-    title: "Gunung Ledang",
-    hint: "The mountain to the north",
-    text: "The mountain of the legend of its puteri, who is said to have set a sultan impossible gifts as her bride price. Its ledges climb in tiers into the mist.",
+    ...txt("ledang"),
     at: (_x, _y, z) => z >= JUNGLE_Z1 && z < KOTA_Z0 - 40,
   },
   {
     id: "kolam",
-    title: "The pool below the falls",
-    hint: "At the foot of the mountain, by falling water",
-    text: "A deep, cold pool under the falls. The noise of the water covers footsteps, and a held breath covers the rest.",
+    ...txt("kolam"),
     at: near(POOL, 9),
   },
   {
     id: "puncak",
-    title: "The summit shrine",
-    hint: "As high as the mountain goes",
-    text: "A small shrine above the clouds where offerings are left. The golden tepak sireh sat on its altar before the soldiers came.",
+    ...txt("puncak"),
     at: (x, y, z) => y >= SUMMIT.y - 1 && Math.hypot(x - SUMMIT.x, z - SUMMIT.z) <= 10,
   },
   {
     id: "halaman-penjara",
-    title: "The penjara yard",
-    hint: "Below the fort wall, outside the gate",
-    text: "A walled yard of packed earth where the guard is changed. One gate and the jailer's back door lead down to the cells, and nothing grows here but straw.",
+    ...txt("halaman-penjara"),
     at: inBox(PENJARA_YARD),
   },
   {
     id: "sel",
-    title: "The cells",
-    hint: "Down in the damp, past the gate",
-    text: "Stone and straw, with water running down the walls and a lantern at every second corner. The corridors are only wide enough for two men, and somewhere behind the last cell an old drain still runs to the river.",
+    ...txt("sel"),
     at: inBox(PENJARA_BLOCK),
   },
 ];
 PLACES.push(...GUA_LANUN_PLACES);
+// guaLanun.ts still holds its places in English; the Malay source comes from the dictionary
+for (const p of GUA_LANUN_PLACES) Object.assign(p, txt(p.id));
 
 // Masjid mission places (this mission only)
 PLACES.push(
   {
     id: "masjid",
     level: "masjid",
-    title: "The old masjid",
-    hint: "Inside the low wall, in the heart of the town",
-    text: "A timber masjid under three stacked atap roofs, a verandah at its front and a beduk house in the corner of a quiet yard. The soldiers keep out of the yard, and so does every blade.",
+    ...txt("masjid"),
     at: (x, _y, z) => Math.abs(x - MASJID_COURT.x) <= MASJID_COURT.w / 2 && Math.abs(z - MASJID_COURT.z) <= MASJID_COURT.d / 2,
   },
   {
     id: "kolam-masjid",
     level: "masjid",
-    title: "The washing pond",
-    hint: "By the south gate of the masjid",
-    text: "A still pond with a stone ledge, kept for washing before worship. Even at dusk the water is clear.",
+    ...txt("kolam-masjid"),
     at: near(MASJID_POND, 4.5),
   },
 );
 
 /** Lore for each tangkal, by amulet id (names and effects stay in amulets.ts). */
-export const CHARM_LORE: Record<string, string> = {
-  harimau: "Carved from the claw of a tiger that walked the harbour lanes for years without being seen. Wear it and the floorboards forget you.",
-  kancil: "The mousedeer outwits the crocodile and the tiger in every tale. This one is small enough to forget you are wearing it, and so do the guards.",
-  besi: "Iron from a broken blade, bound in brass. Smiths say a blade's spirit stays in its iron, and it is happier near other blades.",
-  buaya: "A crocodile's tooth on a cord. The buaya waits under the water for as long as it must.",
-  merpati: "A grey dove's feather bound in thread, found where the lanes run quiet. Doves nest in old eaves and do not startle at footsteps they know.",
-  puteri: "A thread of gold said to be from the puteri's own sash, left on the mountain. Wounds close a little faster near it.",
-  rantai: "One link of a prisoner's chain, worn smooth in the dark. It has held men who should never have been held, and it remembers how to let go: a blade turned aside is turned a moment longer.",
-};
+export const CHARM_LORE: Record<string, string> = Object.fromEntries(
+  ["harimau", "kancil", "besi", "buaya", "merpati", "puteri", "rantai"].map((id) => [id, t("ms", `kitab.charm.${id}`)]),
+);
 
 /** After-the-mission pages, by level id. */
-export const MISSION_LORE: Record<string, { title: string; text: string; kind?: KitabKind; sumber?: Sumber[] }> = {
-  harbour: { title: "The Kapitan", text: "With the Kapitan gone the battery sat silent for three nights. Someone, though, had told the Portuguese exactly where to put it." },
-  kampung: { title: "The clerk", text: "The clerk was paid in silver for a copy of the battery's plans. Where he kept the copy, he never said." },
-  plans: { title: "The plans", text: "The plans came back in a chest from under the penghulu's hall, and nobody in the kampung ever knew they had been gone." },
-  jungle: { title: "The scouts", text: "Without their captain the scouts lost the trails they had mapped. The way in from the hutan is closed, for now." },
-  ledang: { title: "The tepak sireh", text: "The betel box is back on the summit altar. The mist came down again behind you, as if the mountain had been waiting." },
-  wayang: { title: "The shadow play", text: "The dalang keeps the Pendekar's puppet in a box of its own. He says it moves on the kelir before he touches the rods." },
-  penjara: { title: "The empty cell", text: "At the morning bell the jailer swore the door was still locked. Down in the drain the soldiers found wet footprints, a boatwright's cap, and no one to ask." },
-};
-
-MISSION_LORE.masjid = {
-  title: "The warkah",
-  text: "The letter left the town folded in oilcloth, and not one soldier ever crossed the masjid's wall to ask where it had been kept. The penjaga still sweeps the yard each morning.",
-};
-
-MISSION_LORE[GUA_LANUN.id] = GUA_LANUN_LORE;
+export const MISSION_LORE: Record<string, { title: string; text: string; kind?: KitabKind; sumber?: Sumber[] }> = Object.fromEntries(
+  ["harbour", "kampung", "plans", "jungle", "ledang", "wayang", "penjara", "masjid", GUA_LANUN.id].map((id) => [id, loreText("ms", id)]),
+);
 
 // Kota Batu (kota.ts), appended after the shared lists so the missions merge cleanly. Its map lies far north of the
 // rest (z from 293), so the Gunung Ledang place above stops short of it.
@@ -184,32 +149,23 @@ PLACES.push(
   {
     id: "kota-bukit",
     level: "kota",
-    title: "The rocks below the Kota",
-    hint: "Under the fortress walls",
-    text: "A tumble of rock and thorn running up to the west wall. The sentries watch the road; they have never learned to watch the stones.",
+    ...txt("kota-bukit"),
     at: (x, _y, z) => z >= KOTA_Z0 + 74 || (z >= KOTA_Z0 + 8 && Math.abs(x) > 31.5),
   },
   {
     id: "kota-halaman",
     level: "kota",
-    title: "The Kota courtyard",
-    hint: "Inside the fortress walls",
-    text: "A well, a barracks that never sleeps, an armoury, and a keep three storeys high. Everything inside the walls looks outward, and no one thinks to look at the roofs.",
+    ...txt("kota-halaman"),
     at: (x, _y, z) => x > KOTA_WALLS.minX && x < KOTA_WALLS.maxX && z > KOTA_WALLS.minZ && z < KOTA_WALLS.maxZ,
   },
   {
     id: "kota-kubu",
     level: "kota",
-    title: "The keep roof",
-    hint: "The top of the keep",
-    text: "A flat roof under the stars and a table with the council's map, weighted down by a dagger and a lantern. From here the sea wall is one jump and the jetty one long fall.",
+    ...txt("kota-kubu"),
     at: (x, y, z) => y >= 9 && Math.hypot(x - KEEP.x, z - KEEP.z) <= 6,
   },
 );
-MISSION_LORE.kota = {
-  title: "The war map",
-  text: "The map reached the elder wrapped in wet cloth. They say the Capitão-mor counted the walls twice that night, and never once looked at the sea.",
-};
+MISSION_LORE.kota = loreText("ms", "kota");
 
 /** Entries that retell a tradition rather than invent: everything else in the journal is in-world fiction (rekaan). */
 const LEGENDA_PLACES = new Set(["ledang"]);
@@ -254,4 +210,24 @@ export function placesInBounds(b: LevelDef["bounds"], levelId?: string): PlaceDe
     for (let x = b.minX; x <= b.maxX; x += 2)
       for (let z = b.minZ; z <= b.maxZ; z += 2) for (const p of placesAt(x, y, z, levelId)) found.add(p.id);
   return PLACES.filter((p) => found.has(p.id));
+}
+
+// ---------------------------------------------------------------- wording per language
+
+/** A place's title, hint and text in one language (falls back to the place's own Malay text). */
+export function placeText(lang: Lang, p: PlaceDef): { title: string; hint: string; text: string } {
+  return {
+    title: tx(lang, `kitab.place.${p.id}.title`, p.title),
+    hint: tx(lang, `kitab.place.${p.id}.hint`, p.hint),
+    text: tx(lang, `kitab.place.${p.id}.text`, p.text),
+  };
+}
+
+/** The lore of a tangkal in one language (undefined if it has none). */
+export const charmLore = (lang: Lang, id: string): string | undefined => (CHARM_LORE[id] === undefined ? undefined : tx(lang, `kitab.charm.${id}`, CHARM_LORE[id]));
+
+/** The after-mission page for a level in one language (undefined if the level has none). */
+export function missionLore(lang: Lang, levelId: string): { title: string; text: string; kind?: KitabKind; sumber?: Sumber[] } | undefined {
+  const l = MISSION_LORE[levelId];
+  return l ? { ...l, title: tx(lang, `kitab.mission.${levelId}.title`, l.title), text: tx(lang, `kitab.mission.${levelId}.text`, l.text) } : undefined;
 }

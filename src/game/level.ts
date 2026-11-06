@@ -4,6 +4,7 @@ import type { Box, Vec2 } from "./logic";
 import { HARBOUR, type GuardDef, type LevelDef, type Placed } from "./levels";
 import { spreadIndices } from "./touch";
 import { addTideScene, type TideScene } from "./tideScene";
+import { exitsOf, type ExitDef } from "./worldgraph";
 
 // Fully procedural kit for a Malacca-1511 kampung: timber stilt houses with atap roofs,
 // pasar stalls, tiered istana, watch towers, a harbour with a jetty and prahu boats.
@@ -224,6 +225,94 @@ function atapRoof(w: number, d: number, topY: number, rise: number, color: numbe
   const m = mesh(geo, mat(color), 0, topY - rise / 2, 0);
   m.scale.set(w, 1, d);
   return m;
+}
+
+// ---------------------------------------------------------------- gates (pintu) between maps
+/** One piece of a gate marker, centred at (x, y, z). Pure data, so a test can look at it without a scene. */
+export interface GatePart {
+  shape: "box" | "ball";
+  x: number;
+  y: number;
+  z: number;
+  /** box sizes along x, y, z (a ball uses sx as its radius) */
+  sx: number;
+  sy: number;
+  sz: number;
+  color: number;
+  /** unlit lantern glow */
+  glow?: boolean;
+  /** a faint self-lit ground patch */
+  lit?: boolean;
+  /** casts a shadow (the ground patch does not) */
+  shadow: boolean;
+}
+export type GateStyle = "pintu" | "gua" | "penjara" | "masjid" | "kota";
+export const gateStyle = (to: string): GateStyle => (to === "gualanun" ? "gua" : to === "penjara" ? "penjara" : to === "masjid" ? "masjid" : to === "kota" ? "kota" : "pintu");
+
+/**
+ * The look of a gate over the footprint `e.at`: two posts just outside the long ends of the footprint and a lintel high
+ * above it (nothing at body height inside, so the way through stays open), a lit patch on the ground and a lantern pair.
+ */
+export function gateParts(e: ExitDef): GatePart[] {
+  const { x, z, w, d } = e.at;
+  const alongX = w >= d;
+  const span = alongX ? w : d;
+  const depth = alongX ? d : w;
+  const out: GatePart[] = [];
+  /** a piece at (a along the span, y, b across it) with its sizes in the same frame */
+  const put = (a: number, y: number, b: number, sa: number, sy: number, sb: number, color: number, o: Partial<GatePart> = {}) =>
+    out.push({ shape: "box", x: alongX ? x + a : x + b, y, z: alongX ? z + b : z + a, sx: alongX ? sa : sb, sy, sz: alongX ? sb : sa, color, shadow: true, ...o });
+  const ball = (a: number, y: number, b: number, r: number, color: number) =>
+    out.push({ shape: "ball", x: alongX ? x + a : x + b, y, z: alongX ? z + b : z + a, sx: r, sy: r, sz: r, color, glow: true, shadow: false });
+  const st = gateStyle(e.to);
+  const half = span / 2;
+  const patch = { gua: 0x1f2a28, penjara: 0x3a362f, masjid: 0x6e6a4a, kota: 0x6a6252, pintu: 0x6b4a22 }[st];
+  put(0, 0.03, 0, span, 0.06, depth, patch, { lit: true, shadow: false });
+
+  if (st === "gua") {
+    // a cave mouth: rough rock jambs and a heavy rock lintel
+    for (const s of [-1, 1]) {
+      put(s * (half + 0.45), 1.8, 0, 1.1, 3.6, Math.max(depth, 1.6), 0x4a463f);
+      put(s * (half + 0.2), 0.5, depth * 0.3, 1.5, 1.0, 0.8, 0x3d3a34);
+    }
+    put(0, 3.85, 0, span + 3, 0.9, Math.max(depth, 1.6), 0x3d3a34);
+    put(0, 4.5, 0, span + 1.4, 0.5, depth * 0.8, 0x4a463f);
+  } else if (st === "penjara") {
+    // stone pillars over a stair going down: three thin treads laid across the footprint
+    for (const s of [-1, 1]) put(s * (half + 0.3), 1.6, 0, 0.7, 3.2, 0.7, 0x6f6a60);
+    put(0, 3.3, 0, span + 1.6, 0.5, 0.8, 0x57534b);
+    for (let k = 0; k < 3; k++) put(0, 0.07, (k - 1) * (depth / 3), span * 0.9, 0.05, depth / 3 - 0.08, k % 2 ? 0x5a564d : 0x6b665b, { shadow: false });
+  } else if (st === "masjid") {
+    // whitewashed posts and a green-capped lintel with a finial
+    for (const s of [-1, 1]) {
+      put(s * (half + 0.3), 1.5, 0, 0.55, 3.0, 0.55, 0xe8e0cc);
+      put(s * (half + 0.3), 3.1, 0, 0.8, 0.25, 0.8, 0x2f6b4a);
+    }
+    put(0, 3.3, 0, span + 1.6, 0.5, 0.6, 0xe8e0cc);
+    put(0, 3.75, 0, span + 1.2, 0.4, 0.7, 0x2f6b4a);
+    ball(0, 4.2, 0, 0.18, 0xe8c36a);
+  } else if (st === "kota") {
+    // a fortress gate: squat stone piers, a tiled lintel with a row of merlons
+    for (const s of [-1, 1]) put(s * (half + 0.6), 2, 0, 1.2, 4.0, 1.4, 0x8d8a80);
+    put(0, 4.3, 0, span + 3, 0.6, 1.4, 0x7d786e);
+    put(0, 4.85, 0, span + 3, 0.5, 1.6, 0xa04630);
+    for (let k = -2; k <= 2; k++) put(k * ((span + 2) / 4), 5.3, 0, 0.5, 0.4, 0.9, 0x8d8a80);
+  } else {
+    // a timber pintu: two posts, a lintel with a carved cross-piece above it and turned-up tips
+    for (const s of [-1, 1]) put(s * (half + 0.25), 1.6, 0, 0.4, 3.2, 0.4, 0x5a3a22);
+    put(0, 3.25, 0, span + 1.4, 0.35, 0.5, 0x6e4a2b);
+    put(0, 3.62, 0, span + 1.0, 0.25, 0.3, 0x8a5a2e);
+    for (const s of [-1, 1]) put(s * (half + 0.95), 3.55, 0, 0.35, 0.3, 0.3, 0x8a5a2e);
+  }
+  // a lantern either side, hung in under the lintel
+  if (st !== "kota") for (const s of [-1, 1]) ball(s * (half - 0.15), st === "gua" ? 3.0 : 2.5, depth * 0.5, 0.2, 0xffb14a);
+  return out;
+}
+
+/** Whether a collider stops a walking body inside the footprint (at ground level, not just a low deck). */
+export function blocksFootprint(b: Box, r: { x: number; z: number; w: number; d: number }): boolean {
+  if (b.maxY <= 0.45 || b.minY >= 1.8) return false;
+  return b.minX < r.x + r.w / 2 && b.maxX > r.x - r.w / 2 && b.minZ < r.z + r.d / 2 && b.maxZ > r.z - r.d / 2;
 }
 
 export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number } = {}): Level {
@@ -730,6 +819,14 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
     root.add(l);
     lampLights.push(l);
   }
+
+  // ---------------------------------------------------------------- gates: markers only, never colliders
+  for (const e of exitsOf(def.id))
+    for (const p of gateParts(e)) {
+      const geo = p.shape === "ball" ? new THREE.SphereGeometry(p.sx, 8, 6) : new THREE.BoxGeometry(p.sx, p.sy, p.sz);
+      const m = p.glow ? glow(p.color) : p.lit ? mat(p.color, { emissive: 0x7a4a10, emissiveIntensity: 0.55 }) : mat(p.color);
+      root.add(mesh(geo, m, p.x, p.y, p.z, p.shadow));
+    }
 
   // ---------------------------------------------------------------- instanced windows
   const addWindows = (list: THREE.Matrix4[], m: THREE.Material) => {

@@ -1113,7 +1113,7 @@ export class Game {
     this.kitabT -= dt;
     if (this.kitabT > 0) return;
     this.kitabT = 0.4;
-    for (const pl of placesAt(this.p.x, this.p.y, this.p.z)) {
+    for (const pl of placesAt(this.p.x, this.p.y, this.p.z, this.def.id)) {
       if (this.kitab.has(pl.id)) continue;
       this.kitab.add(pl.id);
       this.toast(`Kitab: ${pl.title}`);
@@ -1389,7 +1389,16 @@ export class Game {
     this.tool = id;
     this.hudTimer = 0;
   }
+  /** A level's sanctuary (a place of worship): no blade, stone or pepper is used inside it. */
+  private inSanctuary() {
+    const r = this.def.sanctuary;
+    return !!r && Math.abs(this.p.x - r.x) < r.w / 2 && Math.abs(this.p.z - r.z) < r.d / 2;
+  }
   private useTool() {
+    if (this.inSanctuary()) {
+      this.toast("Not on this ground. Keep the peace.");
+      return;
+    }
     if (this.tool === "knife") this.tryThrow();
     else if (this.tool === "stone") this.throwStone();
     else this.throwPepper();
@@ -2557,7 +2566,7 @@ export class Game {
       this.completeObjective();
       return;
     }
-    const { guard, air } = this.takedownTarget();
+    const { guard, air } = this.inSanctuary() ? { guard: null, air: false } : this.takedownTarget();
     if (!guard) {
       if (this.pantun.tryOpen(this.p)) {
         this.hudTimer = 0;
@@ -2873,6 +2882,7 @@ export class Game {
   /** E / left click with no takedown on offer, an alert guard close: start readying a strike. Letting go swings it. */
   private startCharge() {
     if (this.charge !== null || this.swing || this.roll || this.climb || this.leap || this.carrying || this.mounted || !this.p.grounded) return;
+    if (this.inSanctuary()) return;
     if (!this.hostileNear(SWING.reach + 0.6)) return;
     this.charge = 0;
   }
@@ -2894,7 +2904,7 @@ export class Game {
   /** An open keris strike at an alert guard in front: light, or heavy after a held press. */
   private trySwing(heavy: boolean) {
     const p = this.p;
-    if (this.swing || this.roll || this.climb || this.leap || this.carrying || !p.grounded) return;
+    if (this.swing || this.roll || this.climb || this.leap || this.carrying || !p.grounded || this.inSanctuary()) return;
     const g = this.hostileNear(SWING.reach + 0.6);
     if (!g) return;
     p.yaw = yawTo(p, g);
@@ -3143,10 +3153,11 @@ export class Game {
         alert = g.brain.state;
       }
     }
-    const tg = this.takedownTarget();
+    const sanc = this.inSanctuary();
+    const tg = sanc ? { guard: null, near: false, air: false } : this.takedownTarget();
     let prompt = "";
     const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
-    const foe = this.hostileNear(SWING.reach + 0.6);
+    const foe = sanc ? null : this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
     else if (this.swim)
       prompt = this.nearBoat()

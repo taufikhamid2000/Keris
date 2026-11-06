@@ -35,7 +35,17 @@ const IDLE_LEVEL: Record<string, string[]> = {
   ledang: ["They say a princess lives on this mountain.", "Mist again. I can't see my own hand.", "Who leaves gold on a mountain top?", "Mind the ledges. Long way down."],
 };
 
-export const idleLines = (levelId: string) => [...IDLE_ALL, ...(IDLE_LEVEL[levelId] ?? [])];
+// Masjid: town guards on the streets outside, who keep clear of the compound
+IDLE_LEVEL.masjid = [
+  "Orders are to leave the masjid yard alone. Fine by me.",
+  "Every messenger in the town gets searched tonight.",
+  "Watch the lanes and the shore. A letter will go out by boat.",
+  "The old caretaker has not come out in days.",
+  "It is quiet here at dusk. Too quiet.",
+  "Nobody gets past the main street without being looked at.",
+];
+
+export const idleLines =(levelId: string) => [...IDLE_ALL, ...(IDLE_LEVEL[levelId] ?? [])];
 
 /** Overhearing range in metres: idle talk is quiet, shouting carries. */
 export const BARK_RANGE: Record<BarkKind, number> = { idle: 11, giveup: 14, search: 18, suspicious: 16, stunned: 10, blind: 12, body: 26, alert: 30 };

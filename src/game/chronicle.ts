@@ -98,7 +98,7 @@ export class Chronicle {
     this.placeT -= 1;
     if (this.placeT > 0) return;
     this.placeT = 20;
-    for (const p of placesAt(s.x, s.y, s.z)) {
+    for (const p of placesAt(s.x, s.y, s.z, this.data.levelId)) {
       if (this.seen.has(p.id)) continue;
       this.seen.add(p.id);
       this.add({ k: "place", id: p.id });

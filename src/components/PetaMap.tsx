@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MapState } from "@/game/engine";
-import { PLACES, placeCentre } from "@/game/kitab";
+import { PLACES, placeCentre, placeOnLevel } from "@/game/kitab";
 import type { LevelDef } from "@/game/levels";
 import { MapView } from "./PauseMenu";
 
@@ -93,12 +93,12 @@ export default function PetaMap({ def, s, visited = [] }: { def: LevelDef; s: Ma
   const labels = useMemo(() => {
     const out: { text: string; x: number; z: number }[] = [];
     for (const p of PLACES) {
-      if (!visited.includes(p.id)) continue;
+      if (!visited.includes(p.id) || !placeOnLevel(p, def.id)) continue;
       const at = placeCentre(p, b);
       if (at) out.push({ text: p.title, ...at });
     }
     return out;
-  }, [visited, b]);
+  }, [visited, b, def.id]);
 
   return (
     <div

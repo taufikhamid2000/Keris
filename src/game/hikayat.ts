@@ -33,6 +33,8 @@ const CAST: Record<string, Cast> = {
   ledang: { who: "the golden tepak sireh", deed: "bring the golden tepak sireh out of the soldiers' hands", region: "Gunung Ledang", exit: "the pool below the falls" },
 };
 
+CAST.masjid = { who: "the sealed warkah", deed: "carry the penjaga's sealed warkah out of the town to the envoy's boatman", region: "the lanes round the old masjid", exit: "the harbour jetty" };
+
 function castFor(def: LevelDef): Cast {
   const c = CAST[def.id];
   if (c) return c;
@@ -52,6 +54,9 @@ const PLACE_WORDS: Record<string, string> = {
   kolam: "the pool below the falls",
   puncak: "the summit shrine",
 };
+
+PLACE_WORDS.masjid = "the quiet yard of the masjid";
+PLACE_WORDS["kolam-masjid"] = "the still pond by the gate";
 
 // ---------------------------------------------------------------- small helpers
 

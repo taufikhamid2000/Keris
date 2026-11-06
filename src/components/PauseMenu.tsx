@@ -59,6 +59,7 @@ export function MapView({
   view,
   labels,
   labelSize,
+  gates,
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -69,6 +70,8 @@ export function MapView({
   labels?: { text: string; x: number; z: number }[];
   /** label font size in map units */
   labelSize?: number;
+  /** gates to other maps, in world coordinates, with their label text */
+  gates?: { id: string; x: number; z: number; text: string }[];
 }) {
   const b = def.bounds;
   const pad = 6;
@@ -116,6 +119,18 @@ export function MapView({
           </g>
         </>
       )}
+      {gates?.map((g) => {
+        const m = mark * 0.9;
+        return (
+          <g key={g.id} transform={`translate(${sx(g.x)} ${sy(g.z)})`}>
+            <path className="m-gate" d={`M${-m} ${m * 0.7} L${-m} ${-m * 0.2} L0 ${-m} L${m} ${-m * 0.2} L${m} ${m * 0.7}`} strokeWidth={m * 0.35} />
+            <path className="m-gate" d={`M${-m * 0.5} ${m * 0.1} L0 ${-m * 0.4} L${m * 0.5} ${m * 0.1}`} strokeWidth={m * 0.25} />
+            <text className="m-place m-gate-t" y={m * 0.7 + fs * 0.9} fontSize={fs} textAnchor="middle" dominantBaseline="middle">
+              {g.text}
+            </text>
+          </g>
+        );
+      })}
       {labels?.map((l) => {
         // keep clear of the player marker: nudge the name above it when they would collide
         const lx = sx(l.x);
@@ -158,6 +173,7 @@ export default function PauseMenu({
   charms,
   lastTale,
   visited = [],
+  known = {},
 }: {
   def: LevelDef;
   s: MapState | null;
@@ -177,6 +193,8 @@ export default function PauseMenu({
   lastTale?: ReactNode;
   /** Kitab place ids the player has reached; their names are drawn on the map */
   visited?: string[];
+  /** maps the player has been to: level id -> name (a gate shows its destination only for these) */
+  known?: Record<string, string>;
 }) {
   const cur = PAUSE_TABS[tab]?.id ?? "peta";
   const worn = amuletById(charms.found.includes(charms.worn ?? "") ? charms.worn : null);
@@ -206,9 +224,9 @@ export default function PauseMenu({
               <div className="map-tab">
                 <MapLegend def={def} />
                 <div className="map-mid">
-                  <PetaMap def={def} s={s} visited={visited} />
+                  <PetaMap def={def} s={s} visited={visited} known={known} />
                 </div>
-                <MapObjectives def={def} s={s} places={places} />
+                <MapObjectives def={def} s={s} places={places} known={known} />
               </div>
               {s && <TideNote levelId={def.id} time={s.time} />}
             </div>

@@ -5,6 +5,7 @@ import type { MapState } from "@/game/engine";
 import { PLACES, placeCentre, placeOnLevel } from "@/game/kitab";
 import type { LevelDef } from "@/game/levels";
 import { MapView } from "./PauseMenu";
+import { gateText, mapExits } from "./MapSide";
 
 const MIN = 1;
 const MAX = 6;
@@ -15,7 +16,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
  * drag to pan when zoomed in, and gold names for the Kitab places the player has reached.
  * Fills its parent's height; the parent needs a definite height (the pause tab panel has one).
  */
-export default function PetaMap({ def, s, visited = [] }: { def: LevelDef; s: MapState | null; visited?: string[] }) {
+export default function PetaMap({ def, s, visited = [], known = {} }: { def: LevelDef; s: MapState | null; visited?: string[]; known?: Record<string, string> }) {
   const frame = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
@@ -100,6 +101,8 @@ export default function PetaMap({ def, s, visited = [] }: { def: LevelDef; s: Ma
     return out;
   }, [visited, b, def.id]);
 
+  const gates = mapExits(s).map((e) => ({ id: e.id, x: e.x, z: e.z, text: gateText(e, known) }));
+
   return (
     <div
       ref={frame}
@@ -133,7 +136,7 @@ export default function PetaMap({ def, s, visited = [] }: { def: LevelDef; s: Ma
         pinch.current = 0;
       }}
     >
-      <MapView def={def} s={s} view={{ x: cx - w / 2, y: cy - h / 2, w, h }} labels={labels} labelSize={11 * upp} />
+      <MapView def={def} s={s} view={{ x: cx - w / 2, y: cy - h / 2, w, h }} labels={labels} gates={gates} labelSize={11 * upp} />
       <div className="peta-zoom" role="group" aria-label="Map zoom">
         <button type="button" aria-label="Zoom in" disabled={zoom >= MAX} onClick={() => zoomTo(zoom * 1.5)}>
           +

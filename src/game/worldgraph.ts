@@ -1,6 +1,7 @@
 // The connected world: walkable gates that carry the player from one map to the next.
 // Data only, no three.js. Gate positions live here (not in each map file) so maps stay independent.
 import type { Rect } from "./levels";
+import { DICTS, t, type Lang } from "./i18n";
 
 export interface ExitDef {
   id: string;
@@ -10,7 +11,7 @@ export interface ExitDef {
   to: string;
   /** where the player appears on the other side, facing rotY (into that map) */
   arrive: { x: number; z: number; rotY: number };
-  /** shown in the prompt and on the Peta map, in Malay */
+  /** shown in the prompt and on the Peta map, in Malay; use gateLabel(lang, exit) for the language-aware text (strings/missions.ts, gate.<id>) */
   label: string;
 }
 
@@ -68,4 +69,15 @@ export function exitAt(levelId: string, x: number, z: number): ExitDef | null {
     if (Math.abs(x - e.at.x) <= e.at.w / 2 && Math.abs(z - e.at.z) <= e.at.d / 2) return e;
   }
   return null;
+}
+
+/** The gate's label in `lang` (falls back to the Malay label for gates without a dictionary entry). */
+export function gateLabel(lang: Lang, e: Pick<ExitDef, "id" | "label">): string {
+  const key = `gate.${e.id}`;
+  return key in DICTS.ms ? t(lang, key) : e.label;
+}
+
+/** The "Masuk: <label>" prompt shown when standing in a gate. */
+export function gatePrompt(lang: Lang, e: Pick<ExitDef, "id" | "label">): string {
+  return t(lang, "gate.enter", { label: gateLabel(lang, e) });
 }

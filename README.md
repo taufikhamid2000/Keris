@@ -55,6 +55,8 @@ A controller works too (Xbox, PlayStation, Steam Deck, via the browser Gamepad A
 
 Hide in haystacks and bushes to disappear from view. A takedown made while you are hidden in cover leaves the body hidden too. Being seen is a fight, not an instant loss. An alert guard in reach winds up a strike (his marker grows and flashes white): parry it to stagger him and finish him with E, or roll clear. Open strikes take three hits per guard; a heavy strike (hold E, then let go) is slower and can be cut short by a blow, but deals double and always staggers him, so the next strike kills. Otherwise at most two guards swing at once, and you can take three cuts; health comes back slowly once you break away. On a mission that must stay unseen, the alarm still ends it.
 
+- Pause map side panels (`src/components/MapSide.tsx`): the legend left of the Peta map; right of it the mission objectives, the Kitab places on this level ("Not written yet" until reached) and a % explored figure from the fog grid (`exploredFraction` in `src/game/fog.ts`). On narrow screens they stack under the map.
+
 ## Playing on phone
 
 Touch controls appear on touch devices (detected by `pointer: coarse`, not user agent). Tap to start, then New game or Continue, which requests fullscreen and a landscape lock where the browser allows it. Portrait shows a "rotate your phone" prompt and pauses.

@@ -706,6 +706,7 @@ export default function GameClient() {
           skills={skillTree}
           kitab={<Kitab save={save} />}
           visited={save.kitab}
+          places={save.kitab}
           charms={{ found: save.amulets, worn: save.amulet, wear: (id) => store.update((d) => wearAmulet(d, id)) }}
           lastTale={save.tales[level.missionId] ? <HikayatScroll text={save.tales[level.missionId]} title="Your last tale" /> : null}
           actions={

@@ -24,6 +24,14 @@ export function unpackFog(text: string, n: number): Uint8Array | null {
   return seen;
 }
 
+/** Fraction (0..1) of the grid's squares that are explored. The grid is cut to the level bounds, so every square counts. */
+export function exploredFraction(seen: Uint8Array): number {
+  if (!seen.length) return 0;
+  let n = 0;
+  for (let i = 0; i < seen.length; i++) if (seen[i]) n++;
+  return n / seen.length;
+}
+
 /** Saved maps: level id -> packed grid, a handful of short strings at most. */
 export function cleanExplored(v: unknown): Record<string, string> {
   const out: Record<string, string> = {};

@@ -5,6 +5,7 @@
 // The world is a fiction set in Malacca in 1511; these pages are written as in-world notes, not as history.
 
 import { CAMP, JUNGLE_Z0, JUNGLE_Z1, POOL, RIVER, SUMMIT } from "./levels";
+import type { LevelDef } from "./levels";
 
 export interface PlaceDef {
   id: string;
@@ -130,3 +131,12 @@ export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: 
 
 /** Places the player is standing in right now. */
 export const placesAt = (x: number, y: number, z: number) => PLACES.filter((p) => p.at(x, y, z));
+
+/** Places that lie inside a level's bounds (ground level and summit height sampled every 2 m), in list order. */
+export function placesInBounds(b: LevelDef["bounds"]): PlaceDef[] {
+  const found = new Set<string>();
+  for (const y of [0, SUMMIT.y])
+    for (let x = b.minX; x <= b.maxX; x += 2)
+      for (let z = b.minZ; z <= b.maxZ; z += 2) for (const p of placesAt(x, y, z)) found.add(p.id);
+  return PLACES.filter((p) => found.has(p.id));
+}

@@ -83,9 +83,13 @@ describe("parseSave / sanitize", () => {
       }),
     );
     expect(d.checkpoint).toBeNull();
-    expect(d.settings).toEqual({ quality: "auto", lookSens: 2.5, invertY: false, reduceShake: false });
+    expect(d.settings).toEqual({ quality: "auto", lookSens: 2.5, invertY: false, reduceShake: false, lang: "ms" });
     expect(d.missions[MISSION_ID]).toEqual({ completed: false, attempts: 0, bestTime: null, bestRating: 3 });
     expect("evil" in d).toBe(false);
+  });
+  it("keeps a valid lang and rejects junk", () => {
+    expect(parseSave(JSON.stringify({ version: 1, settings: { lang: "en" } })).settings.lang).toBe("en");
+    expect(parseSave(JSON.stringify({ version: 1, settings: { lang: "fr" } })).settings.lang).toBe("ms");
   });
   it("sanitize of junk is defaults", () => {
     expect(sanitize(5)).toEqual(defaultSave());

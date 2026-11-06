@@ -8,6 +8,7 @@ import { CAMP, JUNGLE_Z0, JUNGLE_Z1, POOL, RIVER, SUMMIT } from "./levels";
 import type { LevelDef } from "./levels";
 import { MASJID_COURT, MASJID_POND } from "./masjid";
 import { PENJARA_BLOCK, PENJARA_YARD } from "./levels/penjara";
+import { GUA_LANUN, GUA_LANUN_LORE, GUA_LANUN_PLACES } from "./guaLanun";
 
 export interface PlaceDef {
   id: string;
@@ -18,10 +19,16 @@ export interface PlaceDef {
   at: (x: number, y: number, z: number) => boolean;
   /** a place that belongs to one mission only (the maps share coordinates); left out, it is on every mission */
   level?: string;
+  /** x range the place lies in; places with neither this nor `level` belong to the Malacca map (|x| <= MALACCA_X), whose tests look at z alone */
+  xr?: [number, number];
 }
 
 /** Is this place on that mission? (No mission given: only the places every mission shares.) */
 export const placeOnLevel = (p: PlaceDef, levelId?: string) => !p.level || p.level === levelId;
+
+const MALACCA_X = 36;
+const inPlace = (p: PlaceDef, x: number, y: number, z: number, levelId?: string) =>
+  placeOnLevel(p, levelId) && (p.xr ? x >= p.xr[0] && x <= p.xr[1] : p.level || Math.abs(x) <= MALACCA_X) && p.at(x, y, z);
 
 const near = (c: { x: number; z: number }, r: number) => (x: number, _y: number, z: number) => Math.hypot(x - c.x, z - c.z) <= r;
 const inBox = (r: { x: number; z: number; w: number; d: number }) => (x: number, _y: number, z: number) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2;
@@ -107,6 +114,7 @@ export const PLACES: PlaceDef[] = [
     at: inBox(PENJARA_BLOCK),
   },
 ];
+PLACES.push(...GUA_LANUN_PLACES);
 
 // Masjid mission places (this mission only)
 PLACES.push(
@@ -155,6 +163,8 @@ MISSION_LORE.masjid = {
   text: "The letter left the town folded in oilcloth, and not one soldier ever crossed the masjid's wall to ask where it had been kept. The penjaga still sweeps the yard each morning.",
 };
 
+MISSION_LORE[GUA_LANUN.id] = GUA_LANUN_LORE;
+
 const placeIds = new Set(PLACES.map((p) => p.id));
 export const placeById = (id: string) => PLACES.find((p) => p.id === id) ?? null;
 
@@ -171,7 +181,7 @@ export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: 
   let n = 0;
   for (let x = b.minX; x <= b.maxX; x += 2)
     for (let z = b.minZ; z <= b.maxZ; z += 2)
-      if (p.at(x, 0, z) || p.at(x, SUMMIT.y, z)) {
+      if (inPlace(p, x, 0, z) || inPlace(p, x, SUMMIT.y, z)) {
         sx += x;
         sz += z;
         n++;
@@ -180,7 +190,7 @@ export function placeCentre(p: PlaceDef, b: { minX: number; maxX: number; minZ: 
 }
 
 /** Places the player is standing in right now. */
-export const placesAt = (x: number, y: number, z: number, levelId?: string) => PLACES.filter((p) => placeOnLevel(p, levelId) && p.at(x, y, z));
+export const placesAt = (x: number, y: number, z: number, levelId?: string) => PLACES.filter((p) => inPlace(p, x, y, z, levelId));
 
 /** Places that lie inside a level's bounds (ground level and summit height sampled every 2 m), in list order. */
 export function placesInBounds(b: LevelDef["bounds"], levelId?: string): PlaceDef[] {

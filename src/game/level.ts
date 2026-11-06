@@ -346,7 +346,7 @@ export function buildLevel(def: LevelDef = HARBOUR, opts: { lampLights?: number 
 
   // ---------------------------------------------------------------- jungle: forest floor, trails, clearings
   for (const r of def.forestFloor ?? []) {
-    const f = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), mat(0x3e4a2a));
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), mat(def.floorColor ?? 0x3e4a2a));
     f.rotation.x = -Math.PI / 2;
     f.position.set(r.x, 0.006, r.z);
     f.receiveShadow = true;

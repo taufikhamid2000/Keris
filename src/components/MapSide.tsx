@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import type { MapState } from "@/game/engine";
 import { exploredFraction } from "@/game/fog";
 import { placesInBounds } from "@/game/kitab";
-import type { LevelDef } from "@/game/levels";
+import { missionText, type LevelDef } from "@/game/levels";
+import { gateLabel } from "@/game/worldgraph";
 import { DEFAULT_LANG, t as tr, type Lang } from "@/game/i18n";
 import { useT } from "./useT";
 
@@ -84,8 +85,8 @@ export function MapObjectives({ def, s, places, known = {}, lang = DEFAULT_LANG 
   }, [def, cols, rows]);
   const pct = s ? Math.round(exploredFraction(s.fog.seen, walk) * 100) : 0;
   const goals: { key: string; text: string; done: boolean }[] = [
-    { key: "main", text: def.text.objective, done: mainDone || escapeNow },
-    { key: "escape", text: def.text.escape, done: false },
+    { key: "main", text: missionText(lang, def, "objective") ?? def.text.objective, done: mainDone || escapeNow },
+    { key: "escape", text: missionText(lang, def, "escape") ?? def.text.escape, done: false },
   ];
   const open = here.filter((p) => places.includes(p.id)).length;
   return (
@@ -111,7 +112,7 @@ export function MapObjectives({ def, s, places, known = {}, lang = DEFAULT_LANG 
           <ul>
             {exits.map((e) => (
               <li key={e.id}>
-                <b>{e.label}</b>
+                <b>{gateLabel(lang, e)}</b>
                 <span className="small dim">{gateText(e, known, lang)}</span>
               </li>
             ))}

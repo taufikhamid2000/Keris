@@ -114,12 +114,9 @@ export class Chronicle {
     }
   }
 
-  /**
-   * A guard went down. Pass `how` when the caller knows it; otherwise it is read from the start of the engine's toast
-   * for the kill (English or Malay), so a translated toast does not turn every takedown into a plain cut.
-   */
-  kill(msg: string, target: boolean, cover: boolean, how?: KillHow) {
-    this.add({ k: "kill", how: how ?? killHowFromToast(msg), target, cover });
+  /** A guard went down, in the way the engine names explicitly (never inferred from toast text). */
+  kill(how: KillHow, target: boolean, cover: boolean) {
+    this.add({ k: "kill", how, target, cover });
   }
 
   end(won: boolean, reason: string | null) {

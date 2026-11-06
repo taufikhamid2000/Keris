@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { buildLevel, cullFoliage, disposeLevel, instanced, type Level } from "./level";
-import { HARBOUR, LEVELS, type GuardDef, type LevelDef, type Placed } from "./levels";
-import { exitAt, exitsOf, type ExitDef } from "./worldgraph";
+import { HARBOUR, LEVELS, missionText, type GuardDef, type LevelDef, type Placed } from "./levels";
+import { exitAt, exitsOf, gateLabel, type ExitDef } from "./worldgraph";
+import { DEFAULT_LANG, type Lang } from "./i18n";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
@@ -43,7 +44,7 @@ import { packFog, unpackFog } from "./fog";
 import { FEEL, Feel, KICK, type Kick, charmPop, landDip, landTrauma, markerPopScale } from "./feel";
 import { placesAt } from "./kitab";
 import { BARK_PRIORITY, BARK_RANGE, barkLines, type BarkKind } from "./barks";
-import { TOOLS, type ToolId } from "./tools";
+import { TOOLS, toolName, type ToolId } from "./tools";
 import { Chronicle, type ChronicleData } from "./chronicle";
 import { Dalang, shadowOnScreen, shadowVision } from "./wayang";
 import { WayangLook } from "./wayangLook";
@@ -57,7 +58,6 @@ import { applyTide, seaSurface } from "./tideScene";
 import { hudMsg } from "./hudMsg";
 
 /** The chronicle keeps its own English wording for kills; the HUD toast is a dictionary key per kind. */
-const KILL_EN = { air: "Air assassination.", counter: "Counter kill.", silent: "Silent kill.", cut: "Cut down." } as const;
 
 export type Phase = "title" | "intro" | "playing" | "paused" | "won" | "lost";
 /** slain: cut down in a fight; detected: any alarm, on a mission that must stay unseen */
@@ -509,6 +509,7 @@ export class Game {
   /** gate travel: seconds stood in a gate, the gate, a swap queued for the end of the frame, arrival grace, fade-in after the swap */
   private gateDwell = 0;
   private gateNow: ExitDef | null = null;
+  private lang: Lang = DEFAULT_LANG;
   private pendingTravel: ExitDef | null = null;
   private gateCd = 0;
   private gateFade = 0;
@@ -988,7 +989,7 @@ export class Game {
     const c = cameraAt(t, reduced);
     this.camera.position.set(...c.pos);
     this.camera.lookAt(...c.look);
-    const cap = captionAt(t, reduced);
+    const cap = captionAt(t, reduced, this.lang);
     const view: IntroView = { text: cap?.text ?? "", opacity: cap ? cap.opacity : 0, fade: fadeAt(t, reduced) };
     const key = `${view.text}|${view.opacity.toFixed(2)}|${view.fade.toFixed(2)}`;
     if (key !== this.introKey) {
@@ -1036,7 +1037,7 @@ export class Game {
   private completeObjective() {
     this.objective = "escape";
     (this.level.exitBeam.material as THREE.MeshBasicMaterial).opacity = 0.35;
-    this.toast(this.level.text.targetDown);
+    this.toast(missionText(this.lang, this.def, "targetDown") ?? this.level.text.targetDown);
     this.chron.add({ k: "objective" });
     this.dalang.cue("checkpoint");
     this.cb.onCheckpoint?.("target");
@@ -1096,7 +1097,7 @@ export class Game {
     if (dist2D(g, this.p) > BARK_RANGE[kind]) return;
     const pri = BARK_PRIORITY[kind];
     if (this.talk.t > 0 && pri < this.talk.pri) return;
-    const pool = barkLines(this.def.id, kind).filter((l) => l !== this.lastLine);
+    const pool = barkLines(this.def.id, kind, this.lang).filter((l) => l !== this.lastLine);
     const line = pool[Math.floor(Math.random() * pool.length)];
     if (!line) return;
     this.lastLine = line;
@@ -1119,6 +1120,11 @@ export class Game {
   }
   setKitab(ids: readonly string[]) {
     for (const id of ids) this.kitab.add(id);
+  }
+  /** The language of level text, barks, captions and gate labels (kept in sync from GameClient with save.settings.lang). */
+  setLang(lang: Lang) {
+    this.lang = lang;
+    this.hudTimer = 0;
   }
   /** Pantun already overheard (from the save): their right answers are marked at the gates. */
   setPantun(ids: readonly string[]) {
@@ -1176,7 +1182,7 @@ export class Game {
       player: { x: this.p.x, z: this.p.z, yaw: this.p.yaw },
       objective: tgt ? { x: tgt.x, z: tgt.z } : null,
       exit: { x: this.level.exit.x, z: this.level.exit.z },
-      exits: exitsOf(this.def.id).map((e) => ({ id: e.id, x: e.at.x, z: e.at.z, label: e.label, to: e.to })),
+      exits: exitsOf(this.def.id).map((e) => ({ id: e.id, x: e.at.x, z: e.at.z, label: gateLabel(this.lang, e), to: e.to })),
       escape: this.objective === "escape",
       guards: this.guards.length,
       guardsDown: this.guards.filter((g) => g.dead).length,
@@ -1331,7 +1337,12 @@ export class Game {
   }
   /** The win screen's wording: the mission's own, or on a wayang mission the dalang's ending for how it was played. */
   winText(): { title: string; body: string } {
-    return this.dalang.ending(this.run.alerts) ?? this.def.win;
+    return (
+      this.dalang.ending(this.run.alerts) ?? {
+        title: missionText(this.lang, this.def, "winTitle") ?? this.def.win.title,
+        body: missionText(this.lang, this.def, "winBody") ?? this.def.win.body,
+      }
+    );
   }
   /** The puteri's tally of the current attempt (read when it is won). */
   ghaibTally() {
@@ -1406,7 +1417,7 @@ export class Game {
     }
   }
   private pickTool(id: ToolId) {
-    if (id !== this.tool) this.toast(TOOLS.find((t) => t.id === id)!.name);
+    if (id !== this.tool) this.toast(toolName(this.lang, id));
     this.tool = id;
     this.hudTimer = 0;
   }
@@ -2404,7 +2415,7 @@ export class Game {
           g.lastKnown = { x: p.x, z: p.z };
           g.lastKnownY = p.y;
         }
-        this.toast(found ? hudMsg("play.toast.bodyFound") : g.isTarget ? (this.level.text.targetSpotted ?? hudMsg("play.toast.spotted")) : hudMsg("play.toast.spotted"));
+        this.toast(found ? hudMsg("play.toast.bodyFound") : g.isTarget ? (missionText(this.lang, this.def, "targetSpotted") ?? hudMsg("play.toast.spotted")) : hudMsg("play.toast.spotted"));
         for (const o of this.guards) {
           if (o !== g && !o.dead && o.stun <= 0 && o.brain.state !== "alert" && dist2D(o, g) < 14) {
             o.brain = forceAlert();
@@ -3109,7 +3120,6 @@ export class Game {
   }
 
   private killGuard(guard: Guard, how: "air" | "counter" | "silent" | "cut", kick: Kick = KICK.takedown) {
-    const msg = KILL_EN[how]; // the chronicle keeps its own English wording; the toast is a key
     this.stabT = 0.7;
     this.feel.kick(kick);
     guard.dead = true;
@@ -3124,7 +3134,7 @@ export class Game {
       guard.z = cover.z + (guard.z - cover.z) * 0.2;
     }
     this.p.yaw = yawTo(this.p, guard);
-    this.chron.kill(msg, guard.isTarget, !!cover);
+    this.chron.kill(how, guard.isTarget, !!cover);
     for (const o of this.guards) if (!o.dead && o !== guard && dist2D(o, guard) < 5) this.hear(o, guard);
     if (guard.isTarget && this.def.objective.kind === "kill") this.completeObjective();
     else this.toast(hudMsg(cover ? `play.toast.kill.${how}.cover` : `play.toast.kill.${how}`));
@@ -3230,7 +3240,7 @@ export class Game {
     const incoming = this.guards.some((g) => g.atk !== null && g.atk < GUARD_ATK.windup && !g.dead && dist2D(g, p) < GUARD_ATK.reach + 0.5);
     const foe = sanc ? null : this.hostileNear(SWING.reach + 0.6);
     if (this.climb || this.leap) prompt = "";
-    else if (this.gateNow) prompt = hudMsg("play.prompt.gate", { label: this.gateNow.label });
+    else if (this.gateNow) prompt = hudMsg("play.prompt.gate", { label: gateLabel(this.lang, this.gateNow) });
     else if (this.swim)
       prompt = this.nearBoat()
         ? hudMsg("play.prompt.climbBoat")
@@ -3242,9 +3252,9 @@ export class Game {
     else if (this.horse) prompt = this.horseSpot() ? hudMsg("play.prompt.dismount") : "";
     else if (this.charge !== null) prompt = hudMsg(this.charge >= HEAVY.hold ? "play.prompt.heavyGo" : "play.prompt.heavyHold");
     else if (this.nearCharm() && !this.carrying && this.charm) prompt = hudMsg("play.prompt.takeCharm", { name: this.charm.name });
-    else if (this.nearLoot() && !this.carrying) prompt = this.level.text.take ? `E  ${this.level.text.take}` : hudMsg("play.prompt.take");
-    else if (tg.guard && tg.air) prompt = tg.guard.isTarget && this.level.text.leap ? `E  ${this.level.text.leap}` : hudMsg("play.prompt.air");
-    else if (tg.guard) prompt = tg.guard.isTarget && this.level.text.strike ? `E  ${this.level.text.strike}` : tg.guard.stagger > 0 ? hudMsg("play.prompt.finish") : tg.guard.stun > 0 ? hudMsg("play.prompt.finishStunned") : hudMsg("play.prompt.takedown");
+    else if (this.nearLoot() && !this.carrying) prompt = missionText(this.lang, this.def, "take") ? `E  ${missionText(this.lang, this.def, "take")}` : hudMsg("play.prompt.take");
+    else if (tg.guard && tg.air) prompt = tg.guard.isTarget && missionText(this.lang, this.def, "leap") ? `E  ${missionText(this.lang, this.def, "leap")}` : hudMsg("play.prompt.air");
+    else if (tg.guard) prompt = tg.guard.isTarget && missionText(this.lang, this.def, "strike") ? `E  ${missionText(this.lang, this.def, "strike")}` : tg.guard.stagger > 0 ? hudMsg("play.prompt.finish") : tg.guard.stun > 0 ? hudMsg("play.prompt.finishStunned") : hudMsg("play.prompt.takedown");
     else if (foe && !this.carrying) prompt = hudMsg("play.prompt.fight");
     else if (this.carrying) prompt = hudMsg("play.prompt.dropBody");
     else if (tg.near) prompt = hudMsg("play.prompt.behind");
@@ -3263,7 +3273,7 @@ export class Game {
       meter,
       breath: this.swim ? this.swim.breath / (SWIM.breath * this.mods.breath) : null,
       alert,
-      objective: this.objective === "main" ? this.level.text.objective : this.level.text.escape,
+      objective: (this.objective === "main" ? missionText(this.lang, this.def, "objective") : missionText(this.lang, this.def, "escape")) ?? "",
       northDeg: (this.camYaw * 180) / Math.PI,
       objDeg: (-rel * 180) / Math.PI,
       eagle: this.eagle,

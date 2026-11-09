@@ -12,7 +12,7 @@ A stealth-parkour browser game set in Malacca, 1511. You are a Pendekar sent to 
 
 | Key | Action |
 | --- | --- |
-| W A S D | Move |
+| W A S D or arrow keys | Move |
 | Shift | Run (louder) |
 | C or Ctrl | Crouch (quieter). Ctrl+W closes the tab in most browsers, so C is the safe choice |
 | Space | Jump, or climb a ledge in front of you |

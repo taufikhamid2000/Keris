@@ -906,7 +906,7 @@ export class Game {
         return;
       }
       if (this.phase !== "playing") return;
-      if (["Space", "ArrowUp", "ArrowDown", "Tab"].includes(e.code)) e.preventDefault();
+      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
       this.pressKey(e.code);
     });
@@ -1950,8 +1950,10 @@ export class Game {
     if (gh.say) this.toast(gh.say);
 
     // ---- player movement
-    let fwd = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
-    let str = (this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("KeyA") ? 1 : 0);
+    // WASD or the arrow keys (Steam Deck's desktop layout sends arrows from the left stick)
+    const k = this.keys;
+    let fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
+    let str = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
     let len = Math.hypot(fwd, str);
     // keyboard wins, then the touch joystick, then the gamepad stick
     const tm = this.touchMove.x !== 0 || this.touchMove.y !== 0 ? this.touchMove : this.padMove;

@@ -48,7 +48,8 @@ import { TOOLS, toolName, type ToolId } from "./tools";
 import { Chronicle, type ChronicleData } from "./chronicle";
 import { Dalang, shadowOnScreen, shadowVision } from "./wayang";
 import { WayangLook } from "./wayangLook";
-import { PAD_CONFIRM, PAD_DOWN, PAD_KEYS, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
+import { Held, ctxFromHud, padCircle, padCross } from "./context";
+import { PAD_CIRCLE, PAD_CONFIRM, PAD_CROSS, PAD_DOWN, PAD_KEYS, PAD_TOOL, PAD_WHEEL_HOLD, PAD_LOOK_RATE, PAD_RUN, PAD_START, PAD_TAB_NEXT, PAD_TAB_PREV, PAD_UP, diffButtons, pickPad, readPad } from "./gamepad";
 import { KAPITAN, round1, type GuardTuple, type KapitanWorld } from "./kapitan";
 import { PathAgent, buildNav, climbDuration, inArea, isWet, pathLen, sampleClimb, type ClimbLink, type NavGrid } from "./nav";
 import { PantunGates } from "./pantunGates";
@@ -86,6 +87,8 @@ export interface HudState {
   knives: number;
   prompt: string;
   carrying: boolean;
+  /** a body is within reach to carry */
+  canCarry?: boolean;
   toast: string;
   /** a guard's line the player overheard, shown as a subtitle ("" when quiet) */
   talk: string;
@@ -543,6 +546,10 @@ export class Game {
   private touchMove = { x: 0, y: 0, run: false };
   private padMove = { x: 0, y: 0, run: false };
   private padPrev: boolean[] = [];
+  /** key code each held pad button resolved to at press, so release matches */
+  private padHeld = new Held();
+  /** R1: when it went down, and whether it has become a tool-wheel hold */
+  private padTool: { t: number; wheel: boolean } | null = null;
   private lookSens = 1;
   private invertY = false;
   /** camera shake, hit-stop and dip (feel.ts) */
@@ -1880,7 +1887,17 @@ export class Game {
     const s = pad ? readPad(pad) : null;
     const { down, up } = diffButtons(this.padPrev, s?.buttons ?? []);
     this.padPrev = s?.buttons ?? [];
-    for (const i of up) if (PAD_KEYS[i]) this.releaseKey(PAD_KEYS[i]);
+    for (const i of up) {
+      if (i === PAD_TOOL) {
+        const r = this.padTool;
+        this.padTool = null;
+        if (r?.wheel) this.releaseKey("Tab");
+        else if (r) this.pressKey("ToolNext");
+        continue;
+      }
+      const held = this.padHeld.release(i);
+      if (held) this.releaseKey(held);
+    }
     this.padMove = { x: 0, y: 0, run: false };
     if (!s) return;
     const pressed = (i: number) => down.includes(i);
@@ -1902,7 +1919,23 @@ export class Game {
       return;
     }
     if (this.pantun.choosing && pressed(PAD_DOWN)) this.pressKey("PadDown");
-    for (const i of down) if (PAD_KEYS[i]) this.pressKey(PAD_KEYS[i]);
+    const choosing = this.pantun.choosing;
+    const ctx = ctxFromHud(this.buildHud());
+    for (const i of down) {
+      if (i === PAD_TOOL) {
+        this.padTool = { t: this.time, wheel: false };
+        continue;
+      }
+      let code: string | undefined = PAD_KEYS[i];
+      if (i === PAD_CROSS) code = choosing ? "Space" : padCross(ctx);
+      else if (i === PAD_CIRCLE) code = choosing ? "KeyX" : padCircle(ctx);
+      else if (choosing && i === PAD_UP) code = "ArrowUp";
+      if (code) this.pressKey(this.padHeld.press(i, code));
+    }
+    if (this.padTool && !this.padTool.wheel && this.time - this.padTool.t >= PAD_WHEEL_HOLD) {
+      this.padTool.wheel = true;
+      this.pressKey("Tab");
+    }
     this.padMove = { ...s.move, run: PAD_RUN.some((i) => s.buttons[i]) };
     if (s.look.x || s.look.y) this.look(s.look.x * PAD_LOOK_RATE * dt, s.look.y * PAD_LOOK_RATE * dt);
   }
@@ -3288,6 +3321,7 @@ export class Game {
       wheel: this.wheel?.sel ?? null,
       prompt,
       carrying: !!this.carrying,
+      canCarry: !!this.nearestBody(),
       toast: this.toastT > 0 ? this.toastText : "",
       talk: this.talk.t > 0 ? this.talk.text : "",
       hp: this.hp,

@@ -1,23 +1,26 @@
 // Gamepad input (standard mapping: Xbox, PlayStation, Steam Deck). Pure helpers; the engine polls navigator.getGamepads().
 
-/** Standard-mapping button index → the key code it acts as. */
+/**
+ * Standard-mapping button index -> the key code it acts as, for buttons whose meaning never changes.
+ * Assassin's Creed Unity layout. Context buttons resolve in context.ts (0 Cross: Space, or KeyX in a fight;
+ * 1 Circle: KeyF, or KeyR in a fight); R1 (5) is a tap / hold pair handled by the engine (tap ToolNext, hold Tab).
+ */
 export const PAD_KEYS: Record<number, string> = {
-  0: "Space", // A / Cross: jump, hold against a wall to climb
-  1: "KeyX", // B / Circle: roll
-  2: "KeyE", // X / Square: takedown, or strike in a fight
-  3: "KeyF", // Y / Triangle: carry body
-  5: "KeyV", // RB / R1: eagle vision
-  6: "KeyR", // LT / L2: parry
-  7: "KeyQ", // RT / R2: throw knife
-  11: "KeyC", // right stick click: crouch toggle
-  12: "Tab", // d-pad up, held: tool wheel (right stick picks)
+  2: "KeyE", // X / Square: attack, takedown
+  3: "KeyV", // Y / Triangle: eagle vision
+  4: "KeyQ", // LB / L1: throw current tool
+  6: "KeyC", // LT / L2: crouch / stealth toggle
   14: "ToolPrev", // d-pad left / right: previous / next tool
   15: "ToolNext",
 };
-export const PAD_RUN = [4, 10]; // LB / L1 or left stick click
+export const PAD_TOOL = 5; // RB / R1: tap next tool, hold the tool wheel (right stick picks)
+export const PAD_WHEEL_HOLD = 0.25; // seconds before R1 counts as a hold
+export const PAD_CROSS = 0;
+export const PAD_CIRCLE = 1;
+export const PAD_RUN = [7, 10]; // RT / R2 held, or left stick click: run (high profile)
 export const PAD_START = 9;
 export const PAD_CONFIRM = 0;
-export const PAD_UP = 12; // d-pad, menus only
+export const PAD_UP = 12; // d-pad up / down: menus and pantun answers only
 export const PAD_DOWN = 13;
 /** pause menu tabs: LB / RB (L1 / R1) and d-pad left / right */
 export const PAD_TAB_PREV = [4, 14];

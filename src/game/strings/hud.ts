@@ -148,15 +148,19 @@ const D: Record<string, readonly [string, string]> = {
   "hud.ctl.eagle": ["Penglihatan Mata Helang", "Mata Helang vision"],
   "hud.ctl.pause": ["Berhenti", "Pause"],
   "hud.ctl.pad": [
-    "Kayu bedik untuk bergerak / melihat, A lompat, X tikam / serang (tahan: serangan berat), LT tangkis, B guling, RT guna alat, tahan d-pad atas untuk roda alat (kayu bedik kanan memilih), d-pad kiri / kanan tukar alat, Y angkat, R3 menunduk, RB penglihatan, LB lari, Start berhenti",
-    "Sticks move / look, A jump, X tikam / strike (hold: heavy), LT parry, B roll, RT use tool, hold d-pad up for the tool wheel (right stick picks), d-pad left / right switch tool, Y carry, R3 crouch, RB vision, LB run, Start pause",
+    "Kayu bedik untuk bergerak / melihat, Pangkah lompat / panjat (dalam pertarungan: guling), Bulatan angkat / letak (dalam pertarungan: tangkis), Petak tikam / serang (tahan: serangan berat), Segi tiga Mata Helang, L1 guna alat, R1 ketik tukar alat / tahan untuk roda alat (kayu bedik kanan memilih), L2 menunduk, R2 atau L3 lari, d-pad kiri / kanan tukar alat, Options berhenti",
+    "Sticks move / look, Cross (A) jump / climb (in a fight: roll), Circle (B) carry / drop (in a fight: parry), Square (X) tikam / strike (hold: heavy), Triangle (Y) Mata Helang, L1 use tool, R1 tap to switch tool / hold for the tool wheel (right stick picks), L2 crouch, R2 or L3 run, d-pad left / right switch tool, Options pause",
   ],
 
   // ---- controls table (touch)
   "hud.tctl.k.move": ["Ibu jari kiri", "Left thumb"],
   "hud.tctl.k.look": ["Seret sebelah kanan", "Drag right side"],
   "hud.tctl.k.jump": ["Lompat", "Jump"],
+  "hud.tctl.k.action": ["Tikam / Angkat", "Tikam / Carry"],
+  "hud.tctl.k.defend": ["Tangkis / Guling", "Parry / Roll"],
+  "hud.tctl.k.crouch": ["Tunduk", "Crouch"],
   "hud.tctl.k.tool": ["Alat", "Alat"],
+  "hud.tctl.k.eagle": ["Mata Helang", "Mata Helang"],
   "hud.tctl.move": [
     "Bergerak (tolak ke tepi untuk berlari, lebih bising)",
     "Move (push to the edge to run, louder)",
@@ -164,16 +168,19 @@ const D: Record<string, readonly [string, string]> = {
   "hud.tctl.look": ["Melihat sekeliling", "Look"],
   "hud.tctl.jump": ["Lompat / panjat tebing (tahan di dinding)", "Jump / climb a ledge (hold at a wall)"],
   "hud.tctl.crouch": ["Togol menunduk (lebih senyap)", "Crouch toggle (quieter)"],
-  "hud.tctl.stab": [
-    "Tikam: bunuh dari belakang. Dalam pertarungan, ketik untuk menyerang, tahan untuk serangan berat",
-    "Tikam: takedown from behind. In a fight, tap to strike, hold for a heavy strike",
+  "hud.tctl.action": [
+    "Satu butang ikut keadaan: tikam pengawal dari belakang, serang dalam pertarungan (tahan untuk serangan berat), angkat mayat yang dekat, letak mayat yang dipikul. Labelnya menunjukkan apa yang akan berlaku",
+    "One button that follows the moment: tikam a guard from behind, strike in a fight (hold for a heavy strike), carry a body in reach, drop the one you carry. Its label shows what will happen",
   ],
-  "hud.tctl.parry": [
-    "Tangkis: sejurus sebelum pengawal menetak (penandanya berkelip putih)",
-    "Parry: just before a guard strikes (his marker flashes white)",
+  "hud.tctl.defend": [
+    "Tangkis sejurus sebelum pengawal menetak (butang bercahaya), jika tidak guling untuk mengelak atau melepaskan diri",
+    "Parry just before a guard strikes (the button lights), otherwise roll to dodge or break away",
   ],
-  "hud.tctl.tool": ["Guna alat di tangan (pisau, batu atau lada)", "Use the tool in hand (knife, stone or pepper)"],
-  "hud.tctl.toolNext": ["Tukar alat", "Switch tool"],
+  "hud.tctl.tool": [
+    "Ketik untuk guna alat di tangan (pisau, batu atau lada); tahan untuk tukar alat",
+    "Tap to use the tool in hand (knife, stone or pepper); hold to switch tool",
+  ],
+  "hud.tctl.eagle": ["Penglihatan Mata Helang (butang kecil di sebelah Berhenti)", "Mata Helang vision (small button beside Pause)"],
   "hud.tctl.horse": ["Tunggang kuda; kayu bedik memandu, E untuk turun", "Mount it; the stick rides, E gets down"],
   "hud.tctl.sampan": [
     "Naik sampan; kayu bedik mendayung, E berhampiran tebing untuk naik ke darat",
@@ -198,6 +205,7 @@ const D: Record<string, readonly [string, string]> = {
   "touch.climb": ["Panjat", "Climb"],
   "touch.tool": ["Alat", "Alat"],
   "touch.switch": ["Tukar", "Switch"],
+  "touch.eagle": ["Mata Helang", "Mata Helang"],
 
   // ---- tools (names live in tools.ts; descriptions here)
   "play.tool.knife.desc": [

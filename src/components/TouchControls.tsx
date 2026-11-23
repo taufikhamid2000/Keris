@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Game, HudState } from "@/game/engine";
 import type { Lang } from "@/game/i18n";
-import { trMsg } from "@/game/hudMsg";
 import { useT } from "./useT";
+import { action, actionLabel, ctxFromHud, defend, defendLabel } from "@/game/context";
 import { clampToRadius, joystickVector, lookDelta } from "@/game/touch";
 
 const TOOL_SHORT = { knife: "Pisau", stone: "Batu", pepper: "Lada" } as const;
@@ -24,7 +24,8 @@ export function enterFullscreenLandscape() {
 }
 
 interface BtnProps {
-  code: string;
+  /** a fixed key code, or a resolver called once on press (the same code is released) */
+  code: string | (() => string);
   label: string;
   sub?: string;
   cls?: string;
@@ -35,20 +36,23 @@ interface BtnProps {
 
 function Btn({ code, label, sub, cls = "", on, dim, game }: BtnProps) {
   const down = useRef<number | null>(null);
+  const held = useRef<string | null>(null);
   const release = useCallback(() => {
-    if (down.current !== null) game?.releaseKey(code);
+    if (down.current !== null && held.current) game?.releaseKey(held.current);
     down.current = null;
-  }, [game, code]);
+    held.current = null;
+  }, [game]);
   return (
     <button
       type="button"
       className={`tbtn ${cls} ${on ? "on" : ""} ${dim ? "dim" : ""}`}
-      data-act={code}
+      data-act={typeof code === "string" ? code : cls}
       onPointerDown={(e) => {
         e.preventDefault();
         e.currentTarget.setPointerCapture?.(e.pointerId);
         down.current = e.pointerId;
-        game?.pressKey(code);
+        held.current = typeof code === "string" ? code : code();
+        game?.pressKey(held.current);
       }}
       onPointerUp={release}
       onPointerCancel={release}
@@ -57,6 +61,55 @@ function Btn({ code, label, sub, cls = "", on, dim, game }: BtnProps) {
     >
       <b>{label}</b>
       {sub && <i>{sub}</i>}
+    </button>
+  );
+}
+
+const TOOL_HOLD_MS = 400;
+
+/** Tap throws the tool in hand (KeyQ); holding 400 ms switches to the next tool instead. */
+function ToolBtn({ game, sub, dim }: { game: Game | null; sub: string; dim: boolean }) {
+  const down = useRef<number | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const switched = useRef(false);
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  const up = (fire: boolean) => {
+    if (down.current === null) return;
+    down.current = null;
+    clear();
+    if (fire && !switched.current) {
+      game?.pressKey("KeyQ");
+      game?.releaseKey("KeyQ");
+    }
+  };
+  useEffect(() => clear, []);
+  return (
+    <button
+      type="button"
+      className={`tbtn tool ${dim ? "dim" : ""}`}
+      data-act="KeyQ"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        down.current = e.pointerId;
+        switched.current = false;
+        clear();
+        timer.current = setTimeout(() => {
+          timer.current = null;
+          switched.current = true;
+          game?.pressKey("ToolNext");
+          game?.releaseKey("ToolNext");
+        }, TOOL_HOLD_MS);
+      }}
+      onPointerUp={() => up(true)}
+      onPointerCancel={() => up(false)}
+      onLostPointerCapture={() => up(false)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <b>{sub}</b>
     </button>
   );
 }
@@ -81,7 +134,7 @@ export default function TouchControls({ game, hud, lang }: { game: Game | null; 
   // never leave the player running if the controls unmount or the game changes
   useEffect(() => () => game?.setTouchMove(0, 0, false), [game]);
 
-  const t = trMsg(lang, hud.prompt);
+  const ctx = ctxFromHud(hud);
   return (
     <div className="touch" onContextMenu={(e) => e.preventDefault()}>
       <div
@@ -160,17 +213,26 @@ export default function TouchControls({ game, hud, lang }: { game: Game | null; 
       >
         II
       </button>
+      <button
+        type="button"
+        className={`tbtn eagle-btn ${hud.eagle ? "on" : ""}`}
+        aria-label={tr("touch.eagle")}
+        data-act="KeyV"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          game?.pressKey("KeyV");
+          game?.releaseKey("KeyV");
+        }}
+      >
+        V
+      </button>
 
       <div className="btn-grid">
-        <Btn game={game} code="KeyV" label="V" sub="Mata Helang" cls="eagle" on={hud.eagle} />
-        <Btn game={game} code="KeyF" label="F" sub={hud.carrying ? tr("touch.drop") : tr("touch.carry")} cls="carry" on={hud.carrying || t.startsWith("F")} />
-        <Btn game={game} code="KeyC" label="C" sub={tr("touch.crouch")} cls="crouch" on={hud.crouched} />
-        <Btn game={game} code="KeyQ" label="Q" sub={`${TOOL_SHORT[hud.tool]} x${hud.ammo[hud.tool]}`} cls="throw" dim={hud.ammo[hud.tool] <= 0} />
-        <Btn game={game} code="KeyX" label="X" sub={tr("touch.roll")} cls="roll" />
-        <Btn game={game} code="KeyR" label="R" sub={tr("touch.parry")} cls="parry" on={hud.incoming} />
-        <Btn game={game} code="KeyE" label="E" sub={hud.combat && hud.prompt !== "§play.prompt.takedown" ? tr("touch.strike") : tr("touch.stab")} cls="stab" on={t.startsWith("E")} />
+        <Btn game={game} code={() => action(ctx)} label={tr(actionLabel(ctx))} cls="act" on={ctx.takedownPrompt || ctx.carrying} />
+        <Btn game={game} code={() => defend(ctx)} label={tr(defendLabel(ctx))} cls="def" on={hud.incoming} />
         <Btn game={game} code="Space" label={tr("touch.jump")} sub={tr("touch.climb")} cls="jump" />
-        <Btn game={game} code="ToolNext" label={tr("touch.tool")} sub={tr("touch.switch")} cls="tool" />
+        <ToolBtn game={game} sub={`${TOOL_SHORT[hud.tool]} x${hud.ammo[hud.tool]}`} dim={hud.ammo[hud.tool] <= 0} />
+        <Btn game={game} code="KeyC" label={tr("touch.crouch")} cls="crouch" on={hud.crouched} />
       </div>
     </div>
   );

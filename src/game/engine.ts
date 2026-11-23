@@ -4,8 +4,9 @@ import { HARBOUR, LEVELS, missionText, type GuardDef, type LevelDef, type Placed
 import { exitAt, exitsOf, gateLabel, type ExitDef } from "./worldgraph";
 import { DEFAULT_LANG, type Lang } from "./i18n";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { buildHorse, type HorseRig } from "./horse";
 import { buildFern, buildJungleTrees } from "./trees";
-import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
+import { loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
   BODY,
   bodyReaction,
@@ -235,9 +236,7 @@ interface Horse {
   yaw: number;
   speed: number;
   home: { x: number; z: number; yaw: number };
-  mixer: THREE.AnimationMixer | null;
-  acts: Partial<Record<"idle" | "walk" | "gallop", THREE.AnimationAction>>;
-  cur: "idle" | "walk" | "gallop" | null;
+  rig: HorseRig | null;
 }
 
 interface Boat {
@@ -495,7 +494,6 @@ export class Game {
   private horses: Horse[] = [];
   /** the horse the player rides, or null */
   private horse: Horse | null = null;
-  private horseModel: { object: THREE.Object3D; clips: THREE.AnimationClip[] } | null = null;
   /** jetties and other decks a boat cannot pass (bridges and planks span the river and it slips under them) */
   private boatBlockers: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   /** main: the level's objective (kill or steal) is still to do */
@@ -685,14 +683,6 @@ export class Game {
         this.dressFoliage();
       })
       .catch((e) => console.warn("[models] rocks failed, keeping the built-in boulders", e));
-    // the Quaternius CC0 horse (props/horse.glb), animated; else a block horse
-    loadCreature("horse", HORSE.modelLength)
-      .then((m) => {
-        if (this.disposed || !m) return;
-        this.horseModel = m;
-        for (const h of this.horses) this.dressHorse(h);
-      })
-      .catch((e) => console.warn("[models] horse failed, keeping the block horse", e));
 
     this.knifeMesh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 5), new THREE.MeshBasicMaterial({ color: 0xe6e6e6 }));
     this.knifeMesh.visible = false;
@@ -1776,19 +1766,7 @@ export class Game {
   }
   /** Pick each character's animation from what it is doing, and advance the mixers. */
   private animateRigs(dt: number) {
-    for (const h of this.horses) {
-      if (!h.mixer) continue;
-      const s = Math.abs(h.speed);
-      const want = s > HORSE.walk + 1 && h.acts.gallop ? "gallop" : s > 0.3 && h.acts.walk ? "walk" : "idle";
-      if (want !== h.cur && h.acts[want]) {
-        const next = h.acts[want]!;
-        next.reset().fadeIn(0.25).play();
-        if (h.cur) h.acts[h.cur]?.fadeOut(0.25);
-        h.cur = want;
-      }
-      if (h.cur && h.cur !== "idle") h.acts[h.cur]!.timeScale = clamp(s / (h.cur === "gallop" ? HORSE.gallop : HORSE.walk), 0.5, 1.3);
-      h.mixer.update(dt);
-    }
+    for (const h of this.horses) h.rig?.update(dt, h.speed, HORSE.walk, HORSE.gallop);
     const p = this.p;
     const pr = this.playerRig;
     if (pr) {
@@ -2850,7 +2828,7 @@ export class Game {
     this.horses = (this.def.horses ?? []).map((d) => {
       const group = new THREE.Group();
       this.level.root.add(group);
-      const h: Horse = { group, x: d.x, y: 0, z: d.z, yaw: d.rotY, speed: 0, home: { x: d.x, z: d.z, yaw: d.rotY }, mixer: null, acts: {}, cur: null };
+      const h: Horse = { group, x: d.x, y: 0, z: d.z, yaw: d.rotY, speed: 0, home: { x: d.x, z: d.z, yaw: d.rotY }, rig: null };
       this.dressHorse(h);
       return h;
     });
@@ -2858,26 +2836,8 @@ export class Game {
 
   private dressHorse(h: Horse) {
     h.group.clear();
-    h.mixer = null;
-    h.acts = {};
-    h.cur = null;
-    const m = this.horseModel;
-    if (!m) {
-      h.group.add(blockHorse());
-      return;
-    }
-    // the model's head is already at +z, the way the horse moves (rest pose: head z +2.5, tail z -2.0)
-    const o = cloneSkinned(m.object);
-    h.group.add(o);
-    h.mixer = new THREE.AnimationMixer(o);
-    // the pack names clips both "Gallop" and "AnimalArmature|Gallop"; take the plain one, else the prefixed one
-    const clip = (n: string) => m.clips.find((c) => c.name === n) ?? m.clips.find((c) => c.name.endsWith("|" + n));
-    for (const [slot, n] of [["idle", "Idle"], ["walk", "Walk"], ["gallop", "Gallop"]] as const) {
-      const c = clip(n);
-      if (c) h.acts[slot] = h.mixer.clipAction(c);
-    }
-    h.acts.idle?.play();
-    h.cur = h.acts.idle ? "idle" : null;
+    h.rig = buildHorse();
+    h.group.add(h.rig.object);
   }
 
   private dressBoat(b: Boat) {
@@ -3556,29 +3516,6 @@ export class Game {
 const CAM_LOOK = new THREE.Vector3();
 const CAM_OFF = new THREE.Vector3();
 const CAM_WANT = new THREE.Vector3();
-
-/** A horse of boxes, for when the horse model is not loaded: body, neck, head, legs and tail, facing +z. */
-function blockHorse(): THREE.Group {
-  const g = new THREE.Group();
-  const coat = std(0x6b4423);
-  const dark = std(0x2b1d12);
-  const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, rx = 0) => {
-    const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-    o.position.set(x, y, z);
-    o.rotation.x = rx;
-    o.castShadow = true;
-    g.add(o);
-  };
-  box(0.55, 0.6, 1.6, coat, 0, 1.15, 0);
-  box(0.3, 0.75, 0.35, coat, 0, 1.6, 0.85, -0.6);
-  box(0.28, 0.3, 0.6, coat, 0, 1.95, 1.15);
-  box(0.08, 0.55, 0.2, dark, 0, 1.75, 0.75, -0.6);
-  for (const [x, z] of [[-0.18, 0.6], [0.18, 0.6], [-0.18, -0.6], [0.18, -0.6]]) box(0.14, 0.9, 0.14, coat, x, 0.45, z);
-  box(0.1, 0.6, 0.1, dark, 0, 1.05, -0.85, 0.4);
-  // saddle cloth
-  box(0.62, 0.08, 0.6, std(0x8c1c13), 0, 1.47, 0);
-  return g;
-}
 
 /** Every mesh of a loaded model as one InstancedMesh, at each of the spots. */
 function instanceModel(model: THREE.Object3D, list: Placed[], shadow: boolean): THREE.Group {

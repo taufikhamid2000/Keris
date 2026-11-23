@@ -24,14 +24,12 @@ const KEEP = {
     "Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Crouch_Idle_Loop", "Crouch_Fwd_Loop", "Sword_Attack", "Death01",
     "Jump_Start", "Roll", "Hit_Chest", "Sword_Idle", "Punch_Cross", "Sitting_Idle_Loop", "Swim_Fwd_Loop", "Swim_Idle_Loop",
   ],
-  "props/horse.glb": ["Idle", "Walk", "Gallop"],
 };
 
 // in: file under assets-src/models, out: file under public/models (a .gltf becomes one .glb the loader finds as character.*)
 // simplify: mild decimation (props only, never characters). maxTex: texture size cap.
 const JOBS = [
   { in: "shared/animations.glb", out: "shared/animations.glb", dropMeshes: true },
-  { in: "props/horse.glb", out: "props/horse.glb", maxTex: 1024 },
   { in: "props/rock_a.glb", out: "props/rock_a.glb", maxTex: 1024 },
   { in: "props/rock_b.glb", out: "props/rock_b.glb", maxTex: 1024 },
   { in: "props/sampan.glb", out: "props/sampan.glb", maxTex: 1024 },

@@ -136,7 +136,11 @@ async function loadFile(url: string): Promise<Loaded> {
     const o = await (await fbxLoader).loadAsync(url);
     return { scene: o, animations: o.animations };
   }
-  gltfLoader ??= import("three/examples/jsm/loaders/GLTFLoader.js").then((m) => new m.GLTFLoader());
+  gltfLoader ??= Promise.all([import("three/examples/jsm/loaders/GLTFLoader.js"), import("three/examples/jsm/libs/meshopt_decoder.module.js")]).then(([m, d]) => {
+    const l = new m.GLTFLoader();
+    l.setMeshoptDecoder(d.MeshoptDecoder); // the optimized .glb files use EXT_meshopt_compression
+    return l;
+  });
   const g = await (await gltfLoader).loadAsync(url);
   return { scene: g.scene, animations: g.animations };
 }

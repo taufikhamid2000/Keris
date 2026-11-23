@@ -81,6 +81,8 @@ const D: Record<string, readonly [string, string]> = {
   ],
   "hud.win.whisper": ["Bisikan puteri", "Bisikan puteri"],
   "hud.win.again": ["Main semula", "Play again"],
+  "hud.win.next": ["Misi seterusnya: {name}", "Next mission: {name}"],
+  "play.toast.gateLocked": ["Belum masanya ke sana.", "Not yet. The story has not reached there."],
   "hud.tale.last": ["Hikayat terakhir anda", "Your last tale"],
   "hud.lose.slain.title": ["Anda ditewaskan", "You were cut down"],
   "hud.lose.detected.title": ["Anda dikesan", "You were seen"],

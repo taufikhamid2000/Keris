@@ -1,6 +1,7 @@
 "use client";
 
 import ChapterSelect from "./ChapterSelect";
+import { CHAPTERS, STORY, chapterComplete, isUnlocked, nextStoryLevelId, storyLevelId } from "@/game/chapters";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Game, HudState, IntroView, LoseReason, MapState, Phase } from "@/game/engine";
 import { TOOLS, toolName } from "@/game/tools";
@@ -85,6 +86,13 @@ declare global {
   interface Window {
     __keris?: Game;
   }
+}
+
+/** Linear story: the mission Continue resumes. A saved, unfinished, unlocked attempt; else the next story mission. */
+function resumeMissionId(save: { checkpointMission: string | null; missions: Record<string, { completed: boolean }> }): string | null {
+  const cp = LEVELS.find((l) => l.missionId === save.checkpointMission);
+  if (cp && !save.missions[cp.missionId]?.completed && isUnlocked(save, cp.id)) return cp.missionId;
+  return LEVELS.find((l) => l.id === storyLevelId(save))?.missionId ?? null;
 }
 
 const mq = (q: string) => window.matchMedia(q).matches;
@@ -276,7 +284,7 @@ export default function GameClient() {
     let disposed = false;
     let inst: Game | null = null;
     // first load: ?level=<id> or the mission with a saved attempt; a rebuilt engine (quality change) keeps the pick
-    const lv = levelRef.current ?? initialLevel(window.location.search, store.get().checkpointMission);
+    const lv = levelRef.current ?? initialLevel(window.location.search, resumeMissionId(store.get()));
     levelRef.current = lv;
     setLevel(lv);
     const missionId = () => (levelRef.current ?? lv).missionId;
@@ -352,6 +360,7 @@ export default function GameClient() {
           { quality: pickQuality(touch, window.location.search, qualityPref), touch, level: lv },
         );
         window.__keris = inst;
+        inst.gateOpen = (id) => isUnlocked(store.get(), id);
         setGame(inst);
       })
       .catch(() => setFailed(true));
@@ -483,7 +492,11 @@ export default function GameClient() {
   };
   const skipIntro = () => g()?.skipIntro();
   // Continue resumes the saved attempt, whichever mission it is on
-  const continueLevel = LEVELS.find((l) => l.missionId === save.checkpointMission) ?? null;
+  const continueLevel = LEVELS.find((l) => l.missionId === resumeMissionId(save)) ?? null;
+  const firstLevel = LEVELS.find((l) => l.id === STORY[0]) ?? LEVELS[0];
+  const nextLevel = LEVELS.find((l) => l.id === nextStoryLevelId(level.id)) ?? null;
+  const storyChapter = CHAPTERS.find((c) => c.levels.includes(level.id));
+  const freeSelect = !storyChapter || chapterComplete(storyChapter, save);
   const canContinue = hasProgress(save) && continueLevel !== null;
   const checkpointHere = checkpointFor(save, level.missionId);
   const savedHere = save.checkpointMission === level.missionId && save.checkpoint !== null;
@@ -642,7 +655,7 @@ export default function GameClient() {
                 {continueLevel === level ? t("title.continue") : t("title.continueNamed", { name: continueLevel ? (missionText(lang, continueLevel, "name") ?? continueLevel.name) : "" })}
               </button>
             )}
-            <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start")} disabled={!game}>
+            <button className={`btn${canContinue ? " ghost" : ""}`} onClick={() => begin("start", firstLevel)} disabled={!game}>
               {t("title.newGame")}
             </button>
             <DuaPemainButton disabled={!game} />
@@ -667,6 +680,7 @@ export default function GameClient() {
             {view === "main" && (
               <>
                 <ChapterSelect missions={save.missions} lang={save.settings.lang}>
+                {freeSelect ? (
                 <div className="missions">
                   {LEVELS.map((l) => (
                     <button key={l.id} className={`btn ghost${l === level ? " on" : ""}`} aria-pressed={l === level} onClick={() => pickLevel(l)} disabled={!game}>
@@ -675,6 +689,9 @@ export default function GameClient() {
                     </button>
                   ))}
                 </div>
+                ) : (
+                  <p className="dim small">{t("chapters.locked")}</p>
+                )}
                 </ChapterSelect>
                 <h3>{missionText(lang, level, "name") ?? level.name}</h3>
                 <p className="story">{missionText(lang, level, "story") ?? level.story}</p>
@@ -778,7 +795,12 @@ export default function GameClient() {
             )}
             <Best m={mission} lang={lang} />
             {tale && <HikayatScroll text={tale} lang={save.settings.lang} />}
-            <button className="btn" onClick={() => begin("start")}>
+            {nextLevel && (
+              <button className="btn" onClick={() => begin("start", nextLevel)}>
+                {t("hud.win.next", { name: missionText(lang, nextLevel, "name") ?? nextLevel.name })}
+              </button>
+            )}
+            <button className={`btn${nextLevel ? " ghost" : ""}`} onClick={() => begin("start")}>
               {t("hud.win.again")}
             </button>
             {menuBtn}

@@ -1144,6 +1144,9 @@ export class Game {
       this.cb.onKitab?.(pl.id);
     }
   }
+  /** Linear story: gates into maps the story has not reached stay shut. Set by the UI from the save. */
+  gateOpen: (levelId: string) => boolean = () => true;
+  private gateLockedAt: string | null = null;
   /** The save's explored map for the current level; used from the next fresh attempt, and merged in now. */
   setExplored(packed: string | null) {
     this.fogSaved = packed;
@@ -2115,7 +2118,13 @@ export class Game {
     // ---- gates to neighbouring maps: stand in one for a beat; the swap runs at the end of the frame
     this.gateCd = Math.max(0, this.gateCd - dt);
     this.gateFade = Math.max(0, this.gateFade - dt / 0.4);
-    const gate = this.gateCd > 0 || this.climb || this.leap ? null : exitAt(this.def.id, p.x, p.z);
+    let gate = this.gateCd > 0 || this.climb || this.leap ? null : exitAt(this.def.id, p.x, p.z);
+    if (gate && !this.gateOpen(gate.to)) {
+      // a locked gate: say so once per visit, never travel
+      if (this.gateLockedAt !== gate.id) this.toast(hudMsg("play.toast.gateLocked"));
+      this.gateLockedAt = gate.id;
+      gate = null;
+    } else if (!gate) this.gateLockedAt = null;
     if (gate && !this.pendingTravel) {
       this.gateDwell = gate === this.gateNow ? this.gateDwell + dt : dt;
       this.gateNow = gate;

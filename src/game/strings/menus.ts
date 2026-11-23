@@ -103,6 +103,7 @@ const P: Record<string, [string, string]> = {
   "chapters.title": ["Bab", "Chapters"],
   "chapters.back": ["‹ Bab", "‹ Chapters"],
   "chapters.soon": ["Akan datang", "Coming soon"],
+  "chapters.locked": ["Tamatkan bab ini untuk memilih misi dengan bebas.", "Finish this chapter to pick missions freely."],
   "chapters.era.prasejarah": ["Prasejarah", "Prehistory"],
 };
 

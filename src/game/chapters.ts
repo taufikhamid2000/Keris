@@ -125,3 +125,33 @@ export function chapterProgress(
   const done = chapter.levels.filter((id) => save.missions[MISSION_OF[id] ?? id]?.completed).length;
   return { done, total: chapter.levels.length };
 }
+
+// ---- linear story: missions are played in STORY order; each one unlocks the next
+
+/** The playable story, in order (level ids). */
+export const STORY: string[] = CHAPTERS.filter((c) => c.playable).flatMap((c) => c.levels);
+
+type Missions = { missions: Record<string, { completed: boolean }> };
+const done = (save: Missions, id: string) => !!save.missions[MISSION_OF[id] ?? id]?.completed;
+
+/** The story mission the player is on: the first one not yet completed, else the last (story finished). */
+export function storyLevelId(save: Missions): string {
+  return STORY.find((id) => !done(save, id)) ?? STORY[STORY.length - 1];
+}
+
+/** A level can be played or walked into once it is completed or it is the current story mission. Levels outside the story stay open. */
+export function isUnlocked(save: Missions, levelId: string): boolean {
+  const i = STORY.indexOf(levelId);
+  return i < 0 || done(save, levelId) || levelId === storyLevelId(save);
+}
+
+/** The story mission after this one, if any. */
+export function nextStoryLevelId(levelId: string): string | null {
+  const i = STORY.indexOf(levelId);
+  return i >= 0 && i < STORY.length - 1 ? STORY[i + 1] : null;
+}
+
+/** Free mission select opens once every mission of the chapter is completed. */
+export function chapterComplete(chapter: ChapterDef, save: Missions): boolean {
+  return chapter.levels.every((id) => done(save, id));
+}

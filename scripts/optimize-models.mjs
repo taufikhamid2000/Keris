@@ -32,9 +32,6 @@ const KEEP = {
 const JOBS = [
   { in: "shared/animations.glb", out: "shared/animations.glb", dropMeshes: true },
   { in: "props/horse.glb", out: "props/horse.glb", maxTex: 1024 },
-  { in: "props/tree_a.glb", out: "props/tree_a.glb", maxTex: 1024, simplify: true },
-  { in: "props/tree_b.glb", out: "props/tree_b.glb", maxTex: 1024, simplify: true },
-  { in: "props/fern.glb", out: "props/fern.glb", maxTex: 1024, simplify: true },
   { in: "props/rock_a.glb", out: "props/rock_a.glb", maxTex: 1024 },
   { in: "props/rock_b.glb", out: "props/rock_b.glb", maxTex: 1024 },
   { in: "props/sampan.glb", out: "props/sampan.glb", maxTex: 1024 },
@@ -108,7 +105,7 @@ for (const job of JOBS) {
 for (const job of JOBS.filter((j) => j.loose)) {
   const dir = path.join(OUT, job.loose);
   if (!fs.existsSync(dir)) continue;
-  for (const f of fs.readdirSync(dir)) if (f !== path.basename(job.out)) fs.rmSync(path.join(dir, f));
+  for (const f of fs.readdirSync(dir)) if (f !== path.basename(job.out) && f !== ".gitkeep") fs.rmSync(path.join(dir, f));
 }
 writeManifest();
 

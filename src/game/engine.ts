@@ -4,6 +4,7 @@ import { HARBOUR, LEVELS, missionText, type GuardDef, type LevelDef, type Placed
 import { exitAt, exitsOf, gateLabel, type ExitDef } from "./worldgraph";
 import { DEFAULT_LANG, type Lang } from "./i18n";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { buildFern, buildJungleTrees } from "./trees";
 import { loadCreature, loadProp, loadRigs, Rig, type Anim, type RigTemplate, type Role } from "./models";
 import {
   BODY,
@@ -656,11 +657,11 @@ export class Game {
         for (const b of this.boats) this.dressBoat(b);
       })
       .catch((e) => console.warn("[models] boat failed, keeping the built-in sampan", e));
-    // Quaternius CC0 jungle trees and ferns (props/tree_a, tree_b, fern), instanced over the level's spots
-    Promise.all([loadProp("tree_a", JUNGLE_TREE_H, "height"), loadProp("tree_b", JUNGLE_TREE_H, "height"), loadProp("fern", 1, "height")])
-      .then(([a, b, f]) => {
+    // procedural jungle trees (trees.ts) and the Quaternius CC0 fern (props/fern), instanced over the level's spots
+    Promise.resolve()
+      .then(() => {
         if (this.disposed) return;
-        this.plantModels = { trees: [a, b].filter((m): m is THREE.Object3D => !!m), fern: f };
+        this.plantModels = { trees: buildJungleTrees(JUNGLE_TREE_H), fern: buildFern(1) };
         this.dressFoliage();
       })
       .catch((e) => console.warn("[models] plants failed, keeping the built-in trees", e));

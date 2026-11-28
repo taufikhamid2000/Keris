@@ -420,3 +420,55 @@ def finish(name):
     bpy.context.view_layer.objects.active = next(iter(ASSET.all_objects))
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, name + ".glb"), export_format="GLB", use_selection=True)
     print("wrote", OUT, name)
+
+
+# ---------------------------------------------------------------- variants: one collection per model
+
+
+def new_group(name):
+    """A sub-collection of ASSET; build one model into it at the origin."""
+    c = bpy.data.collections.new(name)
+    ASSET.children.link(c)
+    return c
+
+
+def place(coll, loc, yaw=0.0):
+    """Parent the group to an empty and move it into the shot. Export resets it."""
+    e = bpy.data.objects.new(coll.name, None)
+    coll.objects.link(e)
+    for ob in coll.objects:
+        if ob is not e and ob.parent is None:
+            ob.parent = e
+    e.location = loc
+    e.rotation_euler = (0, 0, yaw)
+    return e
+
+
+def render_and_export(name, groups):
+    """Render one shot of every variant to <name>.png, then export each group at the origin."""
+    scene = bpy.context.scene
+    scene.render.filepath = os.path.join(OUT, name + ".png")
+    bpy.ops.render.render(write_still=True)
+    for c in groups:
+        e = bpy.data.objects[c.name]
+        loc, rot = e.location.copy(), e.rotation_euler.copy()
+        e.location, e.rotation_euler = (0, 0, 0), (0, 0, 0)
+        bpy.context.view_layer.update()
+        for ob in scene.objects:
+            ob.select_set(ob.name in c.all_objects)
+        bpy.context.view_layer.objects.active = e
+        bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, c.name + ".glb"), export_format="GLB", use_selection=True)
+        e.location, e.rotation_euler = loc, rot
+    print("wrote", OUT, name, [c.name for c in groups])
+
+
+# ---------------------------------------------------------------- common props
+
+
+def sack(x, y, z, k=1.0, seed=0.0, yaw=0.0, coll=None):
+    return blob((x, y, z + 0.22 * k), (0.36 * k, 0.26 * k, 0.24 * k), M["sack"], coll, wobble=0.18, seed=seed, smooth=True, rot=(0, 0, yaw), name="guni")
+
+
+def tempayan(x, y, z, k=1.0, mat=None, coll=None):
+    p = [(0.0, 0.0), (0.17, 0.0), (0.27, 0.12), (0.33, 0.32), (0.32, 0.5), (0.24, 0.66), (0.14, 0.74), (0.12, 0.79), (0.15, 0.82), (0.15, 0.84), (0.0, 0.84)]
+    return lathe([(r * k, h * k) for r, h in p], (x, y, z), mat=mat or M["glaze"], coll=coll, segs=20, name="tempayan")

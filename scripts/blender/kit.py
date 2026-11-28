@@ -367,7 +367,14 @@ def environment(cam, target, lens=30, sun_elev=11, sun_rot=-140, sky=0.07, sun=7
                 setattr(sk, attr, val)
             except Exception:
                 pass
-    world.node_tree.links.new(sk.outputs["Color"], bg.inputs["Color"])
+    # warm the sky so it reads as tropical haze rather than flat grey
+    tint = wn.new("ShaderNodeMix")
+    tint.data_type = "RGBA"
+    tint.blend_type = "MULTIPLY"
+    tint.inputs["Factor"].default_value = 1.0
+    tint.inputs[7].default_value = (1.0, 0.86, 0.68, 1)
+    world.node_tree.links.new(sk.outputs["Color"], tint.inputs[6])
+    world.node_tree.links.new(tint.outputs[2], bg.inputs["Color"])
     bg.inputs["Strength"].default_value = env("SKY", float(sky))
 
     sd = bpy.data.lights.new("matahari", "SUN")

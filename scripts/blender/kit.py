@@ -508,3 +508,47 @@ def sack(x, y, z, k=1.0, seed=0.0, yaw=0.0, coll=None):
 def tempayan(x, y, z, k=1.0, mat=None, coll=None):
     p = [(0.0, 0.0), (0.17, 0.0), (0.27, 0.12), (0.33, 0.32), (0.32, 0.5), (0.24, 0.66), (0.14, 0.74), (0.12, 0.79), (0.15, 0.82), (0.15, 0.84), (0.0, 0.84)]
     return lathe([(r * k, h * k) for r, h in p], (x, y, z), mat=mat or M["glaze"], coll=coll, segs=20, name="tempayan")
+
+
+# ---------------------------------------------------------------- walls and roofs
+
+
+def wall(c, a, b, z0, h, t, mat, holes=(), battens=None):
+    """Axis-aligned wall from a to b (x, y) with rectangular holes (s_centre, width, z_bottom, z_top)
+    measured along the wall from a; optional vertical battens on the outside."""
+    (ax, ay), (bx, by) = a, b
+    n = math.hypot(bx - ax, by - ay)
+    ux, uy = (bx - ax) / n, (by - ay) / n
+    along_x = abs(ux) > 0.5
+
+    def piece(s0, s1, zb, zt):
+        if s1 - s0 < 0.01 or zt - zb < 0.01:
+            return
+        s = (s0 + s1) / 2
+        size = (s1 - s0, t, zt - zb) if along_x else (t, s1 - s0, zt - zb)
+        box(size, (ax + ux * s, ay + uy * s, z0 + (zb + zt) / 2), mat=mat, coll=c, name="dinding")
+
+    cuts = sorted(holes)
+    s = 0.0
+    for hc, hw, zb, zt in cuts:
+        piece(s, hc - hw / 2, 0, h)
+        piece(hc - hw / 2, hc + hw / 2, 0, zb)
+        piece(hc - hw / 2, hc + hw / 2, zt, h)
+        s = hc + hw / 2
+    piece(s, n, 0, h)
+    if battens:
+        nx, ny = -uy, ux  # outward normal when walls run anticlockwise
+        k = 0.3
+        while k < n - 0.2:
+            if not any(abs(k - hc) < hw / 2 + 0.05 for hc, hw, _, _ in cuts):
+                box((0.07, 0.07, h), (ax + ux * k + nx * (t / 2 + 0.03), ay + uy * k + ny * (t / 2 + 0.03), z0 + h / 2),
+                        mat=battens, coll=c, name="bilah")
+            k += 0.55
+
+
+def gable_roof(c, W, D, ze, rise, over, mat, trim):
+    hip(0, 0, W / 2 + over, D / 2 + over + 0.4, W / 2 + over, 0.05, ze, ze + rise, mat=mat, coll=c, trim=trim, name="atap")
+    for sx in (-1, 1):  # gable panels
+        prism([(-D / 2 - 0.1, ze), (D / 2 + 0.1, ze), (0, ze + rise * (D / 2 + 0.1) / (D / 2 + over + 0.4) - 0.05)], 0.08,
+                  sx * (W / 2 + 0.05), mat=M["plank"], coll=c, name="tebar_layar")
+

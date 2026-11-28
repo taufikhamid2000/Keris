@@ -227,24 +227,25 @@ def rocks(name, pieces, seed):
 
 # ---------------------------------------------------------------- the clearing
 
-groups, spots = [], []
-for i, v in enumerate(PALMS):
-    groups.append(palm(*v, seed=i * 7 + 2))
-spots += [((-6.5, 7.0), -20), ((1.0, 9.0), 160), ((6.5, 4.5), 0)]
-for i, v in enumerate(BANANAS):
-    groups.append(banana(*v, seed=i * 5 + 3))
-spots += [((-3.0, 3.5), 0), ((3.2, 2.5), 40)]
-for i, v in enumerate(BUSHES):
-    groups.append(bush(*v, seed=i * 13 + 4))
-spots += [((-5.0, 0.5), 0), ((-0.5, 1.0), 0), ((4.8, -0.3), 0)]
-for i, v in enumerate(ROCKS):
-    groups.append(rocks(*v, seed=i * 17 + 5))
-spots += [((-2.5, -1.2), 20), ((1.6, -1.6), 0), ((0.0, -3.0), 70)]
+if __name__ == "__main__":
+    groups, spots = [], []
+    for i, v in enumerate(PALMS):
+        groups.append(palm(*v, seed=i * 7 + 2))
+    spots += [((-6.5, 7.0), -20), ((1.0, 9.0), 160), ((6.5, 4.5), 0)]
+    for i, v in enumerate(BANANAS):
+        groups.append(banana(*v, seed=i * 5 + 3))
+    spots += [((-3.0, 3.5), 0), ((3.2, 2.5), 40)]
+    for i, v in enumerate(BUSHES):
+        groups.append(bush(*v, seed=i * 13 + 4))
+    spots += [((-5.0, 0.5), 0), ((-0.5, 1.0), 0), ((4.8, -0.3), 0)]
+    for i, v in enumerate(ROCKS):
+        groups.append(rocks(*v, seed=i * 17 + 5))
+    spots += [((-2.5, -1.2), 20), ((1.6, -1.6), 0), ((0.0, -3.0), 70)]
 
-for c, ((x, y), yaw) in zip(groups, spots):
-    kit.place(c, (x, y, 0), math.radians(yaw))
+    for c, ((x, y), yaw) in zip(groups, spots):
+        kit.place(c, (x, y, 0), math.radians(yaw))
 
-kit.ground(0.0, kit.fibre("rumput", (0.16, 0.20, 0.08), (0.42, 0.40, 0.20), scale=(3, 3, 3), bump=0.3))
-kit.hills()
-kit.environment(cam=(0.0, -15.0, 2.4), target=(0.0, 3.0, 4.2), lens=24, sun_elev=16, sun_rot=-140, sky=0.08, sun=8.0, haze=0.002, exposure=0.3)
-kit.render_and_export("nature", groups)
+    kit.ground(0.0, kit.fibre("rumput", (0.16, 0.20, 0.08), (0.42, 0.40, 0.20), scale=(3, 3, 3), bump=0.3))
+    kit.hills()
+    kit.environment(cam=(0.0, -15.0, 2.4), target=(0.0, 3.0, 4.2), lens=24, sun_elev=16, sun_rot=-140, sky=0.08, sun=8.0, haze=0.002, exposure=0.3)
+    kit.render_and_export("nature", groups)

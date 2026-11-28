@@ -217,18 +217,19 @@ def dangau(name, rnd):
     return c
 
 
-rnd = random.Random(1511)
-BUILD = [(pokok_tualang, (-34.0, 34.0)), (pokok_hutan, (-14.0, 26.0)), (pokok_bukit, (0.0, 18.0)), (buluh, (9.0, 12.0)),
-         (paku_pakis, (5.0, 4.0)), (bakau, (-20.0, 2.0)), (nipah, (-11.0, -2.0)), (sawah, (16.0, -8.0)), (dangau, (21.0, 4.0))]
-groups = []
-for fn, (x, y) in BUILD:
-    g = fn(fn.__name__, rnd)
-    kit.place(g, (x, y, 0.0), rnd.uniform(0, 6.28) if fn not in (sawah, dangau) else 0.2)
-    groups.append(g)
+if __name__ == "__main__":
+    rnd = random.Random(1511)
+    BUILD = [(pokok_tualang, (-34.0, 34.0)), (pokok_hutan, (-14.0, 26.0)), (pokok_bukit, (0.0, 18.0)), (buluh, (9.0, 12.0)),
+             (paku_pakis, (5.0, 4.0)), (bakau, (-20.0, 2.0)), (nipah, (-11.0, -2.0)), (sawah, (16.0, -8.0)), (dangau, (21.0, 4.0))]
+    groups = []
+    for fn, (x, y) in BUILD:
+        g = fn(fn.__name__, rnd)
+        kit.place(g, (x, y, 0.0), rnd.uniform(0, 6.28) if fn not in (sawah, dangau) else 0.2)
+        groups.append(g)
 
-kit.ground(0.0, kit.fibre("tanah_hutan", (0.12, 0.10, 0.05), (0.30, 0.27, 0.14), scale=(3, 3, 3), bump=0.4))
-kit.box((24, 14, 0.04), (-16, 0, 0.02), mat=MUD, coll=kit.SCENERY, name="lumpur_bakau")
-kit.box((24, 14, 0.02), (-16, 0, 0.3), mat=M["water"], coll=kit.SCENERY, name="air_bakau")
-kit.hills()
-kit.environment(cam=(-2.0, -44.0, 9.0), target=(-4.0, 12.0, 11.0), lens=22, sun_elev=26, sun_rot=-130, sky=0.08, sun=8.0, haze=0.002, exposure=0.25)
-kit.render_and_export("hutan", groups)
+    kit.ground(0.0, kit.fibre("tanah_hutan", (0.12, 0.10, 0.05), (0.30, 0.27, 0.14), scale=(3, 3, 3), bump=0.4))
+    kit.box((24, 14, 0.04), (-16, 0, 0.02), mat=MUD, coll=kit.SCENERY, name="lumpur_bakau")
+    kit.box((24, 14, 0.02), (-16, 0, 0.3), mat=M["water"], coll=kit.SCENERY, name="air_bakau")
+    kit.hills()
+    kit.environment(cam=(-2.0, -44.0, 9.0), target=(-4.0, 12.0, 11.0), lens=22, sun_elev=26, sun_rot=-130, sky=0.08, sun=8.0, haze=0.002, exposure=0.25)
+    kit.render_and_export("hutan", groups)

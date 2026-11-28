@@ -383,6 +383,12 @@ def export(t, w):
     png("terrain_height.png", ((h - H_MIN) / (H_MAX - H_MIN) * 65535 + 0.5).astype(np.uint16))
     png("terrain_splat0.png", u8(w["sand"], w["mud"], w["grass"], w["jungle"]))
     png("terrain_splat1.png", u8(w["path"], w["padi"], w["rock"], w["town"]))
+    # for the web viewer: 1025-square float32 heights and river water (-9999 = dry), unshaded albedo
+    sv = max(1, (N - 1) // 1024)
+    h[::sv, ::sv].astype("<f4").tofile(os.path.join(kit.OUT, "terrain_h.f32"))
+    np.nan_to_num(t["water_z"][::sv, ::sv], nan=-9999.0).astype("<f4").tofile(os.path.join(kit.OUT, "terrain_w.f32"))
+    alb = albedo({k: v[::sv, ::sv] for k, v in w.items()})
+    png("terrain_albedo.png", u8(*(alb[..., i] ** (1 / 2.2) for i in range(3))))
     # shaded top view
     st = max(1, (N - 1) // 1024)
     hs = h[::st, ::st]

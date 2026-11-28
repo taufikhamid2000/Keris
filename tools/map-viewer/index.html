@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Melaka 1511 map viewer</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #b9b2a3; font: 13px/1.4 system-ui, sans-serif; }
+    canvas { display: block; }
+    #hud { position: fixed; left: 12px; top: 10px; color: #fff; text-shadow: 0 1px 2px #000a; pointer-events: none; white-space: pre; }
+    #start { position: fixed; inset: 0; display: grid; place-items: center; background: #0007; color: #fff; cursor: pointer; text-align: center; }
+    #start div { max-width: 460px; padding: 20px; }
+    #start b { font-size: 20px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="hud">Loading…</div>
+  <div id="start"><div>
+    <b>Melaka 1511</b><br><br>
+    <span id="progress">Loading terrain…</span><br><br>
+    Click to look around (Esc to free the mouse)<br><br>
+    WASD move · Shift run · F walk / fly<br>
+    Fly: Space up · C down · mouse wheel speed<br>
+    1 river mouth · 2 Istana · 3 masjid · 4 anchorage · 5 cave · 6 Ledang
+  </div></div>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

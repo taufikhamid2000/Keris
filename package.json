@@ -14,7 +14,8 @@
     "check:browser": "node scripts/check-all.mjs",
     "optimize:models": "node scripts/optimize-models.mjs",
     "models:upload": "node scripts/upload-models.mjs",
-    "models:manifest": "node scripts/models-manifest.mjs"
+    "models:manifest": "node scripts/models-manifest.mjs",
+    "map:view": "node tools/map-viewer/serve.mjs"
   },
   "dependencies": {
     "next": "^16.4.4",

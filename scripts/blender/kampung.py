@@ -215,13 +215,14 @@ def teratak(name, rnd):
     return c
 
 
-rnd = random.Random(1511)
-groups = [rumah_bujang("rumah_bujang", rnd), rumah_serambi("rumah_serambi", rnd), rumah_nelayan("rumah_nelayan", rnd), teratak("teratak", rnd)]
-SPOTS = [((-13.0, 1.0), 12), ((-1.0, 4.0), 0), ((11.0, 1.5), -12), ((19.5, -2.5), -28)]
-for g, ((x, y), yaw) in zip(groups, SPOTS):
-    kit.place(g, (x, y, 0), math.radians(yaw))
+if __name__ == "__main__":
+    rnd = random.Random(1511)
+    groups = [rumah_bujang("rumah_bujang", rnd), rumah_serambi("rumah_serambi", rnd), rumah_nelayan("rumah_nelayan", rnd), teratak("teratak", rnd)]
+    SPOTS = [((-13.0, 1.0), 12), ((-1.0, 4.0), 0), ((11.0, 1.5), -12), ((19.5, -2.5), -28)]
+    for g, ((x, y), yaw) in zip(groups, SPOTS):
+        kit.place(g, (x, y, 0), math.radians(yaw))
 
-kit.ground(0.0, kit.fibre("halaman", (0.30, 0.25, 0.14), (0.52, 0.46, 0.28), scale=(3, 3, 3), bump=0.3))
-kit.hills()
-kit.environment(cam=(3.0, -21.0, 6.5), target=(3.0, 1.0, 1.6), lens=17, sun_elev=22, sun_rot=-130, sky=0.08, sun=8.0, haze=0.002, exposure=0.2)
-kit.render_and_export("kampung", groups)
+    kit.ground(0.0, kit.fibre("halaman", (0.30, 0.25, 0.14), (0.52, 0.46, 0.28), scale=(3, 3, 3), bump=0.3))
+    kit.hills()
+    kit.environment(cam=(3.0, -21.0, 6.5), target=(3.0, 1.0, 1.6), lens=17, sun_elev=22, sun_rot=-130, sky=0.08, sun=8.0, haze=0.002, exposure=0.2)
+    kit.render_and_export("kampung", groups)

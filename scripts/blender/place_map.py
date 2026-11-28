@@ -29,6 +29,10 @@ import kit  # noqa: E402
 import terrain as T  # noqa: E402
 
 rnd = random.Random(1511)
+LIGHT = bool(kit.env("SAVE", ""))  # the saved .blend is for live fly-through, so keep it light
+TOWN_C = (-250.0, 0.0)
+TREES = {"pokok_hutan", "pokok_bukit", "pokok_tualang", "buluh", "paku_pakis", "bakau", "nipah", "palm_tall", "palm_lean", "palm_young",
+         "banana_clump", "banana_single", "bush_wide", "bush_small", "bush_flower", "rock_cluster"}
 PLACED = []          # (asset, x, y, z, yaw)
 OCC = {}             # 10 m occupancy grid for buildings
 QIBLA_YAW = math.radians(68.0)  # local +Y turned to bearing 292 (WNW), the qibla from Melaka
@@ -338,6 +342,8 @@ def build_scene(t, w, libs):
     for asset, x, y, z, yaw in PLACED:
         if asset not in libs or asset == "balairung":
             continue
+        if LIGHT and (asset in ("sawah", "dangau") or (asset in TREES and math.hypot(x - TOWN_C[0], y - TOWN_C[1]) > 1500)):
+            continue  # light file for live viewing: no rice tiles, trees only round the town
         e = bpy.data.objects.new(asset, None)
         e.instance_type = "COLLECTION"
         e.instance_collection = libs[asset]
@@ -404,5 +410,12 @@ if __name__ == "__main__":
             except TypeError:
                 pass
         os.makedirs(os.path.dirname(save), exist_ok=True)
+        for scr in bpy.data.screens:  # open in Solid view that can see the whole 8 km map
+            for area in scr.areas:
+                for sp in area.spaces:
+                    if sp.type == "VIEW_3D":
+                        sp.shading.type = "SOLID"
+                        sp.shading.color_type = "MATERIAL"
+                        sp.clip_end = 20000.0
         bpy.ops.wm.save_as_mainfile(filepath=save, compress=True)
         print("saved", save)

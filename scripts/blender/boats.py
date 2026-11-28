@@ -259,13 +259,14 @@ VARIANTS = [
     (sampan, ("sampan_cargo", True), (3.5, 2.0, 0.16), -20),
 ]
 
-groups = []
-for fn, args, loc, yaw in VARIANTS:
-    g = fn(*args)
-    kit.place(g, loc, math.radians(yaw))
-    groups.append(g)
+if __name__ == "__main__":
+    groups = []
+    for fn, args, loc, yaw in VARIANTS:
+        g = fn(*args)
+        kit.place(g, loc, math.radians(yaw))
+        groups.append(g)
 
-kit.water(-4.0)
-kit.hills()
-kit.environment(cam=(0.0, -16.0, 6.0), target=(0.0, 20.0, 3.0), lens=24, sun_elev=8, sun_rot=-140, sky=0.07, sun=9.0, haze=0.002, exposure=0.35)
-kit.render_and_export("boats", groups)
+    kit.water(-4.0)
+    kit.hills()
+    kit.environment(cam=(0.0, -16.0, 6.0), target=(0.0, 20.0, 3.0), lens=24, sun_elev=8, sun_rot=-140, sky=0.07, sun=9.0, haze=0.002, exposure=0.35)
+    kit.render_and_export("boats", groups)

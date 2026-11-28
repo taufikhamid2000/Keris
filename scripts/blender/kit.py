@@ -469,6 +469,35 @@ def render_and_export(name, groups):
     print("wrote", OUT, name, [c.name for c in groups])
 
 
+def hip(cx, cy, ax, ay, bx, by, ze, zt, mat=None, coll=None, trim=None, t=0.2, name="atap"):
+    """A hipped roof tier: eave rectangle (half sizes ax, ay) at ze rising to (bx, by) at zt,
+    open on top (bx = by = 0.05 makes a pyramid). Hips and eaves get trim beams."""
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    sq = [(-1, -1), (1, -1), (1, 1), (-1, 1)]
+    ob = [bm.verts.new((cx + sx * ax, cy + sy * ay, ze)) for sx, sy in sq]
+    ot = [bm.verts.new((cx + sx * bx, cy + sy * by, zt)) for sx, sy in sq]
+    ib = [bm.verts.new((cx + sx * ax, cy + sy * ay, ze - t)) for sx, sy in sq]
+    it = [bm.verts.new((cx + sx * bx, cy + sy * by, zt - t)) for sx, sy in sq]
+    for i in range(4):
+        j = (i + 1) % 4
+        bm.faces.new((ob[i], ob[j], ot[j], ot[i]))
+        bm.faces.new((ib[j], ib[i], it[i], it[j]))
+        bm.faces.new((ib[i], ib[j], ob[j], ob[i]))
+        bm.faces.new((ot[i], ot[j], it[j], it[i]))
+    bm.to_mesh(me)
+    bm.free()
+    roof = _obj(me, mat or M["thatch"], (0, 0, 0), (0, 0, 0), coll, name)
+    tm = trim or M["trim"]
+    for i, (sx, sy) in enumerate(sq):
+        beam((cx + sx * ax, cy + sy * ay, ze), (cx + sx * bx, cy + sy * by, zt), 0.08, tm, coll, verts=6, name="perabung")
+        nx, ny = sq[(i + 1) % 4]
+        beam((cx + sx * ax, cy + sy * ay, ze - 0.05), (cx + nx * ax, cy + ny * ay, ze - 0.05), 0.07, tm, coll, verts=6, name="papan_cantik")
+    if bx > 0.1:  # a ridge along X when the top is a line, not a point
+        beam((cx - bx, cy, zt), (cx + bx, cy, zt), 0.1, tm, coll, verts=6, name="perabung")
+    return roof
+
+
 # ---------------------------------------------------------------- common props
 
 

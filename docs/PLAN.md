@@ -5,7 +5,7 @@ Written 2026-11-28. Builds on `docs/STORYLINE-DRAFT.md`, which still holds the e
 ## Vision (from the owner's answers)
 
 - **Direction:** the six-era storyline from the draft, with real freedom inside each era. The main missions stay in order. Between them, the player roams one large map per era with side content.
-- **Melaka arc:** chapter 2 has three parts (2A Temasek, 2B the rise, 2C the fall of 1511). One keris passes from teacher to student. The 1511 hero is a new heir; Hang Tuah is a legend. The enemy is a fictional faction. Details are in the draft.
+- **Melaka arc:** chapter 2 has three parts (2A Temasek, 2B the rise, 2C the fall of 1511). One keris passes from teacher to student. The 1511 hero is a new heir, a young woman; Hang Tuah is a legend. The enemy is a fictional faction. Details are in the draft.
 - **The feeling:** all four at once. *I'm a pendekar* (stealth and silat in Melaka), *I learned something real* (sourced history), *I want to explore* (every corner hides something), *I care about these people* (villagers with names and problems).
 - **Audience:** general players and schools. The tone stays school-safe, as the draft says.
 - **Side content:** all four kinds:
@@ -31,7 +31,8 @@ Every system ships with a **data schema, one finished example and a validator te
 
 ### 0. Story rewrite (documents only)
 - [x] **Melaka arc in the storyline draft:** three parts, leads, working names and rules.
-- [ ] **You approve or change** the working names (*Waris Keris*, *Pakatan Bayang*) and name the 1511 heir.
+- [x] **Names approved:** *Waris Keris* and *Pakatan Bayang*.
+- [ ] **Name the 1511 heir** (a young woman).
 - [ ] **Source sheets** for Temasek, the founding and the 1420s (research agents, then you).
 
 ### 1. Art style
@@ -56,6 +57,7 @@ The goal is a strong, recognisable low-poly look, not realism. The browser and p
 
 ### 2. Fall of Melaka (2C) story
 - [ ] **New hero:** the heir replaces Hang Tuah in mission text, barks, title and credits (BM and EN).
+- [ ] **Her character model, outfit and animations** replace the current hero's.
 - [ ] **The keris and the Pakatan** woven into the existing missions, labelled *Rekaan*.
 - [ ] **Hang Tuah as legend:** people mention the stories; a Kitab card marks them *legenda*.
 - [ ] **Check against the fact sheet** (`docs/sources/ch2-melaka-1511.md`), including its "Do NOT claim" list.

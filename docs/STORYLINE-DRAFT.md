@@ -29,7 +29,7 @@ Each era the keris is hidden or passed on, and a diary page turns up in the Kita
 
 One keris passes from teacher to student as Melaka is founded, flourishes and falls. Everything about the keepers and their enemy is fiction and labelled *Rekaan*. Based on the owner's 2023 story idea.
 
-**Working names (change freely):**
+**Names (confirmed by the owner):**
 - **Waris Keris:** the line of keepers, handed from teacher to student.
 - **Pakatan Bayang:** the enemy, a faction of traders and court schemers after control of the trade routes.
 
@@ -37,7 +37,7 @@ One keris passes from teacher to student as Melaka is founded, flourishes and fa
 |---|---|---|---|
 | 2A Temasek | **Anindita**, a new keeper, young | Majapahit's hold is starting to weaken. Anindita helps Prince Parameswara through the Pakatan's schemes and the local struggle for Temasek. | Parameswara leaves Temasek and founds Melaka. |
 | 2B Rise (c. 1420s) | **Rama**, young, taught by a middle-aged Anindita | Melaka flourishes. Rama receives the keris, which the Pakatan wants for its rumoured power over people's minds. Court politics, piracy and spies. | Rama defeats the Pakatan's leader, spares them, and later leads the Waris Keris. |
-| 2C Fall (1511) | **The heir** (name to be decided), from a keris smith's family, descended from Rama's student | The Portuguese fleet arrives. The heir fights the Pakatan, which is helping it, strengthens the defences and stops a plot against the Sultan. | Melaka falls, however well you play. The heir carries the keris away and vows to keep it. |
+| 2C Fall (1511) | **The heir**, a young woman (name to be decided), from a keris smith's family, descended from Rama's student | The Portuguese fleet arrives. The heir fights the Pakatan, which is helping it, strengthens the defences and stops a plot against the Sultan. | Melaka falls, however well you play. She carries the keris away and vows to keep it. |
 
 **Rules for the arc**
 - **Hang Tuah** is a legend that people talk about, marked *legenda*. Hang Tuah is no longer the playable hero.
@@ -81,7 +81,7 @@ Build for general players with a school-safe tone: no gore, neutral wording, sou
 3. The heirloom-keris thread **stays**.
 4. Sourcing pass is done by research agents (fact sheets in `docs/sources/`); a **human reviewer** must still read chapters 5 and 6 before any public or school release.
 5. (2026-11-28) Melaka is a **three-part arc**: Temasek, the rise, the fall.
-6. (2026-11-28) The 1511 hero is a **new heir of the keris**; Hang Tuah is a legend.
+6. (2026-11-28) The 1511 hero is a **new heir of the keris, a young woman**; Hang Tuah is a legend.
 7. (2026-11-28) The enemy is a **fictional faction of traders and court schemers**.
 8. (2026-11-28) The **other eras stay**, for later.
 

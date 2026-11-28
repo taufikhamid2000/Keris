@@ -383,6 +383,26 @@ if __name__ == "__main__":
         "map_town": ((mx - 380, my - 520, 85), (mx + 160, my + 40, 4), 28),
         "map_istana": ((ix - 230, iy + 260, 75), (ix + 20, iy - 10, 30), 32),
     }
-    want = kit.env("VIEWS", "map_wide,map_town,map_istana").split(",")
+    # a camera per view, plus one at street level in the town, so the saved .blend can switch between them
+    for k, (cam, target, lens) in list(views.items()) + [("map_jalan", ((mx + 120, my + 140, 3.5), (mx + 300, my + 260, 3.0), 24))]:
+        cd = bpy.data.cameras.new(k)
+        cd.lens, cd.clip_end = lens, 3e6
+        co = bpy.data.objects.new(k, cd)
+        co.location = cam
+        co.rotation_euler = (Vector(target) - Vector(cam)).to_track_quat("-Z", "Y").to_euler()
+        bpy.context.scene.collection.objects.link(co)
+    want = [v for v in kit.env("VIEWS", "map_wide,map_town,map_istana").split(",") if v]
     for k in want:
         shoot(k, *views[k])
+    save = kit.env("SAVE", "")
+    if save:
+        bpy.context.scene.camera = bpy.data.objects["map_town"]
+        for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):  # fast real-time "Rendered" view in the viewport
+            try:
+                bpy.context.scene.render.engine = eng
+                break
+            except TypeError:
+                pass
+        os.makedirs(os.path.dirname(save), exist_ok=True)
+        bpy.ops.wm.save_as_mainfile(filepath=save, compress=True)
+        print("saved", save)

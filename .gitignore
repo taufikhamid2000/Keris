@@ -14,3 +14,6 @@ graphify-out/
 public/models/*/*
 !public/models/*/.gitkeep
 public/models/manifest.json
+
+# local builds (large .blend files)
+build/

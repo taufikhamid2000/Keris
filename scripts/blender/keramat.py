@@ -249,5 +249,6 @@ scene.camera = co
 scene.view_settings.exposure = 2.4
 bpy.data.objects["kabus"].hide_render = True  # haze volume makes the enclosed interior very slow to render
 scene.render.filepath = os.path.join(kit.OUT, "keramat_gua.png")
-bpy.ops.render.render(write_still=True)
+if not kit.env("NORENDER", 0):
+    bpy.ops.render.render(write_still=True)
 print("wrote", kit.OUT, "keramat_gua")

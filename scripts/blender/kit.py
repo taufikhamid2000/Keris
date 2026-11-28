@@ -72,7 +72,7 @@ def wood(name, dark, light, scale=6.0, rough=0.75):
     l.new(mix.outputs["Result"], ramp.inputs["Fac"])
     l.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
     bsdf.inputs["Roughness"].default_value = rough
-    m.diffuse_color = (*light, 1)
+    m.diffuse_color = (*[0.4 * a + 0.6 * c for a, c in zip(dark, light)], 1)
     return m
 
 
@@ -418,14 +418,43 @@ def environment(cam, target, lens=30, sun_elev=11, sun_rot=-140, sky=0.07, sun=7
     box((600, 600, 90), (0, 60, 43), mat=hz, coll=SCENERY, name="kabus")
 
 
+def flatten_colours():
+    """glTF keeps only plain base colours: unhook procedural Base Color inputs and use each material's
+    diffuse colour for the export. Returns what restore_colours() needs to put them back."""
+    undo = []
+    for m in bpy.data.materials:
+        b = m.node_tree.nodes.get("Principled BSDF") if m.use_nodes and m.node_tree else None
+        if b is None or not b.inputs["Base Color"].is_linked:
+            continue
+        s = b.inputs["Base Color"]
+        src = s.links[0].from_socket
+        m.node_tree.links.remove(s.links[0])
+        undo.append((m, src, s, tuple(s.default_value)))
+        s.default_value = m.diffuse_color
+    return undo
+
+
+def restore_colours(undo):
+    for m, src, s, old in undo:
+        s.default_value = old
+        m.node_tree.links.new(src, s)
+
+
+def export_glb(path):
+    undo = flatten_colours()
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True)
+    restore_colours(undo)
+
+
 def finish(name):
     scene = bpy.context.scene
     scene.render.filepath = os.path.join(OUT, name + ".png")
-    bpy.ops.render.render(write_still=True)
+    if not env("NORENDER", 0):
+        bpy.ops.render.render(write_still=True)
     for ob in scene.objects:
         ob.select_set(ob.name in ASSET.all_objects)
     bpy.context.view_layer.objects.active = next(iter(ASSET.all_objects))
-    bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, name + ".glb"), export_format="GLB", use_selection=True)
+    export_glb(os.path.join(OUT, name + ".glb"))
     print("wrote", OUT, name)
 
 
@@ -455,7 +484,8 @@ def render_and_export(name, groups):
     """Render one shot of every variant to <name>.png, then export each group at the origin."""
     scene = bpy.context.scene
     scene.render.filepath = os.path.join(OUT, name + ".png")
-    bpy.ops.render.render(write_still=True)
+    if not env("NORENDER", 0):
+        bpy.ops.render.render(write_still=True)
     for c in groups:
         e = bpy.data.objects[c.name]
         loc, rot = e.location.copy(), e.rotation_euler.copy()
@@ -464,7 +494,7 @@ def render_and_export(name, groups):
         for ob in scene.objects:
             ob.select_set(ob.name in c.all_objects)
         bpy.context.view_layer.objects.active = e
-        bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, c.name + ".glb"), export_format="GLB", use_selection=True)
+        export_glb(os.path.join(OUT, c.name + ".glb"))
         e.location, e.rotation_euler = loc, rot
     print("wrote", OUT, name, [c.name for c in groups])
 

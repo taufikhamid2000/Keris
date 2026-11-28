@@ -201,6 +201,8 @@ const ROCK = { h: 1, color: 0x8a877d };
  */
 const SWIM = { speed: 2.2, fast: 3.4, dive: 1.9, surfaceY: -1.0, diveY: -2.3, sink: 4, breath: 8, refill: 2, gasp: 1.5, maxEntryY: 1.5, seaReach: 72, seaY: -0.25, climbRise: 5.2 };
 // dusk fill levels; Mata Helang drops them for contrast
+/** camera auto-recenter: wait (s), fade-in (s), follow rate (1/s), top speed (rad/s), and beyond this angle (rad) he is walking at the camera, so leave it */
+const AUTO_CAM = { delay: 1.5, ramp: 1, rate: 1.6, maxSpeed: 1.4, maxAngle: 2.4 };
 const LIGHT = { hemi: 1.7, ambient: 0.55, sun: 2.4, eagleHemi: 0.85, eagleAmbient: 0.2, eagleSun: 1.5 };
 const STEP_H = 0.6;
 // ---- combat: stealth stays the better option, but being seen is a fight you can win, not an instant loss
@@ -551,6 +553,10 @@ export class Game {
   private padTool: { t: number; wheel: boolean } | null = null;
   private lookSens = 1;
   private invertY = false;
+  /** ease the camera back behind the player while moving without touching the look controls */
+  private autoCam = true;
+  /** seconds since the last look input (mouse, touch drag or right stick) */
+  private lookIdle = 0;
   /** camera shake, hit-stop and dip (feel.ts) */
   private feel = new Feel();
   /** seconds into the charm pickup pop, or null */
@@ -1354,9 +1360,10 @@ export class Game {
     this.ghaib.setRestu(restu);
   }
   /** Mouse and touch look settings: sensitivity multiplier and inverted vertical look. */
-  setLookSettings(sens: number, invertY: boolean) {
+  setLookSettings(sens: number, invertY: boolean, autoCam = true) {
     this.lookSens = Number.isFinite(sens) && sens > 0 ? sens : 1;
     this.invertY = invertY;
+    this.autoCam = autoCam;
   }
   /** "Kurangkan gegaran": no camera shake or dip (also on when the system asks for reduced motion) */
   setReduceShake(on: boolean) {
@@ -1518,6 +1525,7 @@ export class Game {
       return;
     }
     const k = 0.0022 * this.lookSens;
+    if (dx || dy) this.lookIdle = 0;
     this.camYaw -= dx * k;
     this.camPitch = clamp(this.camPitch + dy * k * (this.invertY ? -1 : 1), -0.25, 1.2);
   }
@@ -3412,6 +3420,16 @@ export class Game {
       const look = CAM_LOOK.set(p.x, p.y + this.camLookY, p.z);
       // swimming (and diving), keep the view on the water surface
       if (this.swim) look.y = Math.max(look.y, 0.5);
+      // auto-recenter: after a moment without look input, drift the camera behind the way he is moving.
+      // Never while standing, rolling, climbing, fighting, in Mata Helang, or walking back toward the camera.
+      this.lookIdle += dt;
+      if (this.autoCam && this.phase === "playing" && p.moving && !this.roll && !this.climb && !this.swing && this.charge === null && !this.eagle && this.lookIdle > AUTO_CAM.delay) {
+        const diff = wrapAngle(Math.atan2(this.moveDir.x, this.moveDir.z) - this.camYaw);
+        if (Math.abs(diff) < AUTO_CAM.maxAngle) {
+          const ramp = Math.min(1, (this.lookIdle - AUTO_CAM.delay) / AUTO_CAM.ramp);
+          this.camYaw += clamp(diff * AUTO_CAM.rate * dt, -AUTO_CAM.maxSpeed * dt, AUTO_CAM.maxSpeed * dt) * ramp;
+        }
+      }
       const rx = -Math.cos(this.camYaw) * 0.45;
       const rz = Math.sin(this.camYaw) * 0.45;
       look.x += rx;

@@ -33,6 +33,8 @@ export interface SaveSettings {
   /** look sensitivity multiplier, applies to mouse and touch */
   lookSens: number;
   invertY: boolean;
+  /** camera eases back behind the player while moving */
+  autoCam: boolean;
   /** "Kurangkan gegaran": no camera shake or landing dip */
   reduceShake: boolean;
   /** interface language, Malay by default */
@@ -74,7 +76,7 @@ export function defaultMission(): MissionStats {
 }
 
 export function defaultSettings(): SaveSettings {
-  return { quality: "auto", lookSens: 1, invertY: false, reduceShake: false, lang: DEFAULT_LANG };
+  return { quality: "auto", lookSens: 1, invertY: false, autoCam: true, reduceShake: false, lang: DEFAULT_LANG };
 }
 
 export function defaultSave(): SaveData {
@@ -129,6 +131,7 @@ function cleanSettings(v: unknown): SaveSettings {
     quality: v.quality === "low" || v.quality === "high" ? v.quality : "auto",
     lookSens: num(v.lookSens, LOOK_SENS_MIN, LOOK_SENS_MAX, d.lookSens),
     invertY: v.invertY === true,
+    autoCam: typeof v.autoCam === "boolean" ? v.autoCam : d.autoCam,
     reduceShake: v.reduceShake === true,
     lang: isLang(v.lang) ? v.lang : d.lang,
   };

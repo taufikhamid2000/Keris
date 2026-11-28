@@ -405,8 +405,8 @@ export default function GameClient() {
   }, [game, explored, level]);
 
   useEffect(() => {
-    game?.setLookSettings(save.settings.lookSens, save.settings.invertY);
-  }, [game, save.settings.lookSens, save.settings.invertY]);
+    game?.setLookSettings(save.settings.lookSens, save.settings.invertY, save.settings.autoCam);
+  }, [game, save.settings.lookSens, save.settings.invertY, save.settings.autoCam]);
 
   // camera shake is off when "Kurangkan gegaran" is on, or the system asks for reduced motion
   useEffect(() => {

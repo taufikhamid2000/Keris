@@ -83,7 +83,7 @@ describe("parseSave / sanitize", () => {
       }),
     );
     expect(d.checkpoint).toBeNull();
-    expect(d.settings).toEqual({ quality: "auto", lookSens: 2.5, invertY: false, reduceShake: false, lang: "ms" });
+    expect(d.settings).toEqual({ quality: "auto", lookSens: 2.5, invertY: false, autoCam: true, reduceShake: false, lang: "ms" });
     expect(d.missions[MISSION_ID]).toEqual({ completed: false, attempts: 0, bestTime: null, bestRating: 3 });
     expect("evil" in d).toBe(false);
   });

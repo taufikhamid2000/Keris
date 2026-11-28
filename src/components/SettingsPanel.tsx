@@ -73,6 +73,10 @@ export default function SettingsPanel({ store, save, canChangeQuality, urlQualit
           <span>{t("settings.invertY")}</span>
           <input type="checkbox" checked={s.invertY} onChange={(e) => set({ invertY: e.target.checked })} aria-label={t("settings.invertY")} />
         </label>
+        <label className="row">
+          <span>{t("settings.autoCam")}</span>
+          <input type="checkbox" checked={s.autoCam} onChange={(e) => set({ autoCam: e.target.checked })} aria-label={t("settings.autoCam.aria")} />
+        </label>
 
         <label className="row">
           <span>{t("settings.reduceShake")}</span>

@@ -54,7 +54,7 @@ MANGROVE = "M470 520 C500 535 525 555 545 585 C560 605 585 615 605 630 L585 650 
 TOWN_UPEH = "M470 440 C520 430 580 440 615 470 C640 495 640 535 615 560 C580 560 545 560 520 545 C495 520 470 480 470 440 Z"
 TOWN_ROYAL = "M600 600 C640 590 700 600 735 630 C760 660 760 700 735 725 C700 735 650 725 620 705 C600 680 590 640 600 600 Z"
 TOWN_EAST = "M720 520 C760 505 840 520 860 555 C870 590 850 620 820 630 C780 620 740 600 725 570 Z"
-RIVER = "M545 585 C575 560 590 530 620 515 C660 495 690 470 700 430 C710 390 750 370 800 360 C860 348 880 300 910 260 C940 220 990 200 1040 140"  # headwaters stop in the foothills
+RIVER = "M545 585 C575 560 590 530 620 515 C660 495 690 470 700 430 C710 390 750 370 800 360 C860 348 880 300 910 260"  # headwaters stop in the jungle foothills, below the massif
 TRIB = "M800 360 C780 300 790 250 760 200 C740 165 700 130 690 60"
 ROADS = [
     "M40 300 C150 340 280 400 380 455 C440 485 500 505 560 515",
@@ -218,7 +218,7 @@ def build():
     coast_d, _ = dist(path_pts(COAST), 160)
     coast_d = np.minimum(coast_d, 1100)
     s = np.where(sea, -coast_d, coast_d)  # signed metres from the shore, land positive
-    jungle = soft(JUNGLE, 120)
+    jungle = smooth(0.35, 0.65, soft(JUNGLE, 120) + 0.28 * fbm(26, 4, 41))  # ragged edge, clearings inside
     padi = soft(PADI, 40)
     mangrove = soft(MANGROVE, 30)
     town = np.clip(soft(TOWN_UPEH, 40) + soft(TOWN_ROYAL, 40) + soft(TOWN_EAST, 40), 0, 1)
@@ -246,13 +246,22 @@ def build():
     h = np.where(sea, np.minimum(h, -0.6), h)  # nothing but the island breaks the waterline
     isl = smooth(1.0, 0.3, ellipse(300, 640, 34, 22))
     h = np.where(isl > 0, h * (1 - isl) + (9 + 3 * fbm(40, 2, 5)) * isl, h)
-    # Gunung Ledang pulled into the NE corner: walkable foothills, steep backdrop summit
-    dc = np.hypot(U[None, :] - 1200, V[:, None])
+    # Gunung Ledang in the NE corner: an irregular massif along a ridge with two summits, warped so it
+    # is no cone; walkable foothills, steep backdrop top
+    rp = np.array([(1095.0, 10.0), (1150.0, 45.0), (1200.0, 110.0)])
+    warp = 70 * fbm(7, 3, 31)
+    dc = np.full((N, N), np.inf, np.float32)
+    for a, b in zip(rp, rp[1:]):
+        ab = b - a
+        tt = np.clip(((U[None, :] - a[0]) * ab[0] + (V[:, None] - a[1]) * ab[1]) / (ab @ ab), 0, 1)
+        dc = np.minimum(dc, np.hypot(U[None, :] - a[0] - tt * ab[0], V[:, None] - a[1] - tt * ab[1]))
+    dc = dc + warp
     ang = np.arctan2(V[:, None] + 0 * U[None, :], 1200 - U[None, :])
-    spurs = smooth(-0.6, 1.0, np.cos(ang * 7 + 2.5 * fbm(6, 3, 23)))  # ridges radiating from the summit
+    spurs = smooth(-0.6, 1.0, np.cos(ang * 7 + 2.5 * fbm(6, 3, 23)))  # ridges running off the massif
     ridge = 1 - np.abs(fbm(10, 4, 21))
-    h += (300 + 140 * ridge * spurs) * smooth(440, 110, dc)
-    h += 760 * smooth(240, 0, dc) ** 1.5 * (0.8 + 0.12 * ridge + 0.08 * spurs)
+    peaks = np.maximum(smooth(90, 0, np.hypot(U[None, :] - 1150, V[:, None] - 45)), 0.75 * smooth(80, 0, np.hypot(U[None, :] - 1195, V[:, None] - 105)))
+    h += (300 + 140 * ridge * spurs) * smooth(400, 90, dc)
+    h += (520 * smooth(200, 0, dc) ** 1.4 + 300 * peaks) * (0.7 + 0.3 * ridge)
 
     print("terrain: rivers")
     water_z = np.full((N, N), np.nan, np.float32)
@@ -260,22 +269,26 @@ def build():
     rivers = {}
     for key, d, w0, w1, depth, base in (("sungai_melaka", RIVER, 42.0, 12.0, 3.5, None), ("anak_sungai", TRIB, 14.0, 6.0, 1.5, "sungai_melaka")):
         p = path_pts(d)
-        dr, al = dist(p, 60)
+        dr, al = dist(p, 120)
         L = float(np.hypot(*np.diff(p, axis=0).T).sum() / UPM)
-        # water level follows the smoothed bank profile, never falling upstream; tidal and flat near the mouth
+        # water level follows the smoothed ground along the course (never falling upstream), flat and
+        # tidal near the mouth; the river now stops in the foothills, so it never climbs the massif
+        start = 0.0 if base is None else rivers[base]["wl_at"](p[0])
+        arc = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(p, axis=0).T))]) / UPM
         prof = np.array([sample(h, *q) for q in p])
         prof = np.convolve(np.pad(prof, 6, mode="edge"), np.ones(13) / 13, mode="valid")
-        start = 0.0 if base is None else rivers[base]["wl_at"](p[0])
-        wl_pts = np.maximum.accumulate(np.maximum(prof - 2.0, start))
-        arc = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(p, axis=0).T))]) / UPM
+        wl_pts = np.maximum.accumulate(np.maximum(prof - 2.5, start))
         if base is None:
-            wl_pts = np.where(arc < 2500, np.minimum(wl_pts, 0.6 * arc / 2500), wl_pts)
-            wl_pts = np.maximum.accumulate(wl_pts)
+            wl_pts = np.maximum.accumulate(np.where(arc < 2500, np.minimum(wl_pts, 0.6 * arc / 2500), wl_pts))
+        # above the tidal reach the river climbs in pools and rapids, not as one sloping sheet
+        wl_pts = np.where(wl_pts > 3.0, np.floor(wl_pts / 3.0) * 3.0, wl_pts)
         wl = np.interp(al, arc, wl_pts).astype(np.float32)
         w = w0 + (w1 - w0) * smooth(0, L, al)
+        valley = wl + 1.0 + np.maximum(dr - w, 0) * 0.3
+        carve = smooth(500, 150, dr)  # fade the valley out well inside the search window: no cliffs
+        h = np.where(~sea, h + (np.minimum(h, valley) - h) * carve, h)
         near = dr < w + 30
-        bank = np.clip(h, wl + 0.6, wl + 1.0 + np.maximum(dr - w, 0) * 0.15)
-        h = np.where(near & ~sea, bank, h)
+        h = np.where(near & ~sea, np.maximum(h, wl + 0.6), h)
         inside = dr < w
         bed = wl - depth * np.maximum(w / w0, 0.4) * (1 - (dr / w) ** 2)
         h = np.where(inside, np.minimum(h, bed), h)
@@ -295,7 +308,7 @@ def build():
     road = np.full((N, N), np.inf, np.float32)
     for d in ROADS:
         road = np.minimum(road, dist(path_pts(d), 12)[0])
-    path = smooth(4.5, 2.5, road) * ~wet * ~sea
+    path = smooth(6.0, 3.5, road) * ~wet * ~sea  # ~4-5 m tracks, wide enough to read at 3.9 m/px
     h = h - 0.12 * path
 
     h = np.clip(h, H_MIN, H_MAX).astype(np.float32)
